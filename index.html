@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dead End Motel</title>
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/theme.css" />
+  <link rel="stylesheet" href="styles/ui.css" />
+</head>
+<body>
+  <div id="app" class="app-shell screen-main-menu">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Night Shift Motel Sim</p>
+        <h1>Dead End Motel</h1>
+        <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
+      </div>
+      <div class="topbar-stats">
+        <div class="stat-box" id="night-stat-box">
+          <span class="label">Night</span>
+          <strong id="night-display">1</strong>
+        </div>
+        <div class="stat-box" id="time-stat-box">
+          <span class="label">Time</span>
+          <strong id="time-display">10:00 PM</strong>
+        </div>
+        <div class="stat-box" id="money-stat-box">
+          <span class="label">Money</span>
+          <strong id="money-display">$120</strong>
+        </div>
+        <div class="stat-box" id="power-stat-box">
+          <span class="label">Power</span>
+          <strong id="power-display">100%</strong>
+        </div>
+        <div class="stat-box" id="reputation-stat-box">
+          <span class="label">Reputation</span>
+          <strong id="reputation-display">50</strong>
+        </div>
+      </div>
+      <p id="active-upgrades-inline" class="topbar-upgrades muted">Active Upgrades: None</p>
+      <button id="audio-toggle-btn" class="button audio-toggle" type="button">Sound: On</button>
+      <button id="open-settings-btn" class="button button-secondary" type="button">Settings</button>
+      <button id="open-help-btn" class="button button-secondary" type="button">Help</button>
+    </header>
+
+    <main>
+      <section id="main-menu" class="screen active">
+        <div class="hero-card">
+          <div>
+            <p class="section-tag">Night Desk Campaign</p>
+            <h2>Welcome to the last motel before nowhere.</h2>
+            <p class="muted">
+              Check guests in, watch the cameras, manage power, and survive the night shift.
+            </p>
+            <div class="hero-actions">
+              <button id="start-game-btn" class="button button-primary">Start Campaign Shift</button>
+              <button id="start-guided-btn" class="button button-secondary">Start Guided First Run</button>
+              <button id="start-standard-btn" class="button button-secondary">Start Standard Run</button>
+              <button id="new-night-btn" class="button button-secondary">Reset Night</button>
+              <button id="menu-settings-btn" class="button button-secondary" type="button">Settings</button>
+            </div>
+            <div id="main-menu-meta-surface" class="main-menu-meta-surface">
+              <details class="mobile-menu-section main-menu-run-setup" id="main-menu-run-setup-section" data-mobile-default="open" open>
+                <summary>Run Setup</summary>
+                <div class="mobile-menu-section-body">
+                  <label class="main-menu-setup-label" for="main-menu-difficulty-select">Difficulty</label>
+                  <select id="main-menu-difficulty-select" class="main-menu-setup-select"></select>
+                  <p class="main-menu-setup-label">Challenge Contracts</p>
+                  <div id="main-menu-contract-list" class="main-menu-contract-list"></div>
+                  <p id="main-menu-run-setup-summary" class="main-menu-meta-line muted">Difficulty: Standard • Contracts: None</p>
+                </div>
+              </details>
+              <details class="mobile-menu-section main-menu-meta-overview" id="main-menu-records-section" data-mobile-default="closed">
+                <summary>Records & Replay</summary>
+                <div class="mobile-menu-section-body">
+                  <p id="main-menu-meta-points" class="main-menu-meta-line">Archive Points: 0</p>
+                  <p id="main-menu-meta-runs" class="main-menu-meta-line muted">Runs Completed: 0</p>
+                  <p id="main-menu-meta-endings" class="main-menu-meta-line muted">Endings Discovered: 0</p>
+                  <p id="main-menu-meta-best-grade" class="main-menu-meta-line muted">Best Grade: -</p>
+                  <p id="main-menu-meta-selected-perk" class="main-menu-meta-selected muted">Selected Perk: None</p>
+                </div>
+              </details>
+              <details class="mobile-menu-section main-menu-meta-perks" id="main-menu-perks-section" data-mobile-default="closed">
+                <summary>Run-Start Perks</summary>
+                <div class="mobile-menu-section-body">
+                  <div id="main-menu-perk-list" class="main-menu-perk-list"></div>
+                  <button id="main-menu-reroll-btn" class="button button-secondary" type="button">Reroll Night 1 Scenario</button>
+                </div>
+              </details>
+              <details class="mobile-menu-section main-menu-meta-archive" id="main-menu-archive-section" data-mobile-default="closed">
+                <summary>Archive</summary>
+                <div class="mobile-menu-section-body">
+                  <ul id="main-menu-archive-list" class="main-menu-archive-list"></ul>
+                </div>
+              </details>
+            </div>
+            <details class="mobile-menu-section" id="main-menu-briefing-section" data-mobile-default="closed">
+              <summary>First Shift Briefing</summary>
+              <div id="main-menu-onboarding" class="main-menu-onboarding"></div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section id="game-screen" class="screen">
+        <nav class="panel-tabs">
+          <button class="tab-button active" data-panel="frontdesk-panel">
+            <span>Front Desk</span>
+            <span id="frontdesk-tab-badge" class="tab-attention-badge" hidden>0</span>
+          </button>
+          <button class="tab-button" data-panel="cameras-panel">
+            <span>Cameras</span>
+            <span id="cameras-tab-badge" class="tab-attention-badge" hidden>0</span>
+          </button>
+          <button class="tab-button" data-panel="power-panel">Power</button>
+          <button class="tab-button" data-panel="report-panel">
+            <span>Report</span>
+            <span id="report-tab-badge" class="tab-attention-badge" hidden>0</span>
+          </button>
+        </nav>
+
+        <section class="shift-status-card">
+          <div id="tutorial-hint-card" class="tutorial-hint-card" hidden></div>
+          <div id="panel-intro-chip" class="panel-intro-chip" hidden></div>
+          <div class="shift-primary-block">
+            <div class="shift-status-title">Current Objective: Survive Until Dawn</div>
+            <div id="shift-pressure-label" class="shift-pressure-label">Pressure: Calm</div>
+            <div class="shift-progress-track">
+              <div id="shift-progress-fill" class="shift-progress-fill"></div>
+            </div>
+            <div id="live-alert-strip" class="live-alert-strip"></div>
+            <div id="active-night-event-card" class="active-night-event-card">
+              <p class="muted">No active shift events.</p>
+            </div>
+          </div>
+
+          <div class="shift-context-block">
+            <div id="finale-banner" class="finale-banner" hidden>Final Night</div>
+            <div id="finale-state-card" class="finale-state-card" hidden>
+              <p id="finale-pressure-label" class="finale-pressure-label">Finale pressure: CONTAINED (0)</p>
+              <p id="finale-chain-label" class="finale-chain-label muted"></p>
+              <div id="finale-command-row" class="finale-command-row"></div>
+            </div>
+            <div class="scenario-card">
+              <div id="scenario-label" class="scenario-label">Standard Shift</div>
+              <div id="scenario-description" class="scenario-description">
+                A normal night on paper, but the motel still feels one bad decision away from trouble.
+              </div>
+            </div>
+            <div id="run-identity-strip" class="run-identity-strip">
+              <p class="muted">Doctrine: Stability Manager</p>
+              <p class="muted">Faction climate remains mostly neutral tonight.</p>
+            </div>
+            <p id="campaign-shift-line" class="campaign-shift-line muted">Campaign: Night 1 of 5</p>
+            <p id="shift-branch-hint" class="shift-branch-hint muted">Outlook: Pressure is mixed tonight.</p>
+            <div id="active-story-beat-card" class="active-story-beat-card">
+              <p class="muted">No recurring story beat active tonight.</p>
+            </div>
+          </div>
+
+          <div class="shift-secondary-block">
+            <p class="section-tag">Objectives</p>
+            <div id="night-objective-list" class="objective-list"></div>
+            <div id="finale-objectives-wrap" class="finale-objectives-wrap" hidden>
+              <p class="section-tag">Final Night Objectives</p>
+              <div id="finale-objective-list" class="objective-list finale-objective-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <div class="layout-grid">
+          <section id="frontdesk-panel" class="panel active-panel">
+            <div class="panel-header">
+              <div>
+                <p class="section-tag">Reception</p>
+                <h3>Guest Queue</h3>
+              </div>
+              <button id="spawn-guest-btn" class="button button-secondary">Spawn Guest</button>
+            </div>
+            <p class="muted microcopy-line">Desk flow: Risk + Policy inform your first call (Check In / Flag / Reject).</p>
+            <div id="guest-queue" class="card-list"></div>
+
+            <div class="panel-header split-space">
+              <div>
+                <p class="section-tag">Rooms</p>
+                <h3>Room Status</h3>
+              </div>
+            </div>
+            <div id="room-list" class="room-grid"></div>
+          </section>
+
+          <section id="cameras-panel" class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="section-tag">Surveillance</p>
+                <h3>Camera Feed</h3>
+              </div>
+              <button id="scan-cameras-btn" class="button button-secondary">Scan Cameras</button>
+            </div>
+            <p class="muted microcopy-line">Scan to detect anomalies, then Investigate to contain spillover pressure.</p>
+            <div id="camera-grid" class="camera-grid"></div>
+          </section>
+
+          <section id="power-panel" class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="section-tag">Maintenance</p>
+                <h3>Power Control</h3>
+              </div>
+            </div>
+
+            <div class="meter-block">
+              <div class="meter-meta">
+                <span>Power Reserve</span>
+                <strong id="power-meter-label">100%</strong>
+              </div>
+              <div class="meter-track">
+                <div id="power-meter-fill" class="meter-fill"></div>
+              </div>
+            </div>
+
+            <div class="button-row">
+              <button id="restore-power-btn" class="button button-primary">Emergency Restore</button>
+              <button id="drain-power-btn" class="button button-danger">Emergency Reroute</button>
+            </div>
+            <p class="muted microcopy-line">Restore is steadier. Reroute is faster, but usually destabilizes something else.</p>
+            <p id="power-economy-meta" class="power-economy-meta muted"></p>
+          </section>
+
+          <section id="report-panel" class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="section-tag">Incident Log</p>
+                <h3>Night Report</h3>
+              </div>
+            </div>
+            <div class="report-panel-actions report-actions">
+              <button id="review-incidents-btn" class="button button-secondary">Review Incidents</button>
+              <button id="dispatch-staff-btn" class="button button-utility">Dispatch Staff</button>
+              <button id="end-night-btn" class="button button-primary">End Night</button>
+            </div>
+            <p class="muted microcopy-line">Report controls incident response and shift closure once dawn is reached.</p>
+            <div id="incident-log" class="log-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="summary-screen" class="screen">
+        <div class="hero-card">
+          <div>
+            <div class="summary-primary-block">
+              <p class="section-tag">Shift Complete</p>
+              <h2 id="summary-title">Night 1 Complete</h2>
+              <p id="summary-text" class="muted">
+                You kept the motel open. A few things still feel wrong.
+              </p>
+              <p id="summary-scenario-label" class="summary-scenario-label muted"></p>
+              <p id="summary-campaign-progress" class="summary-campaign-progress muted"></p>
+              <p id="summary-run-setup" class="summary-campaign-progress muted"></p>
+              <p id="summary-run-reward-bonus" class="summary-campaign-progress muted"></p>
+              <h3 id="summary-outcome-title" class="summary-outcome-title"></h3>
+              <p id="summary-outcome-note" class="summary-outcome-note"></p>
+            </div>
+
+            <div class="summary-performance-block">
+              <div id="summary-rating" class="summary-rating"></div>
+              <ul id="summary-breakdown" class="summary-breakdown"></ul>
+              <div id="summary-objective-list" class="objective-list summary-objectives"></div>
+            </div>
+
+            <div class="summary-flavor-block">
+              <ul id="summary-campaign-flavor" class="summary-thread-flavor summary-campaign-flavor"></ul>
+              <ul id="summary-thread-flavor" class="summary-thread-flavor"></ul>
+              <ul id="summary-identity-flavor" class="summary-thread-flavor summary-identity-flavor"></ul>
+              <ul id="summary-branch-flavor" class="summary-thread-flavor summary-branch-flavor"></ul>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <button id="next-night-btn" class="button button-primary">Continue to Night Prep</button>
+            <button id="back-menu-btn" class="button button-secondary">Main Menu</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="night-prep-screen" class="screen">
+        <div class="hero-card night-prep-card">
+          <div>
+            <div class="prep-primary-block">
+              <p class="section-tag">Between-Nights Management</p>
+              <h2 id="night-prep-title">Night Prep</h2>
+              <p id="night-prep-meta" class="muted">Prepare for Night 2</p>
+              <p id="night-prep-campaign" class="night-prep-campaign muted">Campaign progress: 0 / 5 nights completed</p>
+              <p class="muted">Invest your motel cash into persistent run upgrades before the next shift begins.</p>
+              <p id="night-prep-money" class="night-prep-money">Available Money: $0</p>
+              <p id="night-prep-spent" class="night-prep-spent muted">Run Spending: $0</p>
+              <p id="night-prep-active-upgrades" class="night-prep-active-upgrades muted">No active upgrades yet.</p>
+            </div>
+            <div class="prep-context-grid">
+              <div id="night-prep-campaign-forecast" class="night-prep-campaign-forecast"></div>
+              <div id="night-prep-doctrine" class="night-prep-doctrine"></div>
+              <div id="night-prep-factions" class="night-prep-factions"></div>
+              <div id="night-prep-director" class="night-prep-director"></div>
+              <div id="night-prep-carryover" class="night-prep-carryover"></div>
+              <div id="night-prep-threads" class="night-prep-threads"></div>
+            </div>
+            <div id="night-prep-upgrade-grid" class="night-prep-upgrade-grid"></div>
+          </div>
+          <div class="hero-actions">
+            <button id="start-prepped-night-btn" class="button button-primary">Start Prepared Night</button>
+            <button id="prep-menu-btn" class="button button-secondary">Main Menu</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="failure-screen" class="screen">
+        <div class="hero-card">
+          <div>
+            <p class="section-tag">Shift Failed</p>
+            <h2 id="failure-title">Motel Blackout</h2>
+            <div id="failure-reason" class="failure-reason">Power Collapse</div>
+            <p id="failure-text" class="failure-text">
+              The motel lost all usable power and operations failed across the property.
+            </p>
+          </div>
+          <div class="hero-actions">
+            <button id="restart-night-btn" class="button button-primary">Restart Night</button>
+            <button id="failure-menu-btn" class="button button-secondary">Main Menu</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="run-ending-screen" class="screen">
+        <div class="hero-card run-ending-card">
+          <div>
+            <p class="section-tag">Campaign Complete</p>
+            <p id="run-ending-tone-badge" class="run-ending-tone-badge">STABLE</p>
+            <div id="run-ending-grade" class="run-ending-grade">Grade B</div>
+            <h2 id="run-ending-title">Order Through Control</h2>
+            <p id="run-ending-subtitle" class="run-ending-subtitle muted">Cold Stability Secured</p>
+            <p id="run-ending-tagline" class="run-ending-tagline"></p>
+            <p id="run-ending-campaign-line" class="run-ending-campaign-line muted"></p>
+            <p id="run-ending-setup-line" class="run-ending-campaign-line muted"></p>
+            <p id="run-ending-summary" class="run-ending-summary muted"></p>
+            <p id="run-ending-dramatic-summary" class="run-ending-dramatic-summary"></p>
+            <p id="run-ending-finale-context" class="run-ending-finale-context"></p>
+            <p id="run-ending-doctrine" class="run-ending-doctrine"></p>
+            <p id="run-ending-climate" class="run-ending-climate"></p>
+            <p id="run-ending-pressure" class="run-ending-pressure muted"></p>
+            <p id="run-ending-posture" class="run-ending-posture muted"></p>
+            <ul id="run-ending-notes" class="run-ending-notes"></ul>
+            <div id="run-ending-tags" class="run-ending-tags"></div>
+            <p id="run-ending-stats" class="run-ending-stats muted"></p>
+            <div id="run-ending-reward-block" class="run-ending-reward-block">
+              <p class="section-tag">Meta Rewards</p>
+              <p id="run-ending-reward-points" class="run-ending-reward-points">Archive Points Earned: 0</p>
+              <p id="run-ending-reward-breakdown" class="run-ending-reward-breakdown muted"></p>
+              <ul id="run-ending-reward-discoveries" class="run-ending-reward-discoveries"></ul>
+              <ul id="run-ending-reward-unlocks" class="run-ending-reward-unlocks"></ul>
+              <p id="run-ending-archive-progress" class="run-ending-archive-progress muted"></p>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <button id="run-ending-new-run-btn" class="button button-primary">Begin New Campaign</button>
+            <button id="run-ending-menu-btn" class="button button-secondary">Main Menu</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="night-event-overlay" class="camera-scene-overlay" aria-hidden="true"></div>
+  <div id="special-encounter-overlay" class="camera-scene-overlay" aria-hidden="true"></div>
+  <div id="camera-scene-overlay" class="camera-scene-overlay" aria-hidden="true"></div>
+  <div id="help-overlay" class="help-overlay" aria-hidden="true"></div>
+  <div id="settings-overlay" class="help-overlay" aria-hidden="true"></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

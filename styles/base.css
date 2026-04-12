@@ -1,0 +1,37 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  font-family: Inter, Arial, sans-serif;
+  background: #090b12;
+  color: #f0f3f8;
+}
+
+body {
+  background:
+    radial-gradient(circle at top, rgba(77, 108, 157, 0.18), transparent 30%),
+    linear-gradient(180deg, #111526 0%, #090b12 100%);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
