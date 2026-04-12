@@ -257,7 +257,6 @@ import {
   buildRunSetupSummary,
   getRunSetupModifierProfile,
   getCampaignLengthFromRunSetup,
-  getCampaignModeCatalog
 } from './runSetup.js';
 import {
   loadOnboardingState,

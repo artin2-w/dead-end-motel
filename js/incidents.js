@@ -104,7 +104,7 @@ function upgradeCondition(currentCondition, effect) {
   return currentCondition || 'Stable';
 }
 
-export function hasActionableIncidentReviewWork(rooms = []) {
+export function hasActionableIncidentReviewContext(rooms = []) {
   const occupied = (rooms || []).filter((room) => room?.occupiedBy);
   if (!occupied.length) return false;
   if (occupied.some((room) => (room.condition || 'Stable') !== 'Stable')) return true;
