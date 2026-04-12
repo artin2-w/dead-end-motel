@@ -77,6 +77,36 @@
   display: block;
 }
 
+/* Summary / run-ending: allow full reward + archive block to scroll on short viewports */
+#app.screen-summary-screen,
+#app.screen-run-ending-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+#app.screen-summary-screen > main,
+#app.screen-run-ending-screen > main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: max(12px, var(--safe-bottom, 0px));
+}
+
+#summary-screen .hero-card,
+#run-ending-screen .run-ending-card {
+  min-height: 0;
+}
+
+.room-card-locked {
+  opacity: 0.78;
+  border-style: dashed;
+}
+
 [hidden] {
   display: none !important;
 }

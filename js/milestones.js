@@ -257,6 +257,26 @@ export function getMilestoneGameplayModifiers(state, night = null) {
     };
   }
 
+  if (safeNight >= 6) {
+    const extra = safeNight - 5;
+    return {
+      ...base,
+      riskBonus: 1 + Math.min(2, Math.ceil(extra / 2)),
+      chainBonus: 1 + Math.min(2, Math.floor(extra / 2)),
+      incidentBonus: Math.min(2, Math.floor(extra / 2)),
+      eventChanceBonus: 0.012 + extra * 0.006,
+      specialEncounterChanceBonus: 0.01 + extra * 0.005,
+      anomalyChanceBonus: 0.008 + extra * 0.004,
+      directorSignalBoost: 1 + Math.min(2, Math.floor(extra / 3)),
+      recurringThreadEscalationBonus: 0.05 + extra * 0.02,
+      unresolvedTolerancePenalty: 1 + Math.min(2, Math.floor(extra / 2)),
+      pressureCadenceBonus: 2 + Math.min(3, Math.floor(extra / 2)),
+      earlyOverlapShield: Math.max(0, 2 - Math.ceil(extra / 2)),
+      eventWorsenShield: Math.max(0, 1 - Math.floor(extra / 3)),
+      unresolvedReturnSmoothing: Math.max(0, 1 - Math.floor(extra / 4))
+    };
+  }
+
   return base;
 }
 

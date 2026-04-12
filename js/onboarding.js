@@ -205,7 +205,7 @@ function getGuidedHintModel(renderState) {
     return {
       key: 'tutorial-spawn',
       title: 'Step 1: Bring in your first guest',
-      body: 'Use Spawn Guest at Front Desk. Then assess Risk + Policy before deciding.',
+      body: 'Use Call Next Arrival at Front Desk (intake slots are limited). Then assess Risk + Policy before deciding.',
       panelId: 'frontdesk-panel'
     };
   }

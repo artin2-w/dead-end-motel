@@ -27,6 +27,8 @@ export function clearRoomAfterEviction(room) {
   return {
     ...room,
     occupiedBy: null,
+    guestName: null,
+    stayNightsRemaining: 0,
     riskLevel: null,
     deskFlagged: false,
     policyRecommendation: null,

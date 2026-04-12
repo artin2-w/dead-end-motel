@@ -54,14 +54,25 @@ export function getActionTimeCost(actionKey) {
     reject: 5,
     flag: 5,
     drainPower: 5,
-    restorePower: 5
+    restorePower: 5,
+    callArrival: 18
   };
 
   return costs[actionKey] ?? 0;
 }
 
-export function advanceNightCycle(state, actionKey) {
-  const minutesToAdd = getActionTimeCost(actionKey);
+export function advanceNightCycle(state, actionKey, options = {}) {
+  const base = getActionTimeCost(actionKey);
+  const scale =
+    typeof options.timeScale === 'number' && Number.isFinite(options.timeScale)
+      ? Math.max(0, options.timeScale)
+      : 1;
+  const override =
+    typeof options.minutesOverride === 'number' && Number.isFinite(options.minutesOverride)
+      ? Math.max(0, options.minutesOverride)
+      : null;
+  const minutesToAdd =
+    override != null ? clampElapsedMinutes(override) : Math.round(base * scale);
   const nextElapsed = clampElapsedMinutes(
     (state?.shiftElapsedMinutes || 0) + minutesToAdd
   );
@@ -87,6 +98,9 @@ export function evaluateNightObjectives(state) {
   const criticalRooms = (state?.rooms || []).filter(
     (room) => room?.occupiedBy && room?.condition === 'Critical'
   ).length;
+  const night = Math.max(1, Number(state?.night || 1));
+  const powerReq = night >= 8 ? 30 : night >= 5 ? 28 : night >= 3 ? 26 : 25;
+  const repReq = night >= 8 ? 44 : night >= 5 ? 42 : night >= 3 ? 41 : 40;
 
   return [
     {
@@ -97,18 +111,18 @@ export function evaluateNightObjectives(state) {
     },
     {
       id: 'power-buffer',
-      label: 'Finish with at least 25% power',
-      complete: (state?.power ?? 0) >= 25
+      label: `Finish with at least ${powerReq}% power`,
+      complete: (state?.power ?? 0) >= powerReq
     },
     {
       id: 'reputation-buffer',
-      label: 'Finish with at least 40 reputation',
-      complete: (state?.reputation ?? 0) >= 40
+      label: `Finish with at least ${repReq} reputation`,
+      complete: (state?.reputation ?? 0) >= repReq
     },
     {
       id: 'critical-control',
-      label: 'Keep critical occupied rooms below 2',
-      complete: criticalRooms < 2
+      label: night >= 5 ? 'Keep critical occupied rooms at 0' : 'Keep critical occupied rooms below 2',
+      complete: night >= 5 ? criticalRooms < 1 : criticalRooms < 2
     }
   ];
 }

@@ -49,6 +49,10 @@ function pickTargetRoom(rooms) {
   return candidates[0] || null;
 }
 
+export function peekDispatchStaffTargetRoom(rooms = []) {
+  return pickTargetRoom(normalizeResponseRooms(rooms));
+}
+
 export function normalizeResponseRooms(rooms = []) {
   return rooms.map((room) => ({
     ...room,

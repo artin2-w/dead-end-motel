@@ -104,6 +104,15 @@ function upgradeCondition(currentCondition, effect) {
   return currentCondition || 'Stable';
 }
 
+export function hasActionableIncidentReviewWork(rooms = []) {
+  const occupied = (rooms || []).filter((room) => room?.occupiedBy);
+  if (!occupied.length) return false;
+  if (occupied.some((room) => (room.condition || 'Stable') !== 'Stable')) return true;
+  if (occupied.some((room) => Number(room.chainPressure || 0) >= 4)) return true;
+  if (occupied.some((room) => Boolean(room.deskFlagged) || Boolean(room.policyOverride))) return true;
+  return false;
+}
+
 export function reviewRoomIncidents(rooms, night = 1) {
   const updatedRooms = rooms.map((room) => ({ ...room }));
   const logs = [];
@@ -143,6 +152,7 @@ export function reviewRoomIncidents(rooms, night = 1) {
     if (safeNight === 1) chance *= 0.68;
     else if (safeNight === 2) chance *= 0.82;
     else if (safeNight >= 4) chance *= 1.05;
+    if (safeNight >= 6) chance *= 1.06 + Math.min(0.12, (safeNight - 5) * 0.018);
 
     if (safeNight <= 2 && generated >= 1) {
       chance *= 0.62;

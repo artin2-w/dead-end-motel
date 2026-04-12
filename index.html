@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dead End Motel</title>
+  <title>Dead End Motel v0.5</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -12,7 +12,7 @@
   <div id="app" class="app-shell screen-main-menu">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Night Shift Motel Sim</p>
+        <p class="eyebrow">Dead End Motel v0.5</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -66,6 +66,8 @@
                 <div class="mobile-menu-section-body">
                   <label class="main-menu-setup-label" for="main-menu-difficulty-select">Difficulty</label>
                   <select id="main-menu-difficulty-select" class="main-menu-setup-select"></select>
+                  <label class="main-menu-setup-label" for="main-menu-campaign-mode-select">Campaign length</label>
+                  <select id="main-menu-campaign-mode-select" class="main-menu-setup-select"></select>
                   <p class="main-menu-setup-label">Challenge Contracts</p>
                   <div id="main-menu-contract-list" class="main-menu-contract-list"></div>
                   <p id="main-menu-run-setup-summary" class="main-menu-meta-line muted">Difficulty: Standard • Contracts: None</p>
@@ -153,6 +155,7 @@
               <p class="muted">Faction climate remains mostly neutral tonight.</p>
             </div>
             <p id="campaign-shift-line" class="campaign-shift-line muted">Campaign: Night 1 of 5</p>
+            <p id="motel-capacity-line" class="campaign-shift-line muted"></p>
             <p id="shift-branch-hint" class="shift-branch-hint muted">Outlook: Pressure is mixed tonight.</p>
             <div id="active-story-beat-card" class="active-story-beat-card">
               <p class="muted">No recurring story beat active tonight.</p>
@@ -176,8 +179,9 @@
                 <p class="section-tag">Reception</p>
                 <h3>Guest Queue</h3>
               </div>
-              <button id="spawn-guest-btn" class="button button-secondary">Spawn Guest</button>
+              <button id="spawn-guest-btn" class="button button-secondary">Call Next Arrival</button>
             </div>
+            <p id="frontdesk-intake-line" class="muted microcopy-line"></p>
             <p class="muted microcopy-line">Desk flow: Risk + Policy inform your first call (Check In / Flag / Reject).</p>
             <div id="guest-queue" class="card-list"></div>
 
@@ -240,7 +244,7 @@
               <button id="dispatch-staff-btn" class="button button-utility">Dispatch Staff</button>
               <button id="end-night-btn" class="button button-primary">End Night</button>
             </div>
-            <p class="muted microcopy-line">Report controls incident response and shift closure once dawn is reached.</p>
+            <p class="muted microcopy-line">Review and dispatch advance time most when real room pressure exists; empty paperwork barely moves the clock.</p>
             <div id="incident-log" class="log-list"></div>
           </section>
         </div>

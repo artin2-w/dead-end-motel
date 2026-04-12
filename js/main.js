@@ -1,10 +1,17 @@
 import { createInitialState } from './state.js';
 import { createGuest } from './guests.js';
-import { createDefaultRooms, getAvailableRoom } from './rooms.js';
+import {
+  createDefaultRooms,
+  getAvailableRoom,
+  applyRoomUnlockFlags,
+  applyStayDecrementBetweenNights,
+  computeStayNightsForGuest,
+  getUnlockedRoomCapForNight
+} from './rooms.js';
 import { createDefaultCameras } from './cameras.js';
 import { clampPower } from './power.js';
 import { generateCameraScanResult } from './anomalies.js';
-import { reviewRoomIncidents } from './incidents.js';
+import { reviewRoomIncidents, hasActionableIncidentReviewContext } from './incidents.js';
 import {
   normalizeEscalationRooms,
   tickEscalationRooms,
@@ -13,7 +20,8 @@ import {
 import {
   normalizeResponseRooms,
   tickResponseCooldowns,
-  dispatchStaffResponse
+  dispatchStaffResponse,
+  peekDispatchStaffTargetRoom
 } from './response.js';
 import {
   normalizeTacticalRooms,
@@ -238,14 +246,18 @@ import {
 import {
   createDefaultRunSetup,
   getDifficultyCatalog,
+  getCampaignModeCatalog,
   getContractCatalog,
   normalizeRunSetup,
   withRunDifficulty,
+  withRunCampaignMode,
   toggleRunContract,
   lockRunSetup,
   markRunSetupModifiersApplied,
   buildRunSetupSummary,
-  getRunSetupModifierProfile
+  getRunSetupModifierProfile,
+  getCampaignLengthFromRunSetup,
+  getCampaignModeCatalog
 } from './runSetup.js';
 import {
   loadOnboardingState,
@@ -510,7 +522,8 @@ function getMetaSurfaceState() {
     runSetup,
     runSetupSummary: buildRunSetupSummary(runSetup),
     runDifficultyCatalog: getDifficultyCatalog(),
-    runContractCatalog: getContractCatalog()
+    runContractCatalog: getContractCatalog(),
+    runCampaignModeCatalog: getCampaignModeCatalog()
   };
 }
 
@@ -607,6 +620,16 @@ function setRunDifficultyFromMenu(difficultyId) {
   renderAll();
 }
 
+function setRunCampaignModeFromMenu(modeId) {
+  state.runSetup = withRunCampaignMode(state?.runSetup || createDefaultRunSetup(), modeId);
+  state.runModifiers = getRunSetupModifierProfile(state.runSetup);
+  state.runSetupSummary = buildRunSetupSummary(state.runSetup);
+  state.campaign = state.campaign && typeof state.campaign === 'object' ? state.campaign : {};
+  state.campaign.length = getCampaignLengthFromRunSetup(state.runSetup);
+  state = normalizeCampaignState(state);
+  renderAll();
+}
+
 function toggleRunContractFromMenu(contractId) {
   state.runSetup = toggleRunContract(state?.runSetup || createDefaultRunSetup(), contractId);
   state.runModifiers = getRunSetupModifierProfile(state.runSetup);
@@ -650,6 +673,8 @@ function getBranchContext(refresh = false) {
 }
 
 function normalizeCampaignSystems() {
+  state.campaign = state.campaign && typeof state.campaign === 'object' ? state.campaign : {};
+  state.campaign.length = getCampaignLengthFromRunSetup(state.runSetup);
   state = normalizeCampaignState(state);
   state = normalizeFinaleDirectorState(state);
   state.runEnding = state?.runEnding && typeof state.runEnding === 'object' ? state.runEnding : null;
@@ -795,6 +820,66 @@ function appendUniqueLogs(lines = []) {
   });
 }
 
+function normalizeIntakeState(targetState = state) {
+  if (!targetState || typeof targetState !== 'object') return targetState;
+  if (!targetState.intake || typeof targetState.intake !== 'object') {
+    targetState.intake = {};
+  }
+  targetState.intake.queueCap = Math.max(2, Number(targetState.intake.queueCap) || 3);
+  if (typeof targetState.intake.arrivalsRemaining !== 'number' || Number.isNaN(targetState.intake.arrivalsRemaining)) {
+    targetState.intake.arrivalsRemaining = computeArrivalBudgetForNight(targetState);
+  }
+  return targetState;
+}
+
+function computeArrivalBudgetForNight(s) {
+  const night = Math.max(1, Number(s?.night || 1));
+  const full = String(s?.runSetup?.campaignMode || '') === 'full';
+  return Math.min(12, 3 + night + (full ? 2 : 0));
+}
+
+function refreshIntakeBudgetForNight(targetState = state) {
+  if (!targetState || typeof targetState !== 'object') return targetState;
+  targetState.intake = targetState.intake && typeof targetState.intake === 'object' ? targetState.intake : {};
+  targetState.intake.arrivalsRemaining = computeArrivalBudgetForNight(targetState);
+  targetState.intake.queueCap = 3;
+  return targetState;
+}
+
+function normalizeAdminSpamState(targetState = state) {
+  if (!targetState || typeof targetState !== 'object') return targetState;
+  if (!targetState.adminSpam || typeof targetState.adminSpam !== 'object') {
+    targetState.adminSpam = { reviewLowValueStreak: 0, dispatchEmptyStreak: 0 };
+  }
+  return targetState;
+}
+
+function tickDeferredShiftCosts() {
+  if (!Array.isArray(state.deferredShiftCosts) || !state.deferredShiftCosts.length) return;
+  const kept = [];
+  state.deferredShiftCosts.forEach((entry) => {
+    const turns = Math.max(0, Number(entry.turnsRemaining || 0) - 1);
+    if (turns <= 0) {
+      const dr = Number(entry.reputationDelta || 0);
+      if (dr) state.reputation = clampReputation(state.reputation + dr);
+      if (entry.logLine) state.logs.push(entry.logLine);
+    } else {
+      kept.push({ ...entry, turnsRemaining: turns });
+    }
+  });
+  state.deferredShiftCosts = kept;
+}
+
+function queueDeferredShiftCost(payload = {}) {
+  state.deferredShiftCosts = Array.isArray(state.deferredShiftCosts) ? state.deferredShiftCosts : [];
+  state.deferredShiftCosts.push({
+    id: payload.id || `dfc-${Date.now()}-${Math.floor(Math.random() * 9999)}`,
+    turnsRemaining: Math.max(1, Number(payload.turnsRemaining || 2)),
+    reputationDelta: Number(payload.reputationDelta || 0),
+    logLine: String(payload.logLine || '')
+  });
+}
+
 function registerRoomChainSignal(payload = {}) {
   const room = state.rooms.find((entry) => String(entry.id) === String(payload.roomId));
   if (!room?.occupiedBy) return null;
@@ -887,6 +972,8 @@ function buildRenderState() {
     campaignNextMilestone: campaign.nextMilestone,
     campaignPrepForecast: [...(campaign.prepForecast || []), ...buildFinaleForeshadowNotes(state)].slice(0, 5),
     campaignSummaryNotes: Array.isArray(state?.campaignSummaryNotes) ? state.campaignSummaryNotes : [],
+    motelCapacityLine: `Rooms licensed tonight: ${getUnlockedRoomCapForNight(state.night)} / 6`,
+    intakeStatusLine: `Arrivals left: ${Math.max(0, Number(state?.intake?.arrivalsRemaining ?? 0))} • Desk queue cap: ${Math.max(0, Number(state?.intake?.queueCap ?? 3))} (${(state.guests || []).length} waiting)`,
     runEnding: state?.runEnding || null,
     onboardingUi,
     ...metaSurface
@@ -1298,7 +1385,9 @@ function bootstrapState() {
   if (!state.activeScenario) {
     state = assignScenarioForNight(state);
   }
-  state.rooms = state.rooms?.length ? state.rooms : createDefaultRooms();
+  state.rooms = state.rooms?.length
+    ? applyRoomUnlockFlags(state.rooms, state.night)
+    : createDefaultRooms({ unlockedCap: getUnlockedRoomCapForNight(state.night) });
   state.rooms = normalizeEscalationRooms(state.rooms);
   state.rooms = normalizeResponseRooms(state.rooms);
   state.rooms = normalizeTacticalRooms(state.rooms);
@@ -1356,6 +1445,9 @@ function bootstrapState() {
   }
 
   guestIdCounter = Math.max(0, ...state.guests.map((guest) => guest.id || 0)) + 1;
+  normalizeIntakeState(state);
+  normalizeAdminSpamState(state);
+  state.deferredShiftCosts = Array.isArray(state.deferredShiftCosts) ? state.deferredShiftCosts : [];
 }
 function renderAll() {
   evaluatePresentationState();
@@ -1383,6 +1475,7 @@ function renderAll() {
     onDisableTutorial: disableTutorialGuidance,
     onEnableTutorial: enableTutorialGuidance,
     onSetDifficulty: setRunDifficultyFromMenu,
+    onSetCampaignMode: setRunCampaignModeFromMenu,
     onToggleContract: toggleRunContractFromMenu,
     onResetTutorial: () => {
       if (!confirmIfNeeded('Reset tutorial guidance state? This keeps run/meta progress but clears tutorial walkthrough flags.')) {
@@ -1442,7 +1535,7 @@ function resetNightState() {
   state = normalizeChainState(state);
   state = assignScenarioForNight(state);
   state.failedState = null;
-  state.rooms = normalizeEscalationRooms(createDefaultRooms());
+  state.rooms = normalizeEscalationRooms(createDefaultRooms({ unlockedCap: getUnlockedRoomCapForNight(1) }));
   state.rooms = normalizeResponseRooms(state.rooms);
   state.rooms = normalizeTacticalRooms(state.rooms);
   state.cameras = createDefaultCameras();
@@ -1600,6 +1693,10 @@ function startShift() {
     maybeGenerateNightStoryBeat(state, state.night);
   }
   syncFinaleStateForNight({ refreshBranch: true });
+  state.rooms = applyRoomUnlockFlags(state.rooms || [], state.night);
+  refreshIntakeBudgetForNight(state);
+  normalizeIntakeState(state);
+  state.deferredShiftCosts = [];
   pushLiveAlert(state, {
     type: 'info',
     message: `Shift started — Scenario: ${state?.activeScenario?.label || 'Standard Shift'}.`,
@@ -1637,22 +1734,34 @@ function checkFailureState() {
 }
 
 function progressShift(actionKey, options = {}) {
+  tickDeferredShiftCosts();
   tickPowerEconomy(state);
   tickLocationState(state);
   const skipPassiveDrain = Boolean(options?.skipPassiveDrain);
   const passiveDrainBase = skipPassiveDrain
     ? 0
     : getPassiveDrainForAction(actionKey, state, getScenarioModifiers());
+  const passiveMult =
+    typeof options.passiveDrainScale === 'number' && Number.isFinite(options.passiveDrainScale)
+      ? Math.max(0, options.passiveDrainScale)
+      : 1;
   const passiveDrain = Math.max(
     0,
-    Math.round(passiveDrainBase * Math.max(0.75, Number(state?.runModifiers?.passiveDrainMult || 1)))
+    Math.round(
+      passiveDrainBase *
+        passiveMult *
+        Math.max(0.75, Number(state?.runModifiers?.passiveDrainMult || 1))
+    )
   );
   if (passiveDrain > 0) {
     state.power = clampPower(state.power - passiveDrain);
     state.logs.push(`Power grid load drained ${passiveDrain}% during ongoing motel operations.`);
   }
 
-  state = advanceNightCycle(state, actionKey);
+  state = advanceNightCycle(state, actionKey, {
+    timeScale: options.timeScale,
+    minutesOverride: options.minutesOverride
+  });
 
   const branchContext = getBranchContext(true);
   const eventTick = tickNightEvents(state, branchContext);
@@ -1758,10 +1867,31 @@ function progressShift(actionKey, options = {}) {
   return false;
 }
 
-function spawnGuest() {
+function callNextArrival() {
   if (activeScreenId !== 'game-screen') return;
   onMeaningfulAction();
   audioController.playUiClick();
+  normalizeIntakeState(state);
+  const cap = Math.max(1, Number(state.intake.queueCap || 3));
+  if ((state.guests || []).length >= cap) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: `Front desk queue is full (${cap}). Check in, flag, or reject before calling another arrival.`,
+      dedupeKey: `intake-queue-full-${state.night}`
+    });
+    renderAll();
+    return;
+  }
+  if (Number(state.intake.arrivalsRemaining || 0) <= 0) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'No further arrivals are scheduled for tonight without overtime intake (not authorized).',
+      dedupeKey: `intake-budget-empty-${state.night}`
+    });
+    renderAll();
+    return;
+  }
+  state.intake.arrivalsRemaining = Math.max(0, Number(state.intake.arrivalsRemaining || 0) - 1);
   const branchContext = getBranchContext(true);
   const visibleGuestNames = [
     ...((state?.guests || []).map((guest) => guest?.name).filter(Boolean)),
@@ -1800,7 +1930,7 @@ function spawnGuest() {
     registerContentExposure(state, { kind: 'special', id: finaleAdjustedGuest.specialEncounter.id });
   }
   guestIdCounter += 1;
-  state.logs.push('A new guest arrived at the front desk.');
+  state.logs.push('A new arrival reached the front desk (intake slot consumed).');
   if (finaleAdjustedGuest?.specialEncounter?.id) {
     pushLiveAlert(state, {
       type: 'warning',
@@ -1815,6 +1945,8 @@ function spawnGuest() {
     dedupeKey: `guest-arrival-${finaleAdjustedGuest.id}`
   });
   updateOnboarding((current) => markTutorialEvent(current, 'guest-spawned'));
+  if (checkFailureState()) return;
+  if (progressShift('callArrival')) return;
   renderAll();
 }
 
@@ -2088,6 +2220,7 @@ function checkInGuest(guestId) {
   room.occupantChainBias =
     typeof guest.chainBias === 'number' ? guest.chainBias : 0;
   room.escalationCooldown = typeof room.escalationCooldown === 'number' ? room.escalationCooldown : 0;
+  room.stayNightsRemaining = computeStayNightsForGuest(guest);
 
   if (room.deskFlagged && room.condition === 'Stable') {
     room.condition = 'Watch';
@@ -2134,6 +2267,9 @@ function checkInGuest(guestId) {
   }
   const checkInLogs = buildGuestCheckInLogs(guest, room);
   state.logs = [...state.logs, ...checkInLogs];
+  state.logs.push(
+    `${guest.name} is booked for ${room.stayNightsRemaining} night${room.stayNightsRemaining === 1 ? '' : 's'} (auto-checkout when nights remaining hit zero).`
+  );
   markThreadOutcome(state, {
     action: 'checkin',
     guest,
@@ -3065,15 +3201,50 @@ function endNight(options = {}) {
 function reviewIncidents() {
   onMeaningfulAction();
   audioController.playUiClick();
+  normalizeAdminSpamState(state);
+  const preActionable = hasActionableIncidentReviewContext(state.rooms);
+  const occupiedCount = (state.rooms || []).filter((r) => r?.occupiedBy).length;
+  if (!occupiedCount) {
+    state.shiftStats.manualReviews = (state.shiftStats.manualReviews || 0) + 1;
+    state.logs.push('Incident review: no occupied rooms — paperwork only.');
+    state.adminSpam.reviewLowValueStreak = (state.adminSpam.reviewLowValueStreak || 0) + 1;
+    const streak = Math.min(8, Number(state.adminSpam.reviewLowValueStreak || 0));
+    const scale = Math.max(0.08, 0.14 - streak * 0.012);
+    if (streak >= 4) {
+      state.reputation = clampReputation(state.reputation - 1);
+      state.logs.push('Repeated empty incident reviews are irritating ownership.');
+    }
+    if (checkFailureState()) return;
+    if (
+      progressShift('review', {
+        timeScale: scale,
+        passiveDrainScale: 0.35,
+        minutesOverride: Math.round(15 * scale)
+      })
+    ) {
+      return;
+    }
+    updateOnboarding((current) => markTutorialEvent(current, 'report-action'));
+    renderAll();
+    return;
+  }
+
   const result = reviewRoomIncidents(state.rooms, state.night);
   const scenarioIncidentBonus = Math.max(0, Number(getScenarioModifiers().incidentBonus || 0));
   const night = Math.max(1, Number(state?.night || 1));
   const reportPowerCost = night <= 2 ? 1 : night >= 4 ? 2 : 1;
-  state.power = clampPower(state.power - reportPowerCost);
+  const meaningful = preActionable || Number(result.generated || 0) > 0;
+  const streak = meaningful ? 0 : Math.min(8, Number(state.adminSpam.reviewLowValueStreak || 0) + 1);
+  state.adminSpam.reviewLowValueStreak = meaningful ? 0 : streak;
+  const lowValueScale = meaningful
+    ? 1
+    : Math.max(0.12, 0.55 - streak * 0.06);
+  const powerCost = meaningful ? reportPowerCost : Math.max(0, reportPowerCost - 1);
+  state.power = clampPower(state.power - powerCost);
   state.shiftStats.manualReviews += 1;
   state.shiftStats.incidentReviewCount = (state.shiftStats.incidentReviewCount || 0) + 1;
   state.shiftStats.reportActionsUsed = (state.shiftStats.reportActionsUsed || 0) + 1;
-  state.shiftStats.reportActionCosts = (state.shiftStats.reportActionCosts || 0) + reportPowerCost;
+  state.shiftStats.reportActionCosts = (state.shiftStats.reportActionCosts || 0) + powerCost;
 
   state.rooms = result.rooms;
   state.logs = [...state.logs, ...result.logs];
@@ -3115,15 +3286,30 @@ function reviewIncidents() {
     state.shiftStats.severeIncidents += highManualIncidents;
   }
 
-  state.autoIncidentCooldown = Math.max(state.autoIncidentCooldown, 1);
-  applyIdentityImpact({
-    doctrine: { control: 1, stability: 1 },
-    factions: { authorities: 1, ownership: 1 },
-    reason: 'manual incident review'
-  });
+  if (meaningful) {
+    state.autoIncidentCooldown = Math.max(state.autoIncidentCooldown, 1);
+    applyIdentityImpact({
+      doctrine: { control: 1, stability: 1 },
+      factions: { authorities: 1, ownership: 1 },
+      reason: 'manual incident review'
+    });
+  } else {
+    state.logs.push('Incident review found no new confirmations; time cost is minimal.');
+    if (streak >= 3) {
+      state.reputation = clampReputation(state.reputation - 1);
+    }
+  }
 
   if (checkFailureState()) return;
-  if (progressShift('review')) return;
+  if (
+    progressShift('review', {
+      timeScale: lowValueScale,
+      passiveDrainScale: meaningful ? 1 : 0.4,
+      minutesOverride: meaningful ? undefined : Math.round(15 * lowValueScale)
+    })
+  ) {
+    return;
+  }
   updateOnboarding((current) => markTutorialEvent(current, 'report-action'));
   renderAll();
 }
@@ -3132,7 +3318,34 @@ function dispatchStaff() {
   onMeaningfulAction();
   audioController.playUiClick();
   audioController.playDispatch();
+  normalizeAdminSpamState(state);
   const identity = getIdentityContext();
+  const previewTarget = peekDispatchStaffTargetRoom(state.rooms);
+  if (!previewTarget) {
+    state.shiftStats.reportActionsUsed = (state.shiftStats.reportActionsUsed || 0) + 1;
+    state.adminSpam.dispatchEmptyStreak = (state.adminSpam.dispatchEmptyStreak || 0) + 1;
+    const streak = Math.min(8, Number(state.adminSpam.dispatchEmptyStreak || 0));
+    state.logs.push('Staff dispatch: no occupied room currently warrants a priority response.');
+    if (streak >= 3) {
+      state.reputation = clampReputation(state.reputation - 1);
+      state.logs.push('Ownership notes unnecessary staff callouts when nothing is actionable.');
+    }
+    const scale = Math.max(0.09, 0.15 - streak * 0.014);
+    if (checkFailureState()) return;
+    if (
+      progressShift('dispatch', {
+        timeScale: scale,
+        passiveDrainScale: 0.3,
+        minutesOverride: Math.round(20 * scale)
+      })
+    ) {
+      return;
+    }
+    updateOnboarding((current) => markTutorialEvent(current, 'report-action'));
+    renderAll();
+    return;
+  }
+
   const result = dispatchStaffResponse(state.rooms, state.night, {
     dispatchSuccessBonus:
       Number(state?.progressionModifiers?.dispatchSuccessBonus || 0) +
@@ -3156,6 +3369,7 @@ function dispatchStaff() {
   state.money = Math.max(0, state.money - dispatchFee);
   state.shiftStats.reportActionsUsed = (state.shiftStats.reportActionsUsed || 0) + 1;
   state.shiftStats.reportActionCosts = (state.shiftStats.reportActionCosts || 0) + dispatchFee;
+  state.adminSpam.dispatchEmptyStreak = 0;
 
   if (Array.isArray(result.logs) && result.logs.length) {
     state.logs = [...state.logs, ...result.logs];
@@ -3232,7 +3446,7 @@ function lockDownRoom(roomId) {
     state.power = clampPower(state.power + result.powerDelta);
   }
 
-  calmRoomChain(roomId, 2);
+  calmRoomChain(roomId, 3);
   const doctrineMods = getDoctrineModifiers(state?.doctrine || {});
   if (Number(doctrineMods.policeRepBonus || 0) > 0) {
     calmRoomChain(roomId, 1);
@@ -3243,6 +3457,14 @@ function lockDownRoom(roomId) {
     factions: { authorities: 1, guests: -1, locals: -1 },
     reason: 'lockdown used'
   });
+
+  if (result.success && Number(result.deferredReputationDelta || 0)) {
+    queueDeferredShiftCost({
+      turnsRemaining: 2,
+      reputationDelta: result.deferredReputationDelta,
+      logLine: result.deferredLogLine || 'Deferred lockdown audit pressure lands on the desk.'
+    });
+  }
 
   if (checkFailureState()) return;
   if (progressShift('lockdown')) return;
@@ -3316,13 +3538,21 @@ function cutPowerToRoom(roomId) {
     state.power = clampPower(state.power + result.powerDelta);
   }
 
-  calmRoomChain(roomId, 2);
+  calmRoomChain(roomId, 3);
   maybeApplyTacticalStabilization(roomId);
   applyIdentityImpact({
     doctrine: { force: 1, secrecy: 1, compassion: -1 },
     factions: { guests: -1, locals: -1, ownership: -1 },
     reason: 'room power cut'
   });
+
+  if (result.success && Number(result.deferredReputationDelta || 0)) {
+    queueDeferredShiftCost({
+      turnsRemaining: 2,
+      reputationDelta: result.deferredReputationDelta,
+      logLine: result.deferredLogLine || 'Deferred maintenance and guest backlash from the hard power cut arrives.'
+    });
+  }
 
   if (checkFailureState()) return;
   if (progressShift('cutPower')) return;
@@ -3428,7 +3658,9 @@ function restartCurrentNight() {
   state = normalizeChainState(state);
   state = assignScenarioForNight(state);
   state.failedState = null;
-  state.rooms = normalizeEscalationRooms(state.rooms || createDefaultRooms());
+  state.rooms = normalizeEscalationRooms(
+    applyRoomUnlockFlags(state.rooms || createDefaultRooms({ unlockedCap: getUnlockedRoomCapForNight(currentNight) }), currentNight)
+  );
   state.rooms = normalizeResponseRooms(state.rooms);
   state.rooms = normalizeTacticalRooms(state.rooms);
   state.cameras = state.cameras?.length ? state.cameras : createDefaultCameras();
@@ -3446,6 +3678,8 @@ function restartCurrentNight() {
   state.shiftElapsedMinutes = 0;
   state.dawnProcessed = false;
   state.lastAdvanceReason = null;
+  state.deferredShiftCosts = [];
+  refreshIntakeBudgetForNight(state);
   state = normalizePresentationState(state);
   state = normalizeSpecialEncounterState(state);
   state = normalizeNightEventState(state);
@@ -3526,11 +3760,16 @@ function nextNight() {
     window.DeadEndPhase2.applyNightModifier(state);
   }
   state.guests = [];
-  state.rooms = normalizeEscalationRooms(createDefaultRooms());
+  state.deferredShiftCosts = [];
+  let nextRooms = applyStayDecrementBetweenNights(state.rooms || []);
+  nextRooms = applyRoomUnlockFlags(nextRooms, state.night);
+  state.rooms = normalizeEscalationRooms(nextRooms);
   state.rooms = normalizeResponseRooms(state.rooms);
   state.rooms = normalizeTacticalRooms(state.rooms);
   state.cameras = createDefaultCameras();
-  state.logs = [`Night ${state.night} started. Motel reset for a new shift.`];
+  state.logs = [`Night ${state.night} started. Carrying forward room ledger, unlocked capacity, and outstanding stays.`];
+  refreshIntakeBudgetForNight(state);
+  normalizeIntakeState(state);
   state.activeEvents = [];
   state.incidents = [];
   state.storyChains = [];
@@ -3611,7 +3850,7 @@ function bindEvents() {
   document.getElementById('new-night-btn').addEventListener('click', resetNightState);
   document.getElementById('menu-settings-btn')?.addEventListener('click', () => toggleSettingsOverlay(true));
   document.getElementById('open-settings-btn')?.addEventListener('click', () => toggleSettingsOverlay(true));
-  document.getElementById('spawn-guest-btn').addEventListener('click', spawnGuest);
+  document.getElementById('spawn-guest-btn').addEventListener('click', callNextArrival);
   document.getElementById('scan-cameras-btn').addEventListener('click', scanCameraSystem);
   document.getElementById('restore-power-btn').addEventListener('click', restorePower);
   document.getElementById('drain-power-btn').addEventListener('click', drainPower);

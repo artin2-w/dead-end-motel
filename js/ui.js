@@ -351,6 +351,16 @@ export function renderTopbar(state) {
         : `Campaign: ${label}`;
   }
 
+  const motelCapacityLine = document.getElementById('motel-capacity-line');
+  if (motelCapacityLine) {
+    motelCapacityLine.textContent = state?.motelCapacityLine || '';
+  }
+
+  const frontdeskIntakeLine = document.getElementById('frontdesk-intake-line');
+  if (frontdeskIntakeLine) {
+    frontdeskIntakeLine.textContent = state?.intakeStatusLine || '';
+  }
+
   const finaleBanner = document.getElementById('finale-banner');
   const finaleStateCard = document.getElementById('finale-state-card');
   const finalePressureLabel = document.getElementById('finale-pressure-label');
@@ -583,7 +593,8 @@ export function renderGuests(state, onCheckIn, onFlagGuest, onRejectGuest, onHan
   queue.innerHTML = '';
 
   if (!state.guests.length) {
-    queue.innerHTML = '<div class="log-item">No guests in queue yet. Spawn Guest to start desk flow.</div>';
+    queue.innerHTML =
+      '<div class="log-item">No guests waiting. Use Call Next Arrival when you have intake slots and queue space.</div>';
     return;
   }
 
@@ -791,7 +802,19 @@ export function renderRooms(
   state.rooms.forEach((room) => {
     const presentation = getRoomPresentationMeta(room);
     const card = document.createElement('article');
-    card.className = `room-card ${getRoomConditionClass(room.condition || 'Stable')} room-tone-${presentation.tone} ${presentation.shouldPulse ? 'is-critical-pulse' : ''} ${room.occupied ? 'room-card-occupied' : 'room-card-vacant'}`;
+    const lockedOut = room?.unlocked === false;
+    card.className = `room-card ${getRoomConditionClass(room.condition || 'Stable')} room-tone-${presentation.tone} ${presentation.shouldPulse ? 'is-critical-pulse' : ''} ${room.occupied ? 'room-card-occupied' : 'room-card-vacant'} ${lockedOut ? 'room-card-locked' : ''}`;
+    if (lockedOut) {
+      card.innerHTML = `
+        <div class="room-card-header">
+          <h4>${room.label}</h4>
+          <span class="room-condition-pill">Locked</span>
+        </div>
+        <p class="room-meta muted">Not licensed for occupancy yet — unlocks as the campaign expands.</p>
+      `;
+      roomList.appendChild(card);
+      return;
+    }
     card.innerHTML = room.occupied
       ? `
         <div class="room-card-header">
@@ -800,6 +823,7 @@ export function renderRooms(
         </div>
         <div class="room-occupant-block">
           <p class="room-meta">Occupied by <strong>${room.guestName || room.occupiedBy}</strong></p>
+          ${Number(room.stayNightsRemaining) > 0 ? `<p class="room-stay-line muted">Stay ledger: ${room.stayNightsRemaining} night${Number(room.stayNightsRemaining) === 1 ? '' : 's'} left on the books</p>` : ''}
           ${room.occupantArchetypeLabel ? `<p class="room-archetype-line">Archetype: ${room.occupantArchetypeLabel}</p>` : ''}
         </div>
         <div class="room-pressure-row">
@@ -828,7 +852,8 @@ export function renderRooms(
       const lockDownButton = document.createElement('button');
       lockDownButton.className = 'button button-warning';
       lockDownButton.textContent = 'Lock Down';
-      lockDownButton.title = 'Restrict movement in the room. Good containment, but can carry tradeoffs.';
+      lockDownButton.title =
+        'NOW: hard containment and calmer chains. LATER: guest complaints and audit/reputation tail once it lifts.';
       bindAtomicActionButton(lockDownButton, () => onLockDownRoom(room.id), { groupRoot: actions });
 
       const callPoliceButton = document.createElement('button');
@@ -840,7 +865,8 @@ export function renderRooms(
       const cutPowerButton = document.createElement('button');
       cutPowerButton.className = 'button button-danger';
       cutPowerButton.textContent = 'Cut Power';
-      cutPowerButton.title = 'Disable room utilities to suppress activity; usually harsh and reputation-sensitive.';
+      cutPowerButton.title =
+        'NOW: kills room activity and can blunt spikes. LATER: maintenance backlash and harsher reputation fallout.';
       bindAtomicActionButton(cutPowerButton, () => onCutPowerToRoom(room.id), { groupRoot: actions });
 
       const evictButton = document.createElement('button');
@@ -1632,6 +1658,7 @@ export function renderMainMenuMetaSurface(state, handlers = {}) {
   const startGuidedButton = document.getElementById('start-guided-btn');
   const startStandardButton = document.getElementById('start-standard-btn');
   const difficultySelect = document.getElementById('main-menu-difficulty-select');
+  const campaignModeSelect = document.getElementById('main-menu-campaign-mode-select');
   const contractList = document.getElementById('main-menu-contract-list');
   const runSetupSummary = document.getElementById('main-menu-run-setup-summary');
 
@@ -1641,6 +1668,7 @@ export function renderMainMenuMetaSurface(state, handlers = {}) {
   const setupSummary = state?.runSetupSummary || null;
   const difficultyCatalog = Array.isArray(state?.runDifficultyCatalog) ? state.runDifficultyCatalog : [];
   const contractCatalog = Array.isArray(state?.runContractCatalog) ? state.runContractCatalog : [];
+  const campaignModeCatalog = Array.isArray(state?.runCampaignModeCatalog) ? state.runCampaignModeCatalog : [];
 
   if (points) {
     points.textContent = `Archive Points: ${Number(archive.points || 0)}`;
@@ -1672,6 +1700,23 @@ export function renderMainMenuMetaSurface(state, handlers = {}) {
     difficultySelect.onchange = (event) => {
       if (typeof handlers.onSetDifficulty === 'function') {
         handlers.onSetDifficulty(event.target.value);
+      }
+    };
+  }
+
+  if (campaignModeSelect) {
+    campaignModeSelect.innerHTML = '';
+    campaignModeCatalog.forEach((entry) => {
+      const option = document.createElement('option');
+      option.value = entry.id;
+      option.textContent = entry.label || entry.id;
+      option.selected = entry.id === runSetup.campaignMode;
+      campaignModeSelect.appendChild(option);
+    });
+    campaignModeSelect.disabled = Boolean(runSetup.locked);
+    campaignModeSelect.onchange = (event) => {
+      if (typeof handlers.onSetCampaignMode === 'function') {
+        handlers.onSetCampaignMode(event.target.value);
       }
     };
   }

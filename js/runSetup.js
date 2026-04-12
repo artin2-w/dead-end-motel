@@ -1,5 +1,6 @@
 const DEFAULT_SETUP = Object.freeze({
   difficultyId: 'standard',
+  campaignMode: 'short',
   contractIds: [],
   locked: false,
   modifiersApplied: false
@@ -8,11 +9,36 @@ const DEFAULT_SETUP = Object.freeze({
 export function createDefaultRunSetup() {
   return {
     difficultyId: DEFAULT_SETUP.difficultyId,
+    campaignMode: DEFAULT_SETUP.campaignMode,
     contractIds: [],
     locked: false,
     modifiersApplied: false
   };
 }
+
+const CAMPAIGN_MODE_PRESETS = Object.freeze([
+  {
+    id: 'short',
+    label: 'Short (5 Nights)',
+    campaignLength: 5,
+    description: 'Classic campaign length with tighter pacing.',
+    modifiers: {}
+  },
+  {
+    id: 'full',
+    label: 'Full (10 Nights)',
+    campaignLength: 10,
+    description: 'Long-run escalation with higher sustained pressure.',
+    modifiers: {
+      pressureScale: 1.08,
+      passiveDrainMult: 1.06,
+      eventTriggerBonus: 0.02,
+      anomalyChanceBonus: 0.02,
+      guestRiskBonus: 1,
+      finalePressureScale: 1.1
+    }
+  }
+]);
 
 const DIFFICULTY_PRESETS = Object.freeze([
   {
@@ -163,19 +189,35 @@ export function getDifficultyCatalog() {
   return DIFFICULTY_PRESETS.map((entry) => ({ ...entry }));
 }
 
+export function getCampaignModeCatalog() {
+  return CAMPAIGN_MODE_PRESETS.map((entry) => ({ ...entry }));
+}
+
+export function getCampaignLengthFromRunSetup(runSetup = {}) {
+  const normalized = normalizeRunSetup(runSetup);
+  const campaignMode =
+    CAMPAIGN_MODE_PRESETS.find((entry) => entry.id === normalized.campaignMode) || CAMPAIGN_MODE_PRESETS[0];
+  return clamp(Number(campaignMode.campaignLength || 5), 3, 12);
+}
+
 export function getContractCatalog() {
   return CONTRACT_CATALOG.map((entry) => ({ ...entry }));
 }
 
 export function normalizeRunSetup(runSetup = {}) {
   const difficultyIds = DIFFICULTY_PRESETS.map((entry) => entry.id);
+  const campaignModeIds = CAMPAIGN_MODE_PRESETS.map((entry) => entry.id);
   const difficultyId = difficultyIds.includes(String(runSetup?.difficultyId || ''))
     ? String(runSetup.difficultyId)
     : DEFAULT_SETUP.difficultyId;
+  const campaignMode = campaignModeIds.includes(String(runSetup?.campaignMode || ''))
+    ? String(runSetup.campaignMode)
+    : DEFAULT_SETUP.campaignMode;
   const contractIds = toUniqueList(runSetup?.contractIds, 2)
     .filter((id) => CONTRACT_CATALOG.some((entry) => entry.id === id));
   return {
     difficultyId,
+    campaignMode,
     contractIds,
     locked: Boolean(runSetup?.locked),
     modifiersApplied: Boolean(runSetup?.modifiersApplied)
@@ -187,6 +229,13 @@ export function withRunDifficulty(runSetup, difficultyId) {
   if (next.locked) return next;
   if (!DIFFICULTY_PRESETS.some((entry) => entry.id === difficultyId)) return next;
   return { ...next, difficultyId };
+}
+
+export function withRunCampaignMode(runSetup, campaignMode) {
+  const next = normalizeRunSetup(runSetup);
+  if (next.locked) return next;
+  if (!CAMPAIGN_MODE_PRESETS.some((entry) => entry.id === campaignMode)) return next;
+  return { ...next, campaignMode };
 }
 
 export function toggleRunContract(runSetup, contractId) {
@@ -211,18 +260,22 @@ export function markRunSetupModifiersApplied(runSetup) {
 export function buildRunSetupSummary(runSetup = {}) {
   const normalized = normalizeRunSetup(runSetup);
   const difficulty = DIFFICULTY_PRESETS.find((entry) => entry.id === normalized.difficultyId) || DIFFICULTY_PRESETS[1];
+  const campaignMode = CAMPAIGN_MODE_PRESETS.find((entry) => entry.id === normalized.campaignMode) || CAMPAIGN_MODE_PRESETS[0];
   const contracts = normalized.contractIds
     .map((id) => CONTRACT_CATALOG.find((entry) => entry.id === id))
     .filter(Boolean);
   return {
     difficultyId: difficulty.id,
     difficultyLabel: difficulty.label,
+    campaignModeId: campaignMode.id,
+    campaignModeLabel: campaignMode.label,
+    campaignLength: Number(campaignMode.campaignLength || 5),
     contractIds: contracts.map((entry) => entry.id),
     contractLabels: contracts.map((entry) => entry.label),
     contractCount: contracts.length,
     setupLine: contracts.length
-      ? `Difficulty: ${difficulty.label} • Contracts: ${contracts.map((entry) => entry.label).join(', ')}`
-      : `Difficulty: ${difficulty.label} • Contracts: None`,
+      ? `Mode: ${campaignMode.label} • Difficulty: ${difficulty.label} • Contracts: ${contracts.map((entry) => entry.label).join(', ')}`
+      : `Mode: ${campaignMode.label} • Difficulty: ${difficulty.label} • Contracts: None`,
     rewardBonusPercent: getRunSetupModifierProfile(normalized).archiveBonusPercent
   };
 }
@@ -230,6 +283,7 @@ export function buildRunSetupSummary(runSetup = {}) {
 export function getRunSetupModifierProfile(runSetup = {}) {
   const normalized = normalizeRunSetup(runSetup);
   const difficulty = DIFFICULTY_PRESETS.find((entry) => entry.id === normalized.difficultyId) || DIFFICULTY_PRESETS[1];
+  const campaignMode = CAMPAIGN_MODE_PRESETS.find((entry) => entry.id === normalized.campaignMode) || CAMPAIGN_MODE_PRESETS[0];
   const contracts = normalized.contractIds
     .map((id) => CONTRACT_CATALOG.find((entry) => entry.id === id))
     .filter(Boolean);
@@ -268,6 +322,7 @@ export function getRunSetupModifierProfile(runSetup = {}) {
     });
   };
 
+  mergeModifiers(campaignMode.modifiers || {});
   mergeModifiers(difficulty.modifiers || {});
   contracts.forEach((contract) => {
     mergeModifiers(contract.modifiers || {});

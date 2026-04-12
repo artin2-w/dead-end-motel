@@ -65,21 +65,23 @@ export function applyLockdownToRoom(room) {
   const updatedRoom = {
     ...room,
     lockedDown: true,
-    lockdownCooldown: 3,
+    lockdownCooldown: 4,
     condition: room.condition === 'Critical' ? 'Watch' : room.condition
   };
 
-  const reputationDelta =
-    room.riskLevel === 'Low' && !room.policyOverride ? -1 : 0;
+  const reputationDelta = room.riskLevel === 'Low' && !room.policyOverride ? -1 : 0;
 
   return {
     room: updatedRoom,
     logs: [
-      `Front desk placed ${roomLabel} under temporary lockdown.`,
-      `${roomLabel} will remain under controlled access for a short period.`
+      `NOW — Hard lockdown on ${roomLabel}: corridor traffic and guest movement are frozen; incident spillover into shared space drops sharply.`,
+      `NOW — Staff keys and access logs are aligned; ${room.occupiedBy} is contained while the situation is documented.`,
+      `LATER — Forced access events draw ownership scrutiny: expect complaint traffic, paperwork, and reputation drag once the lock lifts.`
     ],
     reputationDelta,
-    powerDelta: -1,
+    powerDelta: -3,
+    deferredReputationDelta: -2,
+    deferredLogLine: `LATER — Audit tail: the ${roomLabel} lockdown is cited in a guest complaint batch and slows the next managerial sign-off.`,
     success: true
   };
 }
@@ -136,17 +138,21 @@ export function applyPowerCutToRoom(room) {
   const updatedRoom = {
     ...room,
     powerCut: true,
-    powerCutCooldown: 3
+    powerCutCooldown: 4,
+    condition: room.condition === 'Critical' ? 'Watch' : room.condition
   };
 
   return {
     room: updatedRoom,
     logs: [
-      `Power to ${roomLabel} was temporarily cut as an emergency containment measure.`,
-      `${room.occupiedBy} is now under restricted room power conditions.`
+      `NOW — Breaker pulled on ${roomLabel}: lights, climate, and outlets die; volatile activity inside loses momentum immediately.`,
+      `NOW — Grid load shifts; the property eats a short operational cost, but the worst camera-linked spikes often flatten.`,
+      `LATER — Guests remember “blackout rooms”; maintenance opens a damage ticket and ownership questions whether cuts were justified.`
     ],
-    reputationDelta: -1 - getRiskPenalty(room.riskLevel || 'Low'),
-    powerDelta: -5,
+    reputationDelta: -2 - getRiskPenalty(room.riskLevel || 'Low'),
+    powerDelta: -8,
+    deferredReputationDelta: -3,
+    deferredLogLine: `LATER — Aftermath: ${roomLabel}'s hard cut is logged as a code-adjacent incident; expect a reputation hit when the story spreads.`,
     success: true
   };
 }

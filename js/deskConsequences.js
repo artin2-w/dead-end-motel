@@ -155,8 +155,17 @@ export function queueDeskFollowupForDecision(state, { guest, action, room = null
   const template = buildConsequenceTemplate({ guest, action, room, policyResult });
   if (!template) return { queued: false, reason: 'no-template' };
 
+  const night = Math.max(1, Number(state.night || 1));
+  const nightScale = 1 + Math.min(0.85, (night - 1) * 0.055);
+  const scaled = {
+    ...template,
+    ticksRemaining: clampTicks(Math.round(template.ticksRemaining * (night >= 6 ? 1.15 : 1))),
+    reputationDelta: Math.round(toInt(template.reputationDelta, 0) * nightScale),
+    chainSeverity: Math.round(toInt(template.chainSeverity, 0) * nightScale)
+  };
+
   const key = `${action}-${guest.id || guest.name}-${template.type}-${state.night || 1}`;
-  const primary = queueDeskConsequence(state, { ...template, key });
+  const primary = queueDeskConsequence(state, { ...scaled, key });
 
   if (!primary.queued) return primary;
 

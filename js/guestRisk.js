@@ -123,9 +123,10 @@ function clampSignal(value) {
   return Math.max(0, Math.min(2, Number(value || 0)));
 }
 
-function buildSignalModel(riskLevel, trait) {
+function buildSignalModel(riskLevel, trait, night = 1) {
   const riskSeed = riskLevel === 'High' ? 2 : riskLevel === 'Medium' ? 1 : 0;
   const traitName = String(trait?.name || '').toLowerCase();
+  const n = Math.max(1, Number(night || 1));
 
   let urgency = riskSeed;
   let instability = riskSeed;
@@ -139,7 +140,9 @@ function buildSignalModel(riskLevel, trait) {
   if (traitName.includes('nervous')) urgency += 1;
   if (traitName.includes('aggressive') || traitName.includes('unstable')) instability += 1;
 
-  const contradictoryClue = Math.random() < (riskLevel === 'Medium' ? 0.42 : 0.2);
+  const baseContradiction = riskLevel === 'Medium' ? 0.42 : riskLevel === 'High' ? 0.26 : 0.2;
+  const nightBoost = Math.min(0.2, (n - 1) * 0.022 + (n >= 6 ? 0.05 : 0) + (n >= 9 ? 0.04 : 0));
+  const contradictoryClue = Math.random() < Math.min(0.72, baseContradiction + nightBoost);
   if (contradictoryClue) {
     if (riskLevel === 'Low') {
       deception += 1;
@@ -216,7 +219,7 @@ export function enrichGuestProfile(guest, night = 1) {
   const riskLevel = pickWeightedRisk(night);
   const traitPool = TRAITS_BY_RISK[riskLevel] || TRAITS_BY_RISK.Low;
   const trait = pickRandom(traitPool);
-  const signals = buildSignalModel(riskLevel, trait);
+  const signals = buildSignalModel(riskLevel, trait, night);
   const policyHint = buildPolicyAlignmentHint(signals);
 
   const draft = {
