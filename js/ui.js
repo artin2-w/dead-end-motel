@@ -330,6 +330,8 @@ export function renderTopbar(state) {
     runIdentityStrip.innerHTML = `
       <p>Operating Doctrine: <strong>${doctrineTitle}</strong></p>
       <p class="muted">${signal}</p>
+      ${state?.nightIdentityLine ? `<p class="muted">${state.nightIdentityLine}</p>` : ''}
+      ${state?.crisisNight?.active && state?.crisisNight?.note ? `<p class="muted">${state.crisisNight.note}</p>` : ''}
     `;
     runIdentityStrip.title = 'Doctrine and faction climate shape subtle bonuses, pressure, and narrative tone.';
   }
@@ -826,6 +828,7 @@ export function renderRooms(
           <p class="room-meta">Occupied by <strong>${room.guestName || room.occupiedBy}</strong></p>
           ${Number(room.stayNightsRemaining) > 0 ? `<p class="room-stay-line muted">Stay remaining: ${room.stayNightsRemaining} night${Number(room.stayNightsRemaining) === 1 ? '' : 's'} incl. tonight${Number(room.stayNightsRemaining) === 1 ? ' • checkout at dawn' : ''}</p>` : ''}
           ${room.occupantArchetypeLabel ? `<p class="room-archetype-line">Archetype: ${room.occupantArchetypeLabel}</p>` : ''}
+          ${room?.memory?.note ? `<p class="room-memory-line muted">${room.memory.note}</p>` : ''}
         </div>
         <div class="room-pressure-row">
           ${typeof room.chainPressure === 'number' && room.chainPressure > 0 ? `<p class="room-chain-line ${room.chainPressure >= 6 ? 'is-high' : ''}" title="Chain pressure tracks linked incident momentum across rooms.">Chain Pressure: ${room.chainPressure}</p>` : '<p class="room-chain-line" title="Chain pressure tracks linked incident momentum across rooms.">Chain Pressure: Low</p>'}

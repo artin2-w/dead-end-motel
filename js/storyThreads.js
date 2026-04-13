@@ -154,7 +154,11 @@ function ensureHistoryRecord(history, guestName) {
       lastMood: null,
       wasHarshlyRejected: false,
       wasHandledCleanly: false,
-      linkedThreads: []
+      linkedThreads: [],
+      lastRoomId: null,
+      lastArchetype: null,
+      roomMemoryWeight: 0,
+      returnModifier: 'neutral'
     };
   }
   return history[guestName];
@@ -228,6 +232,19 @@ function buildReturningGuestVariant(baseGuest, history, activeStoryBeat) {
   variant.risk = riskLevel;
   variant.riskNote = riskNote;
   variant.priorHistoryLine = priorLine;
+  variant.returnModifier = history.returnModifier || 'neutral';
+  variant.returningGuestNote =
+    history.returnModifier === 'hostile-return'
+      ? 'Returning after eviction: expects conflict and may escalate faster.'
+      : history.returnModifier === 'resentful'
+        ? 'Returning after rejection: tone is defensive and old friction is still active.'
+        : history.returnModifier === 'knows-you-watched'
+          ? 'Returning after a prior flag: calmer on the surface, less trustworthy underneath.'
+          : history.returnModifier === 'recognizes-you'
+            ? 'Returning guest remembers prior handling and reacts to it.'
+            : 'Returning guest with prior motel history.';
+  variant.assignedRoomMemoryId = history.lastRoomId || null;
+  variant.archetypeMemoryLine = history.lastArchetype ? `Prior pattern on file: ${history.lastArchetype}.` : '';
   variant.policyHistoryPressure = history.wasHarshlyRejected ? 'Management expects controlled handling.' : null;
   variant.extraEncounterNote = history.wasHarshlyRejected
     ? 'Desk tone may escalate quickly if rejected again.'
@@ -274,20 +291,26 @@ export function markThreadOutcome(state, payload = {}) {
     record.lastNight = night;
     record.lastRiskLevel = riskLevel;
     record.lastMood = mood;
+    record.lastRoomId = payload?.guest?.assignedRoomId || payload?.linkedRoomId || payload?.roomId || record.lastRoomId || null;
+    record.lastArchetype = payload?.guest?.archetypeKey || payload?.guest?.archetypeLabel || record.lastArchetype || null;
 
     if (action === 'reject') {
       record.lastOutcome = 'rejected';
       record.wasHarshlyRejected = riskLevel !== 'High';
       record.wasHandledCleanly = false;
+      record.returnModifier = record.wasHarshlyRejected ? 'resentful' : 'deflecting';
     } else if (action === 'checkin') {
       record.lastOutcome = 'checkedIn';
       record.wasHandledCleanly = true;
       record.wasHarshlyRejected = false;
+      record.returnModifier = 'recognizes-you';
     } else if (action === 'flag') {
       record.lastOutcome = 'flagged';
+      record.returnModifier = 'knows-you-watched';
     } else if (action === 'evicted') {
       record.lastOutcome = 'evicted';
       record.wasHandledCleanly = false;
+      record.returnModifier = 'hostile-return';
     }
   }
 
@@ -449,7 +472,7 @@ export function maybeGenerateReturningGuestVariant(baseGuest, state, night = 1) 
     return entry?.name && lastNight > 0 && lastNight < Number(night || 1);
   });
 
-  const returnChance = clamp(0.08 + historyEntries.length * 0.04, 0.08, 0.32);
+  const returnChance = clamp(0.12 + historyEntries.length * 0.05, 0.12, 0.4);
   if (!historyEntries.length || Math.random() > returnChance) {
     if (state.activeStoryBeat && Math.random() < 0.22) {
       return {

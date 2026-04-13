@@ -560,6 +560,7 @@ function bumpRiskLevel(riskLevel) {
 }
 
 function getScenarioModifiers() {
+  ensureCrisisNightState(state);
   const scenario = state?.activeScenario || {
     incidentBonus: 0,
     riskBonus: 0,
@@ -569,6 +570,10 @@ function getScenarioModifiers() {
   const bias = state?.narrativeBias || {};
   const milestoneMods = getMilestoneGameplayModifiers(state);
   const runMods = state?.runModifiers || {};
+  const crisis = state?.crisisNight || {};
+  const crisisRisk = crisis.active && (crisis.kind === 'guest-surge' || crisis.kind === 'hostile-social-night') ? 1 : 0;
+  const crisisChain = crisis.active && (crisis.kind === 'stacked-pressure' || crisis.kind === 'guest-surge') ? 1 : 0;
+  const crisisPower = crisis.active && crisis.kind === 'utility-fragility' ? 1 : 0;
   return {
     ...scenario,
     incidentBonus: Math.max(0, Number(scenario.incidentBonus || 0) + Number(milestoneMods.incidentBonus || 0)),
@@ -578,9 +583,10 @@ function getScenarioModifiers() {
       + Number(bias.riskBonus || 0)
       + Number(milestoneMods.riskBonus || 0)
       + Number(runMods.guestRiskBonus || 0)
+      + crisisRisk
     ),
-    chainBonus: Math.max(0, Number(scenario.chainBonus || 0) + Number(bias.chainBonus || 0) + Number(milestoneMods.chainBonus || 0)),
-    powerScanPenalty: Math.max(0, Number(scenario.powerScanPenalty || 0) + Number(bias.powerScanPenalty || 0)),
+    chainBonus: Math.max(0, Number(scenario.chainBonus || 0) + Number(bias.chainBonus || 0) + Number(milestoneMods.chainBonus || 0) + crisisChain),
+    powerScanPenalty: Math.max(0, Number(scenario.powerScanPenalty || 0) + Number(bias.powerScanPenalty || 0) + crisisPower),
     eventTriggerBonus: Number(runMods.eventTriggerBonus || 0) + Number(state?.phase2Pressure?.eventFrequencyBoost || 0),
     anomalyChanceBonus: Number(runMods.anomalyChanceBonus || 0)
   };
@@ -719,10 +725,12 @@ function syncFinaleStateForNight(options = {}) {
     runtimeBranchContext = null;
     getBranchContext(true);
   }
+  ensureCrisisNightState(state);
 }
 
 function getCampaignContext() {
   normalizeCampaignSystems();
+  ensureCrisisNightState(state);
   const progress = getCampaignProgress(state);
   const currentMilestone = getMilestoneMeta(progress.currentNight, state.campaign);
   const nextMilestone = getMilestoneMeta(Math.min(progress.currentNight + 1, progress.totalNights), state.campaign);
@@ -730,7 +738,10 @@ function getCampaignContext() {
     progress,
     currentMilestone,
     nextMilestone,
-    prepForecast: getPrepForecastNotes(state)
+    prepForecast: [
+      ...getPrepForecastNotes(state),
+      ...(state?.crisisNight?.active ? [state.crisisNight.note] : [])
+    ].slice(0, 5)
   };
 }
 
@@ -840,6 +851,7 @@ function captureNightStartSnapshot(reason = 'night-open') {
     state: snapshotState
   };
   state.nightStartSnapshotReason = reason;
+  state.logs.push(`Snapshot saved: opening state for Night ${state.night} captured (${reason}).`);
 }
 
 function restoreNightStartSnapshot(options = {}) {
@@ -868,6 +880,7 @@ function restoreNightStartSnapshot(options = {}) {
   state = restoredState;
   guestIdCounter = Math.max(1, Number(snapshot.guestIdCounter || 1));
   state.failedState = null;
+  state = normalizeRoomMemoryState(state);
   state.guests = Array.isArray(state.guests) ? state.guests : [];
   state.guests = normalizeGuestFlags(state.guests);
   state.guests = normalizePolicyGuests(state.guests, state.night);
@@ -907,6 +920,7 @@ function restoreNightStartSnapshot(options = {}) {
     message: options.message || `Night ${state.night} restored to opening conditions.`,
     dedupeKey: `reset-restored-${state.night}-${Date.now()}`
   });
+  state.logs.push(`Night ${state.night} restored to opening-night state from snapshot.`);
   captureNightStartSnapshot('restored-opening');
   renderAll();
   setActiveScreen('game-screen');
@@ -937,6 +951,111 @@ function pushOpeningTensionBeat(context = 'opening') {
     message: alertMessage,
     dedupeKey: `opening-tension-${state.night}-${context}`
   });
+}
+
+function normalizeRoomMemoryState(targetState = state) {
+  if (!targetState || typeof targetState !== 'object') return targetState;
+  const rooms = Array.isArray(targetState.rooms) ? targetState.rooms : [];
+  targetState.rooms = rooms.map((room) => {
+    const memory = room?.memory && typeof room.memory === 'object' ? room.memory : {};
+    return {
+      ...room,
+      memory: {
+        nightsOccupied: Math.max(0, Number(memory.nightsOccupied || 0)),
+        incidentsSeen: Math.max(0, Number(memory.incidentsSeen || 0)),
+        harshActions: Math.max(0, Number(memory.harshActions || 0)),
+        returningGuestVisits: Math.max(0, Number(memory.returningGuestVisits || 0)),
+        signatures: Array.isArray(memory.signatures) ? memory.signatures.slice(-4) : [],
+        note: String(memory.note || '')
+      }
+    };
+  });
+  return targetState;
+}
+
+function markRoomMemory(roomId, payload = {}) {
+  const idx = state.rooms.findIndex((room) => room.id === roomId);
+  if (idx === -1) return;
+  const room = state.rooms[idx];
+  const memory = room?.memory && typeof room.memory === 'object'
+    ? { ...room.memory }
+    : { nightsOccupied: 0, incidentsSeen: 0, harshActions: 0, returningGuestVisits: 0, signatures: [], note: '' };
+  memory.nightsOccupied = Math.max(0, Number(memory.nightsOccupied || 0) + Number(payload.nightsOccupied || 0));
+  memory.incidentsSeen = Math.max(0, Number(memory.incidentsSeen || 0) + Number(payload.incidentsSeen || 0));
+  memory.harshActions = Math.max(0, Number(memory.harshActions || 0) + Number(payload.harshActions || 0));
+  memory.returningGuestVisits = Math.max(0, Number(memory.returningGuestVisits || 0) + Number(payload.returningGuestVisits || 0));
+  if (payload.signature) {
+    memory.signatures = [...(Array.isArray(memory.signatures) ? memory.signatures : []), String(payload.signature)].slice(-4);
+  }
+  if (payload.note) {
+    memory.note = String(payload.note);
+  }
+  state.rooms[idx] = {
+    ...room,
+    memory
+  };
+}
+
+function getRoomMemoryPressureBonus(room) {
+  const memory = room?.memory || {};
+  return Math.max(
+    0,
+    Number(memory.incidentsSeen || 0)
+    + Number(memory.harshActions || 0)
+    + Math.max(0, Number(memory.returningGuestVisits || 0) - 1)
+  );
+}
+
+function ensureCrisisNightState(targetState = state) {
+  if (!targetState || typeof targetState !== 'object') return targetState;
+  const night = Math.max(1, Number(targetState?.night || 1));
+  const existing = targetState.crisisNight && typeof targetState.crisisNight === 'object' ? targetState.crisisNight : {};
+  if (existing.night === night && existing.kind) return targetState;
+  const options = ['stacked-pressure', 'guest-surge', 'utility-fragility', 'hostile-social-night'];
+  const chance = night >= 4 ? Math.min(0.35, 0.08 + (night - 3) * 0.045) : 0;
+  const active = Math.random() < chance;
+  const kind = active ? options[(night + Math.floor(Math.random() * options.length)) % options.length] : null;
+  const title =
+    kind === 'stacked-pressure'
+      ? 'Crisis Night: Pressure Stack'
+      : kind === 'guest-surge'
+        ? 'Crisis Night: Guest Surge'
+        : kind === 'utility-fragility'
+          ? 'Crisis Night: Utility Fragility'
+          : kind === 'hostile-social-night'
+            ? 'Crisis Night: Hostile Social Atmosphere'
+            : '';
+  const note =
+    kind === 'stacked-pressure'
+      ? 'Multiple systems are likely to overlap tonight; mistakes will stack instead of staying local.'
+      : kind === 'guest-surge'
+        ? 'Desk pressure and room stress are likely to spike together.'
+        : kind === 'utility-fragility'
+          ? 'Small faults are more likely to spread across rooms and power decisions.'
+          : kind === 'hostile-social-night'
+            ? 'Guests are more reactive, rumors travel faster, and containment will read harsher.'
+            : '';
+  targetState.crisisNight = {
+    active,
+    night,
+    kind,
+    title,
+    note
+  };
+  return targetState;
+}
+
+function buildNightIdentitySummary(targetState = state) {
+  const scenario = targetState?.activeScenario || {};
+  const crisis = targetState?.crisisNight || {};
+  const tags = [];
+  if (scenario.label) tags.push(`Scenario: ${scenario.label}`);
+  if (crisis.active && crisis.title) tags.push(crisis.title);
+  if (Number(targetState?.night || 1) <= 2) tags.push('Mood: quiet but wrong');
+  if ((targetState?.rooms || []).some((room) => Number(room?.memory?.incidentsSeen || 0) >= 2)) {
+    tags.push('Mood: remembered room pressure');
+  }
+  return tags.slice(0, 3).join(' • ');
 }
 
 function normalizeIntakeState(targetState = state) {
@@ -1098,6 +1217,8 @@ function buildRenderState() {
     campaignNextMilestone: campaign.nextMilestone,
     campaignPrepForecast: [...(campaign.prepForecast || []), ...buildFinaleForeshadowNotes(state)].slice(0, 5),
     campaignSummaryNotes: Array.isArray(state?.campaignSummaryNotes) ? state.campaignSummaryNotes : [],
+    crisisNight: state?.crisisNight || null,
+    nightIdentityLine: buildNightIdentitySummary(state),
     motelCapacityLine: `Rooms licensed tonight: ${getUnlockedRoomCapForNight(state.night)} / 6`,
     intakeStatusLine: `Arrivals left: ${Math.max(0, Number(state?.intake?.arrivalsRemaining ?? 0))} • Desk queue cap: ${Math.max(0, Number(state?.intake?.queueCap ?? 3))} (${(state.guests || []).length} waiting)`,
     runEnding: state?.runEnding || null,
@@ -1525,6 +1646,7 @@ function bootstrapState() {
   state.rooms = normalizeTacticalRooms(state.rooms);
   state.cameras = state.cameras?.length ? state.cameras : createDefaultCameras();
   state.guests = Array.isArray(state.guests) ? state.guests : [];
+  state = normalizeRoomMemoryState(state);
   state.guests = normalizeGuestFlags(state.guests);
   state.guests = normalizePolicyGuests(state.guests, state.night);
   state.guests = state.guests.map((guest) => {
@@ -2076,6 +2198,15 @@ function callNextArrival() {
       Number(finaleAdjustedGuest?.expectedStayNights || computeStayNightsForGuest(finaleAdjustedGuest))
     )
   };
+  if (guestWithStay.isReturningGuest) {
+    const preferredRoom = state.rooms.find((room) => room.id === guestWithStay.assignedRoomMemoryId);
+    if (preferredRoom?.memory?.note) {
+      guestWithStay.priorHistoryLine = `${guestWithStay.priorHistoryLine || ''} Room memory: ${preferredRoom.memory.note}`.trim();
+    }
+    if (guestWithStay.returningGuestNote) {
+      guestWithStay.threadMemoryLine = [guestWithStay.threadMemoryLine, guestWithStay.returningGuestNote].filter(Boolean).join(' ');
+    }
+  }
 
   state.guests.push(guestWithStay);
   registerContentExposure(state, {
@@ -2382,6 +2513,16 @@ function checkInGuest(guestId) {
     typeof guest.chainBias === 'number' ? guest.chainBias : 0;
   room.escalationCooldown = typeof room.escalationCooldown === 'number' ? room.escalationCooldown : 0;
   room.stayNightsRemaining = Math.max(1, Number(guest.expectedStayNights || computeStayNightsForGuest(guest)));
+  room.memory = room?.memory && typeof room.memory === 'object'
+    ? { ...room.memory }
+    : { nightsOccupied: 0, incidentsSeen: 0, harshActions: 0, returningGuestVisits: 0, signatures: [], note: '' };
+  room.memory.nightsOccupied = Math.max(0, Number(room.memory.nightsOccupied || 0) + 1);
+  if (guest.isReturningGuest) {
+    room.memory.returningGuestVisits = Math.max(0, Number(room.memory.returningGuestVisits || 0) + 1);
+    room.memory.note = `${guest.name} returned to the property with prior history attached.`;
+  } else if (guest.archetypeLabel) {
+    room.memory.note = `${guest.archetypeLabel} pressure has touched this room before.`;
+  }
 
   if (room.deskFlagged && room.condition === 'Stable') {
     room.condition = 'Watch';
@@ -3423,6 +3564,11 @@ function reviewIncidents() {
 
   const reviewIncidents = Array.isArray(result.incidents) ? result.incidents : [];
   reviewIncidents.forEach((incident) => {
+    markRoomMemory(incident.roomId, {
+      incidentsSeen: 1,
+      signature: incident.type,
+      note: `${incident.type} was previously logged here.`
+    });
     registerRoomChainSignal({
       roomId: incident.roomId,
       guestName: incident.guestName,
@@ -3430,6 +3576,26 @@ function reviewIncidents() {
       severity: getSeverityPoints(incident.severity) + scenarioIncidentBonus
     });
   });
+
+  if (meaningful && Math.random() < (state?.crisisNight?.active ? 0.22 : 0.08)) {
+    const target = (state.rooms || []).find((room) => room?.occupiedBy && room?.condition !== 'Critical');
+    if (target) {
+      target.condition = target.condition === 'Stable' ? 'Watch' : 'Critical';
+      state.logs.push(`Signature incident: a hallway-wide knock pattern converged on ${target.label}, turning scattered pressure into a property-wide warning.`);
+      pushLiveAlert(state, {
+        type: 'warning',
+        message: `Signature incident: ${target.label} just became the center of a motel-wide pressure spike.`,
+        dedupeKey: `signature-incident-${target.id}-${state.night}-${state.shiftElapsedMinutes}`
+      });
+      markRoomMemory(target.id, {
+        incidentsSeen: 1,
+        harshActions: 0,
+        signature: 'hallway-knock-pattern',
+        note: 'A signature hallway knock pattern has been logged here.'
+      });
+      state.shiftStats.severeIncidents = (state.shiftStats.severeIncidents || 0) + 1;
+    }
+  }
 
   if (typeof result.reputationDelta === 'number') {
     state.reputation = clampReputation(state.reputation + result.reputationDelta);
@@ -3634,6 +3800,11 @@ function lockDownRoom(roomId) {
       logLine: result.deferredLogLine || 'Deferred lockdown audit pressure lands on the desk.'
     });
   }
+  markRoomMemory(roomId, {
+    harshActions: 1,
+    signature: 'lockdown',
+    note: 'Lockdown history remains attached to this room.'
+  });
   if (result.success) {
     pushLiveAlert(state, {
       type: 'warning',
@@ -3729,6 +3900,11 @@ function cutPowerToRoom(roomId) {
       logLine: result.deferredLogLine || 'Deferred maintenance and guest backlash from the hard power cut arrives.'
     });
   }
+  markRoomMemory(roomId, {
+    harshActions: 1,
+    signature: 'power-cut',
+    note: 'A hard power cut was previously used in this room.'
+  });
   if (result.success) {
     pushLiveAlert(state, {
       type: 'warning',
@@ -3841,6 +4017,18 @@ function advanceEscalationState() {
   state.rooms = tickResponseCooldowns(state.rooms);
   state.rooms = tickTacticalRooms(state.rooms);
 
+  state.rooms = state.rooms.map((room) => {
+    const memoryPressure = getRoomMemoryPressureBonus(room);
+    if (!room?.occupiedBy || memoryPressure <= 0) return room;
+    if (Math.random() < Math.min(0.18, memoryPressure * 0.035)) {
+      return {
+        ...room,
+        condition: room.condition === 'Stable' ? 'Watch' : room.condition
+      };
+    }
+    return room;
+  });
+
   if (state.autoIncidentCooldown > 0) {
     state.autoIncidentCooldown -= 1;
   }
@@ -3883,6 +4071,7 @@ function nextNight() {
   });
   refreshIntakeBudgetForNight(state);
   normalizeIntakeState(state);
+  ensureCrisisNightState(state);
   state.activeEvents = [];
   state.incidents = [];
   state.storyChains = [];

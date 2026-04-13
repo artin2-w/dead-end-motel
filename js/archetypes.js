@@ -86,6 +86,61 @@ const ARCHETYPES = [
     chainBias: 2,
     delayedRiskProfile: { approval: 2, flagged: 1, rejection: 0 },
     zoneTension: 'laundry'
+  },
+  {
+    key: 'credit-floater',
+    label: 'Credit Floater',
+    clue: 'Spoke smoothly, but kept trying to slide past ordinary desk friction.',
+    hiddenIntent: 'exploit',
+    incidentBias: 1,
+    riskBias: 1,
+    chainBias: 1,
+    delayedRiskProfile: { approval: 2, flagged: 1, rejection: 1 },
+    zoneTension: 'lobby'
+  },
+  {
+    key: 'false-contractor',
+    label: 'False Contractor',
+    clue: 'Looked like staff-adjacent maintenance, but details did not hold under follow-up.',
+    hiddenIntent: 'access',
+    incidentBias: 2,
+    riskBias: 1,
+    chainBias: 2,
+    delayedRiskProfile: { approval: 2, flagged: 0, rejection: 2 },
+    zoneTension: 'laundry'
+  },
+  {
+    key: 'quiet-family-fracture',
+    label: 'Quiet Family Fracture',
+    clue: 'At first they looked ordinary, but the group dynamic felt strained and brittle.',
+    hiddenIntent: 'domestic-strain',
+    incidentBias: 1,
+    riskBias: 1,
+    chainBias: 1,
+    delayedRiskProfile: { approval: 1, flagged: 1, rejection: 2 },
+    zoneTension: 'hallway'
+  },
+  {
+    key: 'night-shift-gambler',
+    label: 'Night Shift Gambler',
+    clue: 'Restless, charming, and always one beat too eager to stay in motion.',
+    hiddenIntent: 'stimulation',
+    incidentBias: 2,
+    riskBias: 1,
+    chainBias: 2,
+    delayedRiskProfile: { approval: 2, flagged: 1, rejection: 1 },
+    zoneTension: 'ice-machine'
+  },
+  {
+    key: 'injured-runner',
+    label: 'Injured Runner',
+    clue: 'Tried to hide visible strain and gave the impression of needing shelter fast.',
+    hiddenIntent: 'hiding',
+    incidentBias: 1,
+    riskBias: 2,
+    chainBias: 1,
+    delayedRiskProfile: { approval: 2, flagged: 1, rejection: 2 },
+    zoneTension: 'rear-exit'
   }
 ];
 
@@ -127,6 +182,25 @@ export function assignArchetypeToGuest(guest, state) {
     (guest?.risk === 'High' ? 5 : guest?.risk === 'Medium' ? 3 : 1);
 
   const template = ARCHETYPES[safeIndex(seed, ARCHETYPES.length)];
+  const pressureNight = Math.max(1, Number(state?.night || 1));
+  const scenarioKeyLower = String(scenarioKey || '').toLowerCase();
+  let adjustedIncidentBias = Number(template.incidentBias || 0);
+  let adjustedChainBias = Number(template.chainBias || 0);
+  let varietyLine = '';
+
+  if (pressureNight >= 4 && (template.key === 'false-contractor' || template.key === 'night-shift-gambler')) {
+    adjustedIncidentBias += 1;
+    adjustedChainBias += 1;
+    varietyLine = 'Pattern note: this archetype becomes more volatile later in a run.';
+  } else if (scenarioKeyLower.includes('inspection') && template.key === 'credit-floater') {
+    adjustedChainBias += 1;
+    varietyLine = 'Pattern note: scrutiny-heavy nights make smooth-talking guests more dangerous.';
+  } else if (scenarioKeyLower.includes('storm') && template.key === 'injured-runner') {
+    adjustedIncidentBias += 1;
+    varietyLine = 'Pattern note: storm conditions make desperate shelter stories harder to read cleanly.';
+  } else if (template.key === 'quiet-family-fracture') {
+    varietyLine = 'Pattern note: this archetype often looks safer at the desk than it is in the room.';
+  }
 
   return {
     ...guest,
@@ -134,9 +208,10 @@ export function assignArchetypeToGuest(guest, state) {
     archetypeLabel: template.label,
     archetypeClue: template.clue,
     hiddenIntent: template.hiddenIntent,
-    incidentBias: template.incidentBias,
-    chainBias: template.chainBias,
+    incidentBias: adjustedIncidentBias,
+    chainBias: adjustedChainBias,
     zoneTension: template.zoneTension,
+    archetypeVarietyLine: varietyLine,
     delayedRiskProfile: {
       approval: Number(template?.delayedRiskProfile?.approval || 0),
       flagged: Number(template?.delayedRiskProfile?.flagged || 0),
