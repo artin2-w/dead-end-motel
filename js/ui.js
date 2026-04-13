@@ -363,6 +363,16 @@ export function renderTopbar(state) {
     frontdeskIntakeLine.textContent = state?.intakeStatusLine || '';
   }
 
+  const scannerFeed = document.getElementById('desk-scanner-feed');
+  if (scannerFeed) {
+    const items = Array.isArray(state?.localScannerFeed) ? state.localScannerFeed : [];
+    scannerFeed.innerHTML = items.length
+      ? items
+        .map((entry) => `<div class="scanner-feed-item scanner-tone-${entry?.tone || 'ambient'}">${entry?.text || ''}</div>`)
+        .join('')
+      : '<div class="scanner-feed-item">Scanner quiet. No local traffic worth calling out yet.</div>';
+  }
+
   const finaleBanner = document.getElementById('finale-banner');
   const finaleStateCard = document.getElementById('finale-state-card');
   const finalePressureLabel = document.getElementById('finale-pressure-label');
@@ -590,7 +600,18 @@ function bindAtomicActionButton(button, handler, { groupRoot = null } = {}) {
   }, { passive: false });
 }
 
-export function renderGuests(state, onCheckIn, onFlagGuest, onRejectGuest, onHandleSpecialEncounter) {
+export function renderGuests(
+  state,
+  onCheckIn,
+  onFlagGuest,
+  onRejectGuest,
+  onInspectId,
+  onDeepInspect,
+  onDeposit,
+  onSecondaryVerify,
+  onHoldScreening,
+  onHandleSpecialEncounter
+) {
   const queue = document.getElementById('guest-queue');
   queue.innerHTML = '';
 
@@ -629,6 +650,9 @@ export function renderGuests(state, onCheckIn, onFlagGuest, onRejectGuest, onHan
         ${buildSignalChips(guest)}
         ${guest?.contradictoryClue ? '<span class="guest-meta-chip guest-meta-chip-contradiction">Mixed Cues</span>' : ''}
         ${Number(guest?.expectedStayNights || 0) > 0 ? `<span class="guest-meta-chip guest-stay-chip" title="Expected stay length if approved.">Stay: ${guest.expectedStayNights}N</span>` : ''}
+        ${guest?.scannerMatches?.length ? '<span class="guest-meta-chip guest-meta-chip-scanner">Scanner Link</span>' : ''}
+        ${guest?.idInspected ? '<span class="guest-meta-chip guest-meta-chip-verified">ID Read</span>' : ''}
+        ${guest?.uvInspected ? '<span class="guest-meta-chip guest-meta-chip-uv">UV Used</span>' : ''}
       </div>
       ${guest?.specialEncounter && !guest.specialEncounter.resolved
         ? `
@@ -646,6 +670,38 @@ export function renderGuests(state, onCheckIn, onFlagGuest, onRejectGuest, onHan
         ${(guest?.contextTag || guest?.visualHint)
           ? `<p class="guest-scan-line">${guest.contextTag ? `Context: ${guest.contextTag}. ` : ''}${guest.visualHint ? `Visual: ${guest.visualHint}.` : ''}</p>`
           : ''}
+        ${guest?.scannerMatches?.length
+          ? `<p class="guest-scan-line guest-scan-line-warning">${guest.scannerMatches.join(' ')}</p>`
+          : ''}
+      </div>
+      <details class="guest-inspection-drawer">
+        <summary>Desk Inspection</summary>
+        <div class="guest-inspection-grid">
+          <div class="guest-detail-block guest-id-block">
+            <p class="guest-id-line"><strong>ID:</strong> ${guest?.idProfile?.cardName || guest.name}</p>
+            <p class="guest-id-line"><strong>Status:</strong> ${guest?.idProfile?.validity || 'Unknown'}</p>
+            <p class="guest-id-line"><strong>Reason:</strong> ${guest?.idProfile?.visitReason || 'Not provided'}</p>
+            <p class="guest-id-line"><strong>Region:</strong> ${guest?.idProfile?.issuingRegion || 'Unknown'}</p>
+            <p class="guest-id-line muted">${guest?.idProfile?.irregularities?.length ? `Irregularities: ${guest.idProfile.irregularities.join('; ')}` : 'No visible document irregularities yet.'}</p>
+          </div>
+          <div class="guest-detail-block guest-uv-block">
+            <p class="guest-id-line"><strong>UV Read:</strong> ${guest?.uvInspected ? (guest?.uvProfile?.suspicious ? 'Suspicious' : 'Clear') : 'Not used yet'}</p>
+            <p class="guest-id-line muted">${guest?.uvInspected ? (guest?.uvProfile?.markers || []).join('; ') : 'Use UV only when the desk read feels off or scanner chatter lines up.'}</p>
+          </div>
+        </div>
+      </details>
+      <div class="guest-detail-block guest-room-choice-block">
+        <p class="guest-room-choice-label">Room release matters tonight.</p>
+        <div class="guest-room-choice-row">
+          <select class="guest-room-select" aria-label="Recommended room for ${guest.name}">
+            ${(guest?.roomAssignmentOptions?.length
+              ? guest.roomAssignmentOptions
+              : [{ roomId: '', label: 'Auto assign first vacant room', reasons: ['standard fit'] }])
+              .map((option) => `<option value="${option.roomId}">${option.label}${option?.reasons?.length ? ` • ${option.reasons.join(', ')}` : ''}</option>`)
+              .join('')}
+          </select>
+          <p class="guest-room-choice-hint muted">${guest?.roomAssignmentOptions?.[0] ? `Best fit: ${guest.roomAssignmentOptions[0].label} (${guest.roomAssignmentOptions[0].reasons.join(', ')}).` : 'Auto assignment will use the first vacant room.'}</p>
+        </div>
       </div>
       ${(guest.priorHistoryLine || guest.threadMemoryLine)
         ? `<div class="guest-history-block">
@@ -654,14 +710,17 @@ export function renderGuests(state, onCheckIn, onFlagGuest, onRejectGuest, onHan
           </div>`
         : ''}
       <div class="guest-action-row"></div>
+      <div class="guest-action-row guest-action-row-secondary"></div>
     `;
 
     const actions = card.querySelector('.guest-action-row');
+    const secondaryActions = card.querySelector('.guest-action-row-secondary');
+    const roomSelect = card.querySelector('.guest-room-select');
     const checkInButton = document.createElement('button');
     checkInButton.className = 'button button-primary';
     checkInButton.textContent = 'Check In';
     checkInButton.title = 'Assign room now. Gains money, but may introduce pressure depending on guest risk.';
-    bindAtomicActionButton(checkInButton, () => onCheckIn(guest.id), { groupRoot: actions });
+    bindAtomicActionButton(checkInButton, () => onCheckIn(guest.id, roomSelect?.value || null), { groupRoot: actions });
 
     const flagButton = document.createElement('button');
     flagButton.className = 'button button-secondary';
@@ -678,6 +737,47 @@ export function renderGuests(state, onCheckIn, onFlagGuest, onRejectGuest, onHan
     actions.appendChild(checkInButton);
     actions.appendChild(flagButton);
     actions.appendChild(rejectButton);
+
+    const inspectIdButton = document.createElement('button');
+    inspectIdButton.className = 'button button-secondary';
+    inspectIdButton.textContent = guest?.idInspected ? 'ID Checked' : 'Inspect ID';
+    inspectIdButton.title = 'Read the guest ID for expiry, validity, and mismatch clues.';
+    inspectIdButton.disabled = Boolean(guest?.idInspected);
+    bindAtomicActionButton(inspectIdButton, () => onInspectId(guest.id), { groupRoot: secondaryActions });
+
+    const uvButton = document.createElement('button');
+    uvButton.className = 'button button-utility';
+    uvButton.textContent = guest?.uvInspected ? 'UV Done' : 'Use UV';
+    uvButton.title = 'Optional deep inspection for hidden marks and forged details.';
+    uvButton.disabled = Boolean(guest?.uvInspected);
+    bindAtomicActionButton(uvButton, () => onDeepInspect(guest.id), { groupRoot: secondaryActions });
+
+    const depositButton = document.createElement('button');
+    depositButton.className = 'button button-utility';
+    depositButton.textContent = guest?.depositRequested ? 'Deposit Taken' : 'Request Deposit';
+    depositButton.title = 'Safer but colder desk handling. Can calm risk or drive off good guests.';
+    depositButton.disabled = Boolean(guest?.depositRequested);
+    bindAtomicActionButton(depositButton, () => onDeposit(guest.id), { groupRoot: secondaryActions });
+
+    const verifyButton = document.createElement('button');
+    verifyButton.className = 'button button-warning';
+    verifyButton.textContent = guest?.secondaryVerified ? 'Verified' : 'Secondary Check';
+    verifyButton.title = 'Ask follow-up questions and compare details before room release.';
+    verifyButton.disabled = Boolean(guest?.secondaryVerified);
+    bindAtomicActionButton(verifyButton, () => onSecondaryVerify(guest.id), { groupRoot: secondaryActions });
+
+    const holdButton = document.createElement('button');
+    holdButton.className = 'button button-warning';
+    holdButton.textContent = guest?.heldForScreening ? 'Held' : 'Hold Screening';
+    holdButton.title = 'Hold the guest aside. Safer, slower, and reputation-sensitive.';
+    holdButton.disabled = Boolean(guest?.heldForScreening);
+    bindAtomicActionButton(holdButton, () => onHoldScreening(guest.id), { groupRoot: secondaryActions });
+
+    secondaryActions.appendChild(inspectIdButton);
+    secondaryActions.appendChild(uvButton);
+    secondaryActions.appendChild(depositButton);
+    secondaryActions.appendChild(verifyButton);
+    secondaryActions.appendChild(holdButton);
 
     if (guest?.specialEncounter && !guest.specialEncounter.resolved) {
       const specialButton = document.createElement('button');

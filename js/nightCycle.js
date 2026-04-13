@@ -53,6 +53,11 @@ export function getActionTimeCost(actionKey) {
     checkIn: 10,
     reject: 5,
     flag: 5,
+    inspectId: 4,
+    deepInspect: 6,
+    deposit: 6,
+    secondaryVerify: 8,
+    holdScreening: 8,
     drainPower: 5,
     restorePower: 5,
     callArrival: 18

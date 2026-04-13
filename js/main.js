@@ -893,6 +893,7 @@ function restoreNightStartSnapshot(options = {}) {
       ? readyGuest
       : { ...readyGuest, expectedStayNights: computeStayNightsForGuest(readyGuest) };
   });
+  normalizeDeskInspectionState(state);
   state.rooms = normalizeEscalationRooms(applyRoomUnlockFlags(state.rooms || [], state.night));
   state.rooms = normalizeResponseRooms(state.rooms);
   state.rooms = normalizeTacticalRooms(state.rooms);
@@ -1058,6 +1059,147 @@ function buildNightIdentitySummary(targetState = state) {
   return tags.slice(0, 3).join(' • ');
 }
 
+function buildDeskIdProfile(guest, targetState = state) {
+  const name = String(guest?.name || 'Unknown Guest');
+  const night = Math.max(1, Number(targetState?.night || 1));
+  const mismatch = Boolean(guest?.contradictoryClue) || Number(guest?.deceptionSignal || 0) >= 2;
+  const validity = mismatch
+    ? (Math.random() < 0.55 ? 'Questionable' : 'Valid')
+    : (Math.random() < 0.14 ? 'Near Expiry' : 'Valid');
+  const reasons = [
+    'Passing through for one night',
+    'Road fatigue / needs sleep',
+    'Waiting on transport',
+    'Between jobs and heading east',
+    'Meeting someone in town',
+    'Avoiding the highway until morning'
+  ];
+  const irregularities = [];
+  if (mismatch) irregularities.push('Photo-lighting mismatch');
+  if (Number(guest?.urgencySignal || 0) >= 2) irregularities.push('Signed too quickly');
+  if (String(guest?.contextTag || '').toLowerCase().includes('maintenance')) irregularities.push('Work claim not supported');
+  return {
+    cardName: name,
+    validity,
+    visitReason: reasons[(name.length + night) % reasons.length],
+    issuingRegion: ['County', 'State', 'Cross-State', 'Local'][night % 4],
+    irregularities: irregularities.slice(0, 2)
+  };
+}
+
+function buildUvInspectionProfile(guest) {
+  const markers = [];
+  if (Number(guest?.deceptionSignal || 0) >= 2) markers.push('Ink edge glows around altered number field');
+  if (Number(guest?.instabilitySignal || 0) >= 2) markers.push('Chemical smear on sleeve cuff');
+  if (String(guest?.archetypeKey || '').includes('contractor')) markers.push('Hidden service-tag outline under laminate');
+  if (String(guest?.contextTag || '').toLowerCase().includes('vehicle')) markers.push('Parking stub residue on wallet seam');
+  return {
+    suspicious: markers.length > 0,
+    markers: markers.length ? markers.slice(0, 2) : ['No obvious UV-reactive tampering found.']
+  };
+}
+
+function buildScannerFeedForNight(targetState = state) {
+  const night = Math.max(1, Number(targetState?.night || 1));
+  const crisis = targetState?.crisisNight || {};
+  const feed = [
+    {
+      id: `desk-feed-${night}-0`,
+      tone: 'ambient',
+      text: crisis.active
+        ? `Scanner crackle: dispatch mentions overlapping nuisance calls and thin patrol coverage near the motel corridor.`
+        : 'Scanner crackle: routine overnight traffic, one distant welfare check, nothing confirmed at motel level.'
+    },
+    {
+      id: `desk-feed-${night}-1`,
+      tone: 'vehicle',
+      text: 'Scanner note: older dark vehicle seen idling near roadside lots, occupants unclear.'
+    },
+    {
+      id: `desk-feed-${night}-2`,
+      tone: 'desk',
+      text: night <= 2
+        ? 'Scanner note: local desk chatter says some late-night travelers are using soft stories to push through tired clerks.'
+        : 'Scanner note: repeat disturbances are being described as “people who looked ordinary until they were inside.”'
+    }
+  ];
+  targetState.localScannerFeed = feed;
+  return feed;
+}
+
+function buildGuestScannerMatches(guest, targetState = state) {
+  const feed = Array.isArray(targetState?.localScannerFeed) ? targetState.localScannerFeed : [];
+  const matches = [];
+  const context = String(guest?.contextTag || '').toLowerCase();
+  const archetype = String(guest?.archetypeKey || '').toLowerCase();
+  if (feed.some((entry) => String(entry.text || '').toLowerCase().includes('vehicle')) && context.includes('vehicle')) {
+    matches.push('Scanner overlap: vehicle-related chatter matches this arrival.');
+  }
+  if (feed.some((entry) => String(entry.text || '').toLowerCase().includes('soft stories')) && Number(guest?.deceptionSignal || 0) >= 2) {
+    matches.push('Scanner overlap: this guest fits tonight’s soft-story warning.');
+  }
+  if (feed.some((entry) => String(entry.text || '').toLowerCase().includes('ordinary until they were inside')) && (Number(guest?.instabilitySignal || 0) >= 2 || archetype.includes('quiet-family-fracture'))) {
+    matches.push('Scanner overlap: calm first reads have been turning worse later tonight.');
+  }
+  return matches.slice(0, 2);
+}
+
+function normalizeDeskInspectionGuest(guest, targetState = state) {
+  if (!guest) return guest;
+  const idProfile = guest.idProfile && typeof guest.idProfile === 'object' ? guest.idProfile : buildDeskIdProfile(guest, targetState);
+  const uvProfile = guest.uvProfile && typeof guest.uvProfile === 'object' ? guest.uvProfile : buildUvInspectionProfile(guest);
+  const scannerMatches = Array.isArray(guest.scannerMatches) ? guest.scannerMatches : buildGuestScannerMatches(guest, targetState);
+  return {
+    ...guest,
+    idProfile,
+    uvProfile,
+    scannerMatches,
+    idInspected: Boolean(guest.idInspected),
+    uvInspected: Boolean(guest.uvInspected),
+    secondaryVerified: Boolean(guest.secondaryVerified),
+    depositRequested: Boolean(guest.depositRequested),
+    heldForScreening: Boolean(guest.heldForScreening),
+    requestedDepositAmount: Number(guest.requestedDepositAmount || 20)
+  };
+}
+
+function normalizeDeskInspectionState(targetState = state) {
+  if (!targetState || typeof targetState !== 'object') return targetState;
+  buildScannerFeedForNight(targetState);
+  targetState.guests = (Array.isArray(targetState.guests) ? targetState.guests : []).map((guest) =>
+    normalizeDeskInspectionGuest(guest, targetState)
+  );
+  return targetState;
+}
+
+function getRoomAssignmentOptionsForGuest(guest, rooms = state?.rooms || []) {
+  const available = (rooms || []).filter((room) => room?.unlocked !== false && !room?.occupied && !room?.occupiedBy);
+  const suspicion = Number(guest?.deceptionSignal || 0) + Number(guest?.instabilitySignal || 0) + Number(guest?.urgencySignal || 0);
+  return available
+    .map((room) => {
+      const memory = room?.memory || {};
+      const chainPressure = Number(room?.chainPressure || 0);
+      const memoryWeight = Number(memory.incidentsSeen || 0) + Number(memory.harshActions || 0) + Number(memory.returningGuestVisits || 0);
+      const roomRiskPenalty = suspicion >= 3 ? memoryWeight * 2 + chainPressure : Math.max(0, memoryWeight - 1) + chainPressure;
+      const returningPenalty =
+        guest?.assignedRoomMemoryId && Number(guest.assignedRoomMemoryId) === Number(room.id) && memoryWeight >= 2 ? 2 : 0;
+      const score = 20 - roomRiskPenalty - returningPenalty;
+      const reasons = [];
+      if (memoryWeight <= 0 && chainPressure <= 0) reasons.push('quiet room');
+      if (memoryWeight >= 2) reasons.push('history on file');
+      if (chainPressure >= 3) reasons.push('current pressure');
+      if (returningPenalty > 0) reasons.push('linked to prior stay');
+      return {
+        roomId: room.id,
+        label: room.label,
+        score,
+        reasons: reasons.length ? reasons : ['standard fit']
+      };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+
 function normalizeIntakeState(targetState = state) {
   if (!targetState || typeof targetState !== 'object') return targetState;
   if (!targetState.intake || typeof targetState.intake !== 'object') {
@@ -1156,6 +1298,7 @@ function calmRoomChain(roomId, amount = 2) {
 }
 
 function buildRenderState() {
+  normalizeDeskInspectionState(state);
   const uiPressureLevel = deriveUiPressureLevel(state);
   const identity = getIdentityContext();
   const branchContext = getBranchContext(true);
@@ -1169,6 +1312,11 @@ function buildRenderState() {
   const roomsWithChainPressure = (state.rooms || []).map((room) => ({
     ...room,
     chainPressure: getVisibleChainPressureForRoom(state, room.id)
+  }));
+
+  const guestsWithDeskOptions = (state.guests || []).map((guest) => ({
+    ...guest,
+    roomAssignmentOptions: getRoomAssignmentOptionsForGuest(guest, roomsWithChainPressure)
   }));
 
   return {
@@ -1199,6 +1347,7 @@ function buildRenderState() {
     uiPressureLevel,
     topbarWarningFlags: getTopbarWarningFlags(state),
     rooms: roomsWithChainPressure,
+    guests: guestsWithDeskOptions,
     activeRunThreads: buildActiveRunThreadHighlights(state, 3),
     carryoverBriefingNotes: Array.isArray(state.carryoverBriefing) ? state.carryoverBriefing : [],
     doctrineDisplay: identity.doctrine,
@@ -1221,6 +1370,7 @@ function buildRenderState() {
     nightIdentityLine: buildNightIdentitySummary(state),
     motelCapacityLine: `Rooms licensed tonight: ${getUnlockedRoomCapForNight(state.night)} / 6`,
     intakeStatusLine: `Arrivals left: ${Math.max(0, Number(state?.intake?.arrivalsRemaining ?? 0))} • Desk queue cap: ${Math.max(0, Number(state?.intake?.queueCap ?? 3))} (${(state.guests || []).length} waiting)`,
+    localScannerFeed: Array.isArray(state?.localScannerFeed) ? state.localScannerFeed : [],
     runEnding: state?.runEnding || null,
     onboardingUi,
     ...metaSurface
@@ -1658,6 +1808,7 @@ function bootstrapState() {
       ? readyGuest
       : { ...readyGuest, expectedStayNights: computeStayNightsForGuest(readyGuest) };
   });
+  normalizeDeskInspectionState(state);
   state.logs = Array.isArray(state.logs) ? state.logs : [];
   state.activeEvents = Array.isArray(state.activeEvents) ? state.activeEvents : [];
   state.incidents = Array.isArray(state.incidents) ? state.incidents : [];
@@ -1714,7 +1865,18 @@ function renderAll() {
   const renderState = buildRenderState();
   renderTopbar(renderState);
   renderNightEventCard(renderState);
-  renderGuests(renderState, checkInGuest, flagGuest, rejectGuest, handleOpenSpecialEncounter);
+  renderGuests(
+    renderState,
+    checkInGuest,
+    flagGuest,
+    rejectGuest,
+    inspectGuestId,
+    deepInspectGuest,
+    requestGuestDeposit,
+    requestSecondaryVerification,
+    holdGuestForScreening,
+    handleOpenSpecialEncounter
+  );
   renderRooms(
     renderState,
     lockDownRoom,
@@ -1967,6 +2129,7 @@ function startShift() {
   state.rooms = applyRoomUnlockFlags(state.rooms || [], state.night);
   refreshIntakeBudgetForNight(state);
   normalizeIntakeState(state);
+  normalizeDeskInspectionState(state);
   state.deferredShiftCosts = [];
   pushLiveAlert(state, {
     type: 'info',
@@ -2198,43 +2361,44 @@ function callNextArrival() {
       Number(finaleAdjustedGuest?.expectedStayNights || computeStayNightsForGuest(finaleAdjustedGuest))
     )
   };
-  if (guestWithStay.isReturningGuest) {
-    const preferredRoom = state.rooms.find((room) => room.id === guestWithStay.assignedRoomMemoryId);
+  const preparedDeskGuest = normalizeDeskInspectionGuest(guestWithStay, state);
+  if (preparedDeskGuest.isReturningGuest) {
+    const preferredRoom = state.rooms.find((room) => room.id === preparedDeskGuest.assignedRoomMemoryId);
     if (preferredRoom?.memory?.note) {
-      guestWithStay.priorHistoryLine = `${guestWithStay.priorHistoryLine || ''} Room memory: ${preferredRoom.memory.note}`.trim();
+      preparedDeskGuest.priorHistoryLine = `${preparedDeskGuest.priorHistoryLine || ''} Room memory: ${preferredRoom.memory.note}`.trim();
     }
-    if (guestWithStay.returningGuestNote) {
-      guestWithStay.threadMemoryLine = [guestWithStay.threadMemoryLine, guestWithStay.returningGuestNote].filter(Boolean).join(' ');
+    if (preparedDeskGuest.returningGuestNote) {
+      preparedDeskGuest.threadMemoryLine = [preparedDeskGuest.threadMemoryLine, preparedDeskGuest.returningGuestNote].filter(Boolean).join(' ');
     }
   }
 
-  state.guests.push(guestWithStay);
+  state.guests.push(preparedDeskGuest);
   registerContentExposure(state, {
     kind: 'guest',
-    archetype: guestWithStay?.archetypeKey,
+    archetype: preparedDeskGuest?.archetypeKey,
     outsideHeavy: Number(branchContext?.signals?.outsideRisk || 0) >= 6
   });
-  registerContentExposure(state, { kind: 'guestMood', mood: guestWithStay?.mood });
-  if (guestWithStay?.specialEncounter?.id) {
-    registerContentExposure(state, { kind: 'special', id: guestWithStay.specialEncounter.id });
+  registerContentExposure(state, { kind: 'guestMood', mood: preparedDeskGuest?.mood });
+  if (preparedDeskGuest?.specialEncounter?.id) {
+    registerContentExposure(state, { kind: 'special', id: preparedDeskGuest.specialEncounter.id });
   }
   guestIdCounter += 1;
   state.logs.push('A new arrival reached the front desk (intake slot consumed).');
   state.logs.push(
-    `${guestWithStay.name} looks booked for roughly ${guestWithStay.expectedStayNights} night${guestWithStay.expectedStayNights === 1 ? '' : 's'} if approved.`
+    `${preparedDeskGuest.name} looks booked for roughly ${preparedDeskGuest.expectedStayNights} night${preparedDeskGuest.expectedStayNights === 1 ? '' : 's'} if approved.`
   );
-  if (guestWithStay?.specialEncounter?.id) {
+  if (preparedDeskGuest?.specialEncounter?.id) {
     pushLiveAlert(state, {
       type: 'warning',
       kind: 'actionable',
-      message: `${guestWithStay.name} presents a special encounter.`,
-      dedupeKey: `special-guest-${guestWithStay.id}-${guestWithStay.specialEncounter.id}`
+      message: `${preparedDeskGuest.name} presents a special encounter.`,
+      dedupeKey: `special-guest-${preparedDeskGuest.id}-${preparedDeskGuest.specialEncounter.id}`
     });
   }
   pushLiveAlert(state, {
     type: 'info',
-    message: `${guestWithStay.name} arrived at reception for a likely ${guestWithStay.expectedStayNights}-night stay.`,
-    dedupeKey: `guest-arrival-${guestWithStay.id}`
+    message: `${preparedDeskGuest.name} arrived at reception for a likely ${preparedDeskGuest.expectedStayNights}-night stay.`,
+    dedupeKey: `guest-arrival-${preparedDeskGuest.id}`
   });
   updateOnboarding((current) => markTutorialEvent(current, 'guest-spawned'));
   if (checkFailureState()) return;
@@ -2469,14 +2633,303 @@ function rejectGuest(guestId) {
   }
 }
 
-function checkInGuest(guestId) {
+function clampDeskSignalValue(value) {
+  return Math.max(0, Math.min(2, Number(value || 0)));
+}
+
+function updateQueuedGuest(guestId, updater) {
+  let updatedGuest = null;
+  state.guests = state.guests.map((entry) => {
+    if (entry.id !== guestId) return entry;
+    const nextGuest = typeof updater === 'function' ? updater(normalizeDeskInspectionGuest(entry, state)) : entry;
+    updatedGuest = normalizeDeskInspectionGuest(
+      applyPolicyToGuest(nextGuest, state.night),
+      state
+    );
+    return updatedGuest;
+  });
+  return updatedGuest;
+}
+
+function inspectGuestId(guestId) {
+  const actionKey = `desk-inspect-id-${guestId}`;
+  if (!acquireActionLock(actionKey)) return;
+  try {
+    onMeaningfulAction();
+    audioController.playUiClick();
+    const guest = state.guests.find((entry) => entry.id === guestId);
+    if (!guest) return;
+    if (guest.idInspected) {
+      pushLiveAlert(state, {
+        type: 'info',
+        message: `${guest.name}'s ID has already been inspected.`,
+        dedupeKey: `desk-id-repeat-${guest.id}`
+      });
+      renderAll();
+      return;
+    }
+    const updatedGuest = updateQueuedGuest(guestId, (currentGuest) => {
+      const irregularities = Array.isArray(currentGuest?.idProfile?.irregularities)
+        ? currentGuest.idProfile.irregularities
+        : [];
+      return {
+        ...currentGuest,
+        idInspected: true,
+        flagged: currentGuest.flagged || irregularities.length > 0 || currentGuest?.idProfile?.validity === 'Questionable',
+        policyAlignmentLine: irregularities.length > 0 || currentGuest?.idProfile?.validity === 'Questionable'
+          ? 'Desk read: document details do not line up cleanly.'
+          : 'Desk read: identity details held together under closer inspection.',
+        threadMemoryLine: [
+          currentGuest.threadMemoryLine,
+          irregularities.length > 0
+            ? `ID irregularities: ${irregularities.join('; ')}.`
+            : 'ID panel read clean under routine inspection.'
+        ].filter(Boolean).join(' ')
+      };
+    });
+    if (!updatedGuest) return;
+    const idLine = updatedGuest?.idProfile?.validity === 'Questionable'
+      ? `${updatedGuest.name}'s ID looked questionable under the desk lamp.`
+      : `${updatedGuest.name}'s ID checked out with no immediate failure points.`;
+    state.logs.push(idLine);
+    if (updatedGuest?.idProfile?.irregularities?.length) {
+      state.logs.push(`ID note: ${updatedGuest.idProfile.irregularities.join('; ')}.`);
+    }
+    pushLiveAlert(state, {
+      type: updatedGuest.flagged ? 'warning' : 'info',
+      message: updatedGuest.flagged ? `${updatedGuest.name}'s ID raised desk concerns.` : `${updatedGuest.name}'s ID read clean.`,
+      dedupeKey: `desk-id-${updatedGuest.id}`
+    });
+    if (checkFailureState()) return;
+    if (progressShift('inspectId', { timeScale: updatedGuest.flagged ? 1.1 : 0.8 })) return;
+    renderAll();
+  } finally {
+    releaseActionLock(actionKey);
+  }
+}
+
+function deepInspectGuest(guestId) {
+  const actionKey = `desk-uv-${guestId}`;
+  if (!acquireActionLock(actionKey)) return;
+  try {
+    onMeaningfulAction();
+    audioController.playUiClick();
+    const guest = state.guests.find((entry) => entry.id === guestId);
+    if (!guest) return;
+    if (guest.uvInspected) {
+      pushLiveAlert(state, {
+        type: 'info',
+        message: `${guest.name} has already gone through UV inspection.`,
+        dedupeKey: `desk-uv-repeat-${guest.id}`
+      });
+      renderAll();
+      return;
+    }
+    const updatedGuest = updateQueuedGuest(guestId, (currentGuest) => {
+      const suspicious = Boolean(currentGuest?.uvProfile?.suspicious);
+      return {
+        ...currentGuest,
+        uvInspected: true,
+        flagged: currentGuest.flagged || suspicious,
+        deceptionSignal: clampDeskSignalValue(Number(currentGuest.deceptionSignal || 0) + (suspicious ? 1 : -1)),
+        threadMemoryLine: [
+          currentGuest.threadMemoryLine,
+          suspicious
+            ? `UV read found: ${(currentGuest?.uvProfile?.markers || []).join('; ')}.`
+            : 'UV read did not reveal fresh tampering.'
+        ].filter(Boolean).join(' ')
+      };
+    });
+    if (!updatedGuest) return;
+    state.logs.push(
+      updatedGuest?.uvProfile?.suspicious
+        ? `UV inspection on ${updatedGuest.name} exposed hidden marks: ${(updatedGuest.uvProfile.markers || []).join('; ')}.`
+        : `UV inspection on ${updatedGuest.name} found no obvious tampering.`
+    );
+    pushLiveAlert(state, {
+      type: updatedGuest?.uvProfile?.suspicious ? 'warning' : 'info',
+      message: updatedGuest?.uvProfile?.suspicious
+        ? `${updatedGuest.name} showed hidden UV-reactive marks.`
+        : `${updatedGuest.name} cleared UV inspection.`,
+      dedupeKey: `desk-uv-${updatedGuest.id}`
+    });
+    if (checkFailureState()) return;
+    if (progressShift('deepInspect', { timeScale: updatedGuest?.uvProfile?.suspicious ? 1.2 : 1 })) return;
+    renderAll();
+  } finally {
+    releaseActionLock(actionKey);
+  }
+}
+
+function requestGuestDeposit(guestId) {
+  const actionKey = `desk-deposit-${guestId}`;
+  if (!acquireActionLock(actionKey)) return;
+  try {
+    onMeaningfulAction();
+    audioController.playUiClick();
+    const guest = state.guests.find((entry) => entry.id === guestId);
+    if (!guest) return;
+    if (guest.depositRequested) {
+      pushLiveAlert(state, {
+        type: 'info',
+        message: `${guest.name} has already been asked for a deposit.`,
+        dedupeKey: `desk-deposit-repeat-${guest.id}`
+      });
+      renderAll();
+      return;
+    }
+    const riskWeight = guest.riskLevel === 'High' ? 2 : guest.riskLevel === 'Medium' ? 1 : 0;
+    const depositAmount = 20 + riskWeight * 10 + (guest.contradictoryClue ? 5 : 0);
+    const lowRiskWalk = guest.riskLevel === 'Low' && !guest.contradictoryClue && Math.random() < 0.38;
+    if (lowRiskWalk) {
+      state.guests = state.guests.filter((entry) => entry.id !== guestId);
+      state.reputation = clampReputation(state.reputation - 1);
+      state.logs.push(`${guest.name} bristled at the deposit request, muttered about the desk tone, and left the property.`);
+      pushLiveAlert(state, {
+        type: 'warning',
+        message: `${guest.name} walked rather than leave a deposit.`,
+        dedupeKey: `desk-deposit-walk-${guest.id}`
+      });
+    } else {
+      const updatedGuest = updateQueuedGuest(guestId, (currentGuest) => ({
+        ...currentGuest,
+        depositRequested: true,
+        requestedDepositAmount: depositAmount,
+        urgencySignal: clampDeskSignalValue(Number(currentGuest.urgencySignal || 0) - 1),
+        threadMemoryLine: [
+          currentGuest.threadMemoryLine,
+          `Desk requested a ${depositAmount}$ deposit before room release.`
+        ].filter(Boolean).join(' ')
+      }));
+      state.money += depositAmount;
+      state.reputation = clampReputation(state.reputation - 1);
+      state.logs.push(`${updatedGuest.name} put down a ${depositAmount}$ deposit. The desk bought caution at the cost of goodwill.`);
+      pushLiveAlert(state, {
+        type: 'info',
+        message: `${updatedGuest.name} paid a ${depositAmount}$ deposit.`,
+        dedupeKey: `desk-deposit-${updatedGuest.id}`
+      });
+    }
+    if (checkFailureState()) return;
+    if (progressShift('deposit')) return;
+    renderAll();
+  } finally {
+    releaseActionLock(actionKey);
+  }
+}
+
+function requestSecondaryVerification(guestId) {
+  const actionKey = `desk-verify-${guestId}`;
+  if (!acquireActionLock(actionKey)) return;
+  try {
+    onMeaningfulAction();
+    audioController.playUiClick();
+    const guest = state.guests.find((entry) => entry.id === guestId);
+    if (!guest) return;
+    if (guest.secondaryVerified) {
+      pushLiveAlert(state, {
+        type: 'info',
+        message: `${guest.name} already completed secondary verification.`,
+        dedupeKey: `desk-verify-repeat-${guest.id}`
+      });
+      renderAll();
+      return;
+    }
+    const updatedGuest = updateQueuedGuest(guestId, (currentGuest) => {
+      const suspicious = currentGuest?.idProfile?.validity === 'Questionable'
+        || Boolean(currentGuest?.uvProfile?.suspicious)
+        || (currentGuest?.scannerMatches || []).length > 0;
+      return {
+        ...currentGuest,
+        idInspected: true,
+        secondaryVerified: true,
+        flagged: currentGuest.flagged || suspicious,
+        deceptionSignal: clampDeskSignalValue(Number(currentGuest.deceptionSignal || 0) + (suspicious ? 1 : -1)),
+        instabilitySignal: clampDeskSignalValue(Number(currentGuest.instabilitySignal || 0) + (suspicious ? 0 : -1)),
+        policyAlignmentLine: suspicious
+          ? 'Secondary verification widened the mismatch instead of settling it.'
+          : 'Secondary verification settled the desk read and lowered immediate uncertainty.'
+      };
+    });
+    state.logs.push(
+      updatedGuest.flagged
+        ? `${updatedGuest.name} failed to reassure the desk during secondary verification.`
+        : `${updatedGuest.name} answered secondary verification cleanly and looked more stable afterward.`
+    );
+    pushLiveAlert(state, {
+      type: updatedGuest.flagged ? 'warning' : 'success',
+      message: updatedGuest.flagged
+        ? `${updatedGuest.name} remains a concern after extra verification.`
+        : `${updatedGuest.name} cleared extra verification.`,
+      dedupeKey: `desk-verify-${updatedGuest.id}`
+    });
+    if (checkFailureState()) return;
+    if (progressShift('secondaryVerify')) return;
+    renderAll();
+  } finally {
+    releaseActionLock(actionKey);
+  }
+}
+
+function holdGuestForScreening(guestId) {
+  const actionKey = `desk-hold-${guestId}`;
+  if (!acquireActionLock(actionKey)) return;
+  try {
+    onMeaningfulAction();
+    audioController.playUiClick();
+    const guest = state.guests.find((entry) => entry.id === guestId);
+    if (!guest) return;
+    if (guest.heldForScreening) {
+      pushLiveAlert(state, {
+        type: 'info',
+        message: `${guest.name} is already being held for extra screening.`,
+        dedupeKey: `desk-hold-repeat-${guest.id}`
+      });
+      renderAll();
+      return;
+    }
+    const updatedGuest = updateQueuedGuest(guestId, (currentGuest) => ({
+      ...currentGuest,
+      heldForScreening: true,
+      flagged: true,
+      urgencySignal: clampDeskSignalValue(Number(currentGuest.urgencySignal || 0) + 1),
+      instabilitySignal: clampDeskSignalValue(Number(currentGuest.instabilitySignal || 0) - 1),
+      threadMemoryLine: [
+        currentGuest.threadMemoryLine,
+        'Desk held this guest aside for a longer screening pass.'
+      ].filter(Boolean).join(' ')
+    }));
+    state.reputation = clampReputation(state.reputation - 1);
+    state.logs.push(`${updatedGuest.name} was held off to the side for extra screening. Safer, slower, and visibly tense.`);
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: `${updatedGuest.name} is being held for screening.`,
+      dedupeKey: `desk-hold-${updatedGuest.id}`
+    });
+    if (checkFailureState()) return;
+    if (progressShift('holdScreening', { timeScale: 1.1 })) return;
+    renderAll();
+  } finally {
+    releaseActionLock(actionKey);
+  }
+}
+
+function checkInGuest(guestId, requestedRoomId = null) {
   const actionKey = `desk-checkin-${guestId}`;
   if (!acquireActionLock(actionKey)) return;
   try {
   onMeaningfulAction();
   audioController.playUiClick();
   const guest = state.guests.find((entry) => entry.id === guestId);
-  let room = getAvailableRoom(state.rooms);
+  const requestedId = requestedRoomId == null || requestedRoomId === '' ? null : Number(requestedRoomId);
+  let room = requestedId != null
+    ? (state.rooms || []).find((entry) => Number(entry.id) === requestedId && entry?.unlocked !== false && !entry?.occupied && entry?.occupiedBy == null)
+    : null;
+  if (!room) {
+    room = getAvailableRoom(state.rooms);
+  }
+  const roomOptions = getRoomAssignmentOptionsForGuest(guest, state.rooms);
+  const roomDecisionMeta = roomOptions.find((entry) => Number(entry.roomId) === Number(room?.id)) || roomOptions[0] || null;
 
   if (!guest || !room) {
     state.logs.push('Check-in failed. No vacant room available.');
@@ -2502,6 +2955,9 @@ function checkInGuest(guestId) {
   room.occupiedBy = guest.name;
   room.guestName = guest.name;
   room.condition = guest.specialRoomCondition || deriveRoomConditionForGuest(guest);
+  if (guest.depositRequested && room.condition === 'Watch') {
+    room.condition = 'Stable';
+  }
   room.riskLevel = guest.riskLevel || 'Low';
   room.trait = guest.trait || 'Quiet';
   room.deskFlagged = Boolean(guest.flagged);
@@ -2522,6 +2978,12 @@ function checkInGuest(guestId) {
     room.memory.note = `${guest.name} returned to the property with prior history attached.`;
   } else if (guest.archetypeLabel) {
     room.memory.note = `${guest.archetypeLabel} pressure has touched this room before.`;
+  }
+  if (guest.secondaryVerified) {
+    room.memory.note = `${room.memory.note} Desk completed secondary verification before releasing the room.`.trim();
+  }
+  if (guest.heldForScreening) {
+    room.memory.note = `${room.memory.note} This room received a screened guest under visible lobby tension.`.trim();
   }
 
   if (room.deskFlagged && room.condition === 'Stable') {
@@ -2572,6 +3034,11 @@ function checkInGuest(guestId) {
   state.logs.push(
     `${guest.name} is booked for ${room.stayNightsRemaining} night${room.stayNightsRemaining === 1 ? '' : 's'} (auto-checkout when nights remaining hit zero).`
   );
+  if (roomDecisionMeta) {
+    state.logs.push(
+      `Room assignment: ${room.label} was chosen as a ${roomDecisionMeta.score >= 18 ? 'cleaner' : roomDecisionMeta.score <= 14 ? 'riskier' : 'manageable'} fit (${roomDecisionMeta.reasons.join(', ')}).`
+    );
+  }
   markThreadOutcome(state, {
     action: 'checkin',
     guest,
@@ -2617,30 +3084,45 @@ function checkInGuest(guestId) {
     policyOutcome.policyOverride ||
     (guest.incidentBias || 0) > 0;
 
+  const roomAssignmentPenalty = roomDecisionMeta && roomDecisionMeta.score <= 14 ? 1 : 0;
+  const roomAssignmentRelief = roomDecisionMeta && roomDecisionMeta.score >= 18 ? 1 : 0;
+  const depositRelief = guest.depositRequested ? 1 : 0;
+  const verificationRelief = guest.secondaryVerified ? 1 : 0;
+  const netChainSeverity = Math.max(0, 1 + roomAssignmentPenalty - roomAssignmentRelief - depositRelief - verificationRelief);
+
   if (shouldSeedChain) {
-    registerRoomChainSignal({
-      roomId: room.id,
-      guestName: guest.name,
-      type: 'check-in-pressure',
-      severity: 1,
-      extraBias: guest.incidentBias || 0
-    });
-    state.logs.push(
-      `Chain reaction: desk approval seeded pressure in ${room.label}. If that room slides, incidents and rep loss will follow.`
-    );
-    pushLiveAlert(state, {
-      type: 'warning',
-      message: `${room.label} now carries elevated pressure from this check-in. Watch chain growth before it becomes incidents.`,
-      dedupeKey: `checkin-chain-${room.id}-${guest.id}`
-    });
+    if (netChainSeverity > 0) {
+      registerRoomChainSignal({
+        roomId: room.id,
+        guestName: guest.name,
+        type: 'check-in-pressure',
+        severity: netChainSeverity,
+        extraBias: guest.incidentBias || 0
+      });
+      state.logs.push(
+        `Chain reaction: desk approval seeded pressure in ${room.label}. If that room slides, incidents and rep loss will follow.`
+      );
+      if (roomAssignmentPenalty > 0) {
+        state.logs.push(`${room.label} was a poor fit for this guest's pressure profile, increasing spillover risk.`);
+      }
+      pushLiveAlert(state, {
+        type: 'warning',
+        message: `${room.label} now carries elevated pressure from this check-in. Watch chain growth before it becomes incidents.`,
+        dedupeKey: `checkin-chain-${room.id}-${guest.id}`
+      });
+    } else {
+      state.logs.push(`${room.label} absorbed the check-in better than expected because desk screening and room choice reduced the pressure tail.`);
+    }
   }
 
   if (window.DeadEndPhase2?.pushDecisionFeedback) {
     window.DeadEndPhase2.pushDecisionFeedback({
       repDelta: 1 + Number(policyOutcome.reputationDelta || 0),
-      pressureDelta: shouldSeedChain ? 1 : 0,
+      pressureDelta: shouldSeedChain ? netChainSeverity : 0,
       message: `${guest.name} accepted.`,
-      consequence: shouldSeedChain ? 'Suspicion rises.' : 'Desk flow remains stable.'
+      consequence: shouldSeedChain
+        ? (netChainSeverity > 0 ? 'Suspicion rises.' : 'Screening offset the usual pressure spike.')
+        : 'Desk flow remains stable.'
     });
   }
   if (window.DeadEndPhase2?.tutorial?.markTutorialDecision) {
@@ -4110,6 +4592,7 @@ function nextNight() {
   state.carryoverBriefing = buildIncomingNightNotes(state, state.night + 1);
   clearTemporaryCarryover(state);
   refreshProgressionDerivedState();
+  normalizeDeskInspectionState(state);
   setNightPrepVisited(state, false);
   pushLiveAlert(state, {
     type: 'info',

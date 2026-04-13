@@ -2042,6 +2042,24 @@
   background: rgba(251, 191, 36, 0.08);
 }
 
+.guest-meta-chip-scanner {
+  color: rgb(125, 211, 252);
+  border-color: rgba(125, 211, 252, 0.26);
+  background: rgba(125, 211, 252, 0.08);
+}
+
+.guest-meta-chip-verified {
+  color: rgb(134, 239, 172);
+  border-color: rgba(74, 222, 128, 0.28);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.guest-meta-chip-uv {
+  color: rgb(216, 180, 254);
+  border-color: rgba(192, 132, 252, 0.28);
+  background: rgba(192, 132, 252, 0.08);
+}
+
 .guest-signal-chip {
   display: inline-flex;
   align-items: center;
@@ -2088,6 +2106,60 @@
   margin: 0.12rem 0;
 }
 
+.guest-inspection-drawer {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.4rem 0.6rem;
+}
+
+.guest-inspection-drawer summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: rgb(191, 219, 254);
+}
+
+.guest-inspection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+}
+
+.guest-id-line {
+  font-size: 0.79rem;
+  line-height: 1.4;
+}
+
+.guest-scan-line-warning {
+  color: rgb(253, 224, 71);
+}
+
+.guest-room-choice-block {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.guest-room-choice-label,
+.guest-room-choice-hint {
+  margin: 0;
+}
+
+.guest-room-choice-row {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.guest-room-select {
+  width: 100%;
+  min-height: 2.1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 23, 42, 0.72);
+  color: var(--text);
+  padding: 0.42rem 0.55rem;
+}
+
 .guest-history-block {
   border-left: 2px solid rgba(125, 211, 252, 0.22);
   padding-left: 0.52rem;
@@ -2102,6 +2174,45 @@
   margin-top: 0.14rem;
   padding-top: 0.52rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.guest-action-row-secondary {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.desk-scanner-card {
+  margin: 0.7rem 0 0.9rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: 14px;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  background: linear-gradient(180deg, rgba(125, 211, 252, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.scanner-feed-list {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.scanner-feed-item {
+  font-size: 0.8rem;
+  line-height: 1.42;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(15, 23, 42, 0.38);
+  color: var(--muted);
+}
+
+.scanner-tone-vehicle {
+  border-color: rgba(251, 191, 36, 0.24);
+  color: rgb(253, 230, 138);
+}
+
+.scanner-tone-desk {
+  border-color: rgba(110, 231, 255, 0.2);
+  color: rgb(191, 219, 254);
 }
 
 .guest-stay-chip {

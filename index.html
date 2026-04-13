@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dead End Motel v0.7</title>
+  <title>Dead End Motel v0.8</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -12,7 +12,7 @@
   <div id="app" class="app-shell screen-main-menu">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Dead End Motel v0.7</p>
+        <p class="eyebrow">Dead End Motel v0.8</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -182,7 +182,16 @@
               <button id="spawn-guest-btn" class="button button-secondary">Call Next Arrival</button>
             </div>
             <p id="frontdesk-intake-line" class="muted microcopy-line"></p>
-            <p class="muted microcopy-line">Desk flow: Risk + Policy inform your first call (Check In / Flag / Reject).</p>
+            <p class="muted microcopy-line">Desk flow: read the guest, inspect when needed, then choose between direct approval and slower safer checks.</p>
+            <div class="desk-scanner-card">
+              <div class="panel-header split-space">
+                <div>
+                  <p class="section-tag">Local Scanner</p>
+                  <h4>Police / Incident Feed</h4>
+                </div>
+              </div>
+              <div id="desk-scanner-feed" class="scanner-feed-list"></div>
+            </div>
             <div id="guest-queue" class="card-list"></div>
 
             <div class="panel-header split-space">
