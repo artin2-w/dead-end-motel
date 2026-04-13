@@ -2215,6 +2215,12 @@
   color: rgb(191, 219, 254);
 }
 
+.scanner-tone-warning {
+  border-color: rgba(244, 63, 94, 0.28);
+  color: rgb(253, 164, 175);
+  background: rgba(127, 29, 29, 0.18);
+}
+
 .guest-stay-chip {
   border-color: rgba(110, 231, 255, 0.28);
   background: rgba(110, 231, 255, 0.08);

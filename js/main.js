@@ -838,24 +838,39 @@ function cloneSerializable(value) {
   }
 }
 
-function captureNightStartSnapshot(reason = 'night-open') {
-  if (!state || typeof state !== 'object') return;
-  const snapshotBase = { ...state };
+function captureNightStartSnapshot(reason = 'night-open', options = {}) {
+  const targetState = options?.targetState && typeof options.targetState === 'object' ? options.targetState : state;
+  if (!targetState || typeof targetState !== 'object') return false;
+  const force = Boolean(options?.force);
+  const safeNight = Math.max(1, Number(targetState?.night || 1));
+  const existing = targetState?.nightStartSnapshot;
+  if (!force && existing?.state && Number(existing?.night || 0) === safeNight) {
+    return false;
+  }
+  const snapshotBase = { ...targetState };
   delete snapshotBase.nightStartSnapshot;
   delete snapshotBase.nightStartSnapshotReason;
   const snapshotState = cloneSerializable(snapshotBase);
-  if (!snapshotState) return;
-  state.nightStartSnapshot = {
-    night: Math.max(1, Number(state?.night || 1)),
-    guestIdCounter: Math.max(1, Number(guestIdCounter || 1)),
+  if (!snapshotState) return false;
+  targetState.nightStartSnapshot = {
+    night: safeNight,
+    guestIdCounter: Math.max(1, Number(options?.guestIdCounterOverride || guestIdCounter || 1)),
+    locked: true,
+    capturedAt: Date.now(),
+    reason,
     state: snapshotState
   };
-  state.nightStartSnapshotReason = reason;
-  state.logs.push(`Snapshot saved: opening state for Night ${state.night} captured (${reason}).`);
+  targetState.nightStartSnapshotReason = reason;
+  targetState.logs = Array.isArray(targetState.logs) ? targetState.logs : [];
+  targetState.logs.push(`Snapshot frozen: opening state for Night ${safeNight} captured (${reason}).`);
+  return true;
 }
 
 function restoreNightStartSnapshot(options = {}) {
-  const snapshot = state?.nightStartSnapshot;
+  const snapshotSource = options?.snapshotSource && typeof options.snapshotSource === 'object'
+    ? options.snapshotSource
+    : state;
+  const snapshot = snapshotSource?.nightStartSnapshot;
   if (!snapshot?.state) {
     pushLiveAlert(state, {
       type: 'warning',
@@ -878,8 +893,12 @@ function restoreNightStartSnapshot(options = {}) {
   }
 
   state = restoredState;
+  state.nightStartSnapshot = cloneSerializable(snapshot);
+  state.nightStartSnapshotReason = snapshot?.reason || snapshotSource?.nightStartSnapshotReason || 'night-open';
   guestIdCounter = Math.max(1, Number(snapshot.guestIdCounter || 1));
   state.failedState = null;
+  state.pendingRunCompletion = false;
+  state.runEnding = null;
   state = normalizeRoomMemoryState(state);
   state.guests = Array.isArray(state.guests) ? state.guests : [];
   state.guests = normalizeGuestFlags(state.guests);
@@ -906,6 +925,8 @@ function restoreNightStartSnapshot(options = {}) {
   state = normalizeSpecialEncounterState(state);
   state = normalizeNightEventState(state);
   state = normalizeDeskConsequenceState(state);
+  ensureCrisisNightState(state);
+  ensureCrisisEscalationState(state);
   normalizeIdentitySystems();
   normalizeRunMemoryState();
   normalizeCampaignSystems();
@@ -918,11 +939,10 @@ function restoreNightStartSnapshot(options = {}) {
   cleanupTransientUiState('restart-night');
   pushLiveAlert(state, {
     type: 'info',
-    message: options.message || `Night ${state.night} restored to opening conditions.`,
+    message: options.message || `Night ${state.night} restored to its frozen opening state.`,
     dedupeKey: `reset-restored-${state.night}-${Date.now()}`
   });
-  state.logs.push(`Night ${state.night} restored to opening-night state from snapshot.`);
-  captureNightStartSnapshot('restored-opening');
+  state.logs.push(`Night ${state.night} restored to its frozen opening-night snapshot.`);
   renderAll();
   setActiveScreen('game-screen');
   setActivePanel('frontdesk-panel');
@@ -1012,7 +1032,7 @@ function ensureCrisisNightState(targetState = state) {
   const night = Math.max(1, Number(targetState?.night || 1));
   const existing = targetState.crisisNight && typeof targetState.crisisNight === 'object' ? targetState.crisisNight : {};
   if (existing.night === night && existing.kind) return targetState;
-  const options = ['stacked-pressure', 'guest-surge', 'utility-fragility', 'hostile-social-night'];
+  const options = ['stacked-pressure', 'guest-surge', 'utility-fragility', 'hostile-social-night', 'partial-blackout'];
   const chance = night >= 4 ? Math.min(0.35, 0.08 + (night - 3) * 0.045) : 0;
   const active = Math.random() < chance;
   const kind = active ? options[(night + Math.floor(Math.random() * options.length)) % options.length] : null;
@@ -1025,6 +1045,8 @@ function ensureCrisisNightState(targetState = state) {
           ? 'Crisis Night: Utility Fragility'
           : kind === 'hostile-social-night'
             ? 'Crisis Night: Hostile Social Atmosphere'
+            : kind === 'partial-blackout'
+              ? 'Crisis Night: Partial Blackout Risk'
             : '';
   const note =
     kind === 'stacked-pressure'
@@ -1035,13 +1057,20 @@ function ensureCrisisNightState(targetState = state) {
           ? 'Small faults are more likely to spread across rooms and power decisions.'
           : kind === 'hostile-social-night'
             ? 'Guests are more reactive, rumors travel faster, and containment will read harsher.'
+            : kind === 'partial-blackout'
+              ? 'Lighting and power stability feel fragile. A local outage could change room control fast.'
             : '';
   targetState.crisisNight = {
     active,
     night,
     kind,
     title,
-    note
+    note,
+    blackoutRisk: active && (kind === 'utility-fragility' || kind === 'partial-blackout'),
+    panicScale:
+      active && kind === 'stacked-pressure' ? 2
+      : active && (kind === 'partial-blackout' || kind === 'guest-surge') ? 1
+      : 0
   };
   return targetState;
 }
@@ -1053,6 +1082,10 @@ function buildNightIdentitySummary(targetState = state) {
   if (scenario.label) tags.push(`Scenario: ${scenario.label}`);
   if (crisis.active && crisis.title) tags.push(crisis.title);
   if (Number(targetState?.night || 1) <= 2) tags.push('Mood: quiet but wrong');
+  if (crisis.kind === 'hostile-social-night') tags.push('Mood: socially hostile');
+  if (crisis.kind === 'utility-fragility' || crisis.kind === 'partial-blackout') tags.push('Mood: infrastructure-fragile');
+  if (crisis.kind === 'guest-surge' || (targetState?.guests || []).length >= 3) tags.push('Mood: crowded and unstable');
+  if (crisis.kind === 'stacked-pressure') tags.push('Mood: systems slipping together');
   if ((targetState?.rooms || []).some((room) => Number(room?.memory?.incidentsSeen || 0) >= 2)) {
     tags.push('Mood: remembered room pressure');
   }
@@ -1121,7 +1154,14 @@ function buildScannerFeedForNight(targetState = state) {
       text: night <= 2
         ? 'Scanner note: local desk chatter says some late-night travelers are using soft stories to push through tired clerks.'
         : 'Scanner note: repeat disturbances are being described as “people who looked ordinary until they were inside.”'
-    }
+    },
+    ...(crisis?.blackoutRisk
+      ? [{
+        id: `desk-feed-${night}-3`,
+        tone: 'warning',
+        text: 'Scanner priority: utility complaints and flickering-light calls are clustering around this block.'
+      }]
+      : [])
   ];
   targetState.localScannerFeed = feed;
   return feed;
@@ -1198,6 +1238,156 @@ function getRoomAssignmentOptionsForGuest(guest, rooms = state?.rooms || []) {
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
+}
+
+function ensureCrisisEscalationState(targetState = state) {
+  if (!targetState || typeof targetState !== 'object') return targetState;
+  const crisis = targetState?.crisisNight || {};
+  const existing = targetState.crisisEscalation && typeof targetState.crisisEscalation === 'object'
+    ? targetState.crisisEscalation
+    : {};
+  if (Number(existing.night || 0) === Math.max(1, Number(targetState?.night || 1))) {
+    targetState.crisisEscalation = {
+      night: Math.max(1, Number(targetState?.night || 1)),
+      blackoutTriggered: Boolean(existing.blackoutTriggered),
+      signatureIdsSeen: Array.isArray(existing.signatureIdsSeen) ? existing.signatureIdsSeen : [],
+      panicMoments: Math.max(0, Number(existing.panicMoments || 0)),
+      crisisKind: crisis.kind || null
+    };
+    return targetState;
+  }
+  targetState.crisisEscalation = {
+    night: Math.max(1, Number(targetState?.night || 1)),
+    blackoutTriggered: false,
+    signatureIdsSeen: [],
+    panicMoments: 0,
+    crisisKind: crisis.kind || null
+  };
+  return targetState;
+}
+
+function buildSignatureIncidentCatalog() {
+  return [
+    {
+      id: 'hallway-knock-pattern',
+      title: 'Hallway Knock Pattern',
+      log: (room) => `Signature incident: a synchronized knock pattern rolled the hallway and collapsed focus around ${room.label}.`,
+      alert: (room) => `${room.label} became the center of a hallway-wide knock surge.`,
+      apply: (room) => ({
+        ...room,
+        condition: room.condition === 'Stable' ? 'Watch' : 'Critical'
+      }),
+      chainSeverity: 2
+    },
+    {
+      id: 'parking-lot-gathering',
+      title: 'Parking Lot Gathering',
+      log: (room) => `Signature incident: figures collected outside near ${room.label}, turning one guest problem into a motel-facing threat.`,
+      alert: () => 'Parking-lot pressure is feeding the motel interior now.',
+      apply: (room) => ({
+        ...room,
+        deskFlagged: true,
+        condition: 'Critical'
+      }),
+      chainSeverity: 3
+    },
+    {
+      id: 'breaker-room-echo',
+      title: 'Breaker Room Echo',
+      log: (room) => `Signature incident: a breaker-room echo dropped power confidence and pushed ${room.label} toward operational failure.`,
+      alert: () => 'Infrastructure stress just became visible property-wide.',
+      apply: (room) => ({
+        ...room,
+        powerCut: false,
+        condition: room.condition === 'Stable' ? 'Watch' : 'Critical'
+      }),
+      chainSeverity: 2,
+      powerDelta: -8
+    }
+  ];
+}
+
+function triggerSignatureIncident(trigger = 'pressure') {
+  ensureCrisisEscalationState(state);
+  const occupied = (state.rooms || []).filter((room) => room?.occupiedBy);
+  if (!occupied.length) return false;
+  const usedIds = new Set(state?.crisisEscalation?.signatureIdsSeen || []);
+  const available = buildSignatureIncidentCatalog().filter((entry) => !usedIds.has(entry.id));
+  if (!available.length) return false;
+  const target = occupied.sort((a, b) => Number(b?.chainPressure || 0) - Number(a?.chainPressure || 0))[0];
+  if (!target) return false;
+  const incident = available[0];
+  const idx = state.rooms.findIndex((room) => room.id === target.id);
+  if (idx === -1) return false;
+  state.rooms[idx] = incident.apply(state.rooms[idx]);
+  if (typeof incident.powerDelta === 'number') {
+    state.power = clampPower(state.power + incident.powerDelta);
+  }
+  registerRoomChainSignal({
+    roomId: target.id,
+    guestName: target.occupiedBy,
+    type: `signature-${incident.id}-${trigger}`,
+    severity: incident.chainSeverity
+  });
+  markRoomMemory(target.id, {
+    incidentsSeen: 1,
+    signature: incident.id,
+    note: `${incident.title} has been logged here.`
+  });
+  state.logs.push(incident.log(target));
+  pushLiveAlert(state, {
+    type: 'danger',
+    message: incident.alert(target),
+    dedupeKey: `signature-${incident.id}-${state.night}`
+  });
+  state.incidents = [...(Array.isArray(state.incidents) ? state.incidents : []), {
+    roomId: target.id,
+    guestName: target.occupiedBy,
+    riskLevel: target.riskLevel || 'High',
+    condition: state.rooms[idx].condition,
+    type: incident.title,
+    severity: 'high'
+  }];
+  state.shiftStats.severeIncidents = (state.shiftStats.severeIncidents || 0) + 1;
+  state.crisisEscalation.signatureIdsSeen = [...usedIds, incident.id];
+  return true;
+}
+
+function maybeTriggerBlackoutPressure(source = 'general') {
+  ensureCrisisNightState(state);
+  ensureCrisisEscalationState(state);
+  const crisis = state?.crisisNight || {};
+  if (!crisis.blackoutRisk || state?.crisisEscalation?.blackoutTriggered) return false;
+  const lowPower = Number(state?.power || 100) <= 35;
+  const lateNight = Number(state?.shiftElapsedMinutes || 0) >= 180;
+  const criticalRooms = getCriticalOccupiedRoomCount();
+  const chance = lowPower || lateNight || criticalRooms >= 2 ? 0.34 : 0.12;
+  if (Math.random() > chance) return false;
+  state.crisisEscalation.blackoutTriggered = true;
+  state.power = clampPower(state.power - (crisis.kind === 'partial-blackout' ? 12 : 8));
+  const occupied = (state.rooms || []).filter((room) => room?.occupiedBy);
+  occupied.slice(0, Math.max(1, Math.min(2, occupied.length))).forEach((room) => {
+    registerRoomChainSignal({
+      roomId: room.id,
+      guestName: room.occupiedBy,
+      type: `blackout-${source}`,
+      severity: 2
+    });
+  });
+  state.logs.push(
+    crisis.kind === 'partial-blackout'
+      ? 'Partial blackout: corridor lighting dropped, front desk visibility narrowed, and room pressure spiked under the outage.'
+      : 'Blackout scare: power sagged across part of the property and room control immediately worsened.'
+  );
+  pushLiveAlert(state, {
+    type: 'danger',
+    message: crisis.kind === 'partial-blackout'
+      ? 'Partial blackout: visibility and control just got worse across the motel.'
+      : 'Blackout pressure: the property is slipping toward operational failure.',
+    dedupeKey: `blackout-${state.night}`
+  });
+  state.shiftStats.majorPowerIncidents = (state.shiftStats.majorPowerIncidents || 0) + 1;
+  return true;
 }
 
 function normalizeIntakeState(targetState = state) {
@@ -1680,7 +1870,7 @@ function evaluatePresentationState() {
   if (warningFlags.lowPower && !state.uiFlags.lowPowerWarned) {
     pushLiveAlert(state, {
       type: 'warning',
-      message: 'Power reserve is low. A blackout is becoming likely.',
+      message: 'Power reserve is low. The motel feels one bad surge away from blackout conditions.',
       dedupeKey: 'warn-low-power'
     });
     state.uiFlags.lowPowerWarned = true;
@@ -1691,7 +1881,7 @@ function evaluatePresentationState() {
   if (warningFlags.lowReputation && !state.uiFlags.lowReputationWarned) {
     pushLiveAlert(state, {
       type: 'warning',
-      message: 'Reputation is slipping into dangerous territory.',
+      message: 'Reputation is collapsing. The motel is losing the benefit of the doubt.',
       dedupeKey: 'warn-low-reputation'
     });
     state.uiFlags.lowReputationWarned = true;
@@ -1701,7 +1891,7 @@ function evaluatePresentationState() {
   if (warningFlags.criticalPressure && !state.uiFlags.criticalPressureWarned) {
     pushLiveAlert(state, {
       type: 'danger',
-      message: 'Multiple occupied rooms are in critical condition.',
+      message: 'This night is slipping away. Multiple occupied rooms are already in critical condition.',
       dedupeKey: 'warn-critical-pressure'
     });
     state.uiFlags.criticalPressureWarned = true;
@@ -1723,12 +1913,26 @@ function evaluatePresentationState() {
   if (chainPressure >= 8 && !state.uiFlags.chainPressureWarned) {
     pushLiveAlert(state, {
       type: 'warning',
-      message: 'Incident chain pressure is rising across occupied rooms.',
+      message: 'Pressure is spreading room to room. The motel is starting to fail as one property, not isolated rooms.',
       dedupeKey: `warn-chain-pressure-${state.night}`
     });
     state.uiFlags.chainPressureWarned = true;
   }
   if (chainPressure < 5) state.uiFlags.chainPressureWarned = false;
+
+  ensureCrisisEscalationState(state);
+  if ((warningFlags.criticalPressure || warningFlags.lowPower || chainPressure >= 10) && !state.uiFlags.panicSlipWarned) {
+    pushLiveAlert(state, {
+      type: 'danger',
+      message: 'Panic warning: command is thinning out. One more bad sequence could break the night open.',
+      dedupeKey: `panic-slip-${state.night}`
+    });
+    state.uiFlags.panicSlipWarned = true;
+    state.crisisEscalation.panicMoments = Math.max(0, Number(state?.crisisEscalation?.panicMoments || 0) + 1);
+  }
+  if (!warningFlags.criticalPressure && !warningFlags.lowPower && chainPressure < 7) {
+    state.uiFlags.panicSlipWarned = false;
+  }
 
   const criticalRooms = getCriticalOccupiedRoomCount();
   state.publicPressureStreak = criticalRooms >= 2 ? (state.publicPressureStreak || 0) + 1 : 0;
@@ -1821,6 +2025,8 @@ function bootstrapState() {
   state = normalizeSpecialEncounterState(state);
   state = normalizeNightEventState(state);
   state = normalizeDeskConsequenceState(state);
+  ensureCrisisNightState(state);
+  ensureCrisisEscalationState(state);
   normalizeIdentitySystems();
   normalizeRunMemoryState();
   normalizeCampaignSystems();
@@ -1857,7 +2063,7 @@ function bootstrapState() {
   normalizeAdminSpamState(state);
   state.deferredShiftCosts = Array.isArray(state.deferredShiftCosts) ? state.deferredShiftCosts : [];
   if (!state?.nightStartSnapshot?.state) {
-    captureNightStartSnapshot('bootstrap-fallback');
+    captureNightStartSnapshot('bootstrap-fallback', { force: true });
   }
 }
 function renderAll() {
@@ -1973,6 +2179,8 @@ function startFreshCampaignRun() {
   state = normalizePresentationState(state);
   state = normalizeSpecialEncounterState(state);
   state = normalizeNightEventState(state);
+  ensureCrisisNightState(state);
+  ensureCrisisEscalationState(state);
   resetCarryoverMemory(state);
   state.storyThreads = [];
   state.activeStoryBeat = null;
@@ -2007,6 +2215,8 @@ function startFreshCampaignRun() {
   applyNightStartProgression(state);
   runtimeBranchContext = null;
   state.doctrine = beginDoctrineNight(state.doctrine);
+  normalizeDeskInspectionState(state);
+  captureNightStartSnapshot('fresh-campaign-night-open', { force: true });
   pushLiveAlert(state, {
     type: 'info',
     message: 'Fresh campaign prepared. Night 1 is ready.',
@@ -2024,7 +2234,7 @@ function resetNightState() {
   onMeaningfulAction();
   audioController.playUiClick();
   restoreNightStartSnapshot({
-    message: `Night ${Math.max(1, Number(state?.night || 1))} reset to its opening state.`
+    message: `Night ${Math.max(1, Number(state?.night || 1))} reset to its frozen opening state.`
   });
 }
 
@@ -2130,6 +2340,8 @@ function startShift() {
   refreshIntakeBudgetForNight(state);
   normalizeIntakeState(state);
   normalizeDeskInspectionState(state);
+  ensureCrisisNightState(state);
+  ensureCrisisEscalationState(state);
   state.deferredShiftCosts = [];
   pushLiveAlert(state, {
     type: 'info',
@@ -2137,7 +2349,7 @@ function startShift() {
     dedupeKey: `scenario-start-${state.night}`
   });
   pushOpeningTensionBeat('shift-start');
-  captureNightStartSnapshot('shift-start');
+  captureNightStartSnapshot('shift-start', { force: true });
   setActiveScreen('game-screen');
   setActivePanel('frontdesk-panel');
   updateOnboarding((current) => markTutorialEvent(current, 'shift-started'));
@@ -2193,6 +2405,8 @@ function progressShift(actionKey, options = {}) {
     state.power = clampPower(state.power - passiveDrain);
     state.logs.push(`Power grid load drained ${passiveDrain}% during ongoing motel operations.`);
   }
+
+  maybeTriggerBlackoutPressure(`pre-${actionKey}`);
 
   state = advanceNightCycle(state, actionKey, {
     timeScale: options.timeScale,
@@ -2289,6 +2503,16 @@ function progressShift(actionKey, options = {}) {
   state.finaleObjectives = buildFinaleObjectives(state);
   state.finaleUi = buildFinaleUiState(state);
   applyQueuedDeskConsequences();
+  maybeTriggerBlackoutPressure(`post-${actionKey}`);
+
+  if (
+    state?.crisisNight?.active &&
+    (state.crisisNight.kind === 'stacked-pressure' || state.crisisNight.kind === 'guest-surge') &&
+    Number(state.shiftElapsedMinutes || 0) >= 160 &&
+    Math.random() < 0.12
+  ) {
+    triggerSignatureIncident(`crisis-${actionKey}`);
+  }
 
   if (!state.dawnProcessed && hasReachedDawn(state)) {
     state.shiftElapsedMinutes = SHIFT_DURATION_MINUTES;
@@ -4060,23 +4284,7 @@ function reviewIncidents() {
   });
 
   if (meaningful && Math.random() < (state?.crisisNight?.active ? 0.22 : 0.08)) {
-    const target = (state.rooms || []).find((room) => room?.occupiedBy && room?.condition !== 'Critical');
-    if (target) {
-      target.condition = target.condition === 'Stable' ? 'Watch' : 'Critical';
-      state.logs.push(`Signature incident: a hallway-wide knock pattern converged on ${target.label}, turning scattered pressure into a property-wide warning.`);
-      pushLiveAlert(state, {
-        type: 'warning',
-        message: `Signature incident: ${target.label} just became the center of a motel-wide pressure spike.`,
-        dedupeKey: `signature-incident-${target.id}-${state.night}-${state.shiftElapsedMinutes}`
-      });
-      markRoomMemory(target.id, {
-        incidentsSeen: 1,
-        harshActions: 0,
-        signature: 'hallway-knock-pattern',
-        note: 'A signature hallway knock pattern has been logged here.'
-      });
-      state.shiftStats.severeIncidents = (state.shiftStats.severeIncidents || 0) + 1;
-    }
+    triggerSignatureIncident('review');
   }
 
   if (typeof result.reputationDelta === 'number') {
@@ -4451,14 +4659,19 @@ function evictRoomGuest(roomId) {
 
 function restartCurrentNight() {
   if (activeScreenId !== 'failure-screen') return;
-  if (!confirmIfNeeded(`Restart Night ${Math.max(1, Number(state?.night || 1))}? This resets current night state only.`)) {
+  if (!confirmIfNeeded(`Retry Night ${Math.max(1, Number(state?.night || 1))} from its frozen opening state? Failed progress from this night will be discarded.`)) {
     return;
   }
   onMeaningfulAction();
   audioController.playUiClick();
   restoreNightStartSnapshot({
-    message: `Night ${Math.max(1, Number(state?.night || 1))} restarted from failure to its opening state.`
+    message: `Night ${Math.max(1, Number(state?.night || 1))} retried from its frozen opening state.`
   });
+}
+
+function restartCampaignFromFailure() {
+  if (activeScreenId !== 'failure-screen') return;
+  startFreshCampaignRun();
 }
 
 function applyEscalationResult(result) {
@@ -4593,6 +4806,7 @@ function nextNight() {
   clearTemporaryCarryover(state);
   refreshProgressionDerivedState();
   normalizeDeskInspectionState(state);
+  ensureCrisisEscalationState(state);
   setNightPrepVisited(state, false);
   pushLiveAlert(state, {
     type: 'info',
@@ -4600,7 +4814,7 @@ function nextNight() {
     dedupeKey: `scenario-start-${state.night}`
   });
   pushOpeningTensionBeat('carryover');
-  captureNightStartSnapshot('next-night-open');
+  captureNightStartSnapshot('next-night-open', { force: true });
 
   renderAll();
   setActiveScreen('game-screen');
@@ -4651,6 +4865,7 @@ function bindEvents() {
   document.getElementById('run-ending-menu-btn').addEventListener('click', moveToMainMenuSafely);
   document.getElementById('run-ending-new-run-btn').addEventListener('click', startFreshCampaignRun);
   document.getElementById('restart-night-btn').addEventListener('click', restartCurrentNight);
+  document.getElementById('restart-campaign-btn').addEventListener('click', restartCampaignFromFailure);
   document.getElementById('failure-menu-btn').addEventListener('click', moveToMainMenuSafely);
   document.getElementById('audio-toggle-btn').addEventListener('click', toggleAudio);
   document.getElementById('open-help-btn').addEventListener('click', () => toggleHelpOverlay(true));

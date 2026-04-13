@@ -54,6 +54,20 @@ const INCIDENT_LIBRARY = {
         `Possible property damage was reported inside or near ${roomLabel}, where ${guestName} is staying.`
     },
     {
+      type: 'Breaker Pop',
+      severity: 'high',
+      effect: 'critical',
+      buildLog: (guestName, roomLabel) =>
+        `A breaker pop and sudden light loss were reported near ${roomLabel}; ${guestName}'s stay is now tied to a wider operational scare.`
+    },
+    {
+      type: 'Parking Lot Convergence',
+      severity: 'high',
+      effect: 'critical',
+      buildLog: (guestName, roomLabel) =>
+        `Unsettling movement outside fed back toward ${roomLabel}, and ${guestName}'s stay now feels tied to a motel-wide threat.`
+    },
+    {
       type: 'Missing Guest',
       severity: 'high',
       effect: 'critical',

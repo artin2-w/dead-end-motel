@@ -17,6 +17,12 @@ export function buildNightSummary(state) {
   if (crisis.active && crisis.title) {
     identity.push(`The night developed under ${crisis.title.toLowerCase()}, which made small errors spread faster than usual.`);
   }
+  if (crisis.kind === 'partial-blackout' || crisis.kind === 'utility-fragility') {
+    identity.push('Infrastructure fragility shaped the whole shift, with power confidence and room control repeatedly threatening to collapse together.');
+  }
+  if (Array.isArray(state?.incidents) && state.incidents.some((incident) => String(incident?.type || '').toLowerCase().includes('hallway') || String(incident?.type || '').toLowerCase().includes('breaker') || String(incident?.type || '').toLowerCase().includes('parking'))) {
+    identity.push('At least one signature incident turned routine pressure into a memorable motel-wide rupture.');
+  }
   if (carriedRooms > 0) {
     identity.push(`${carriedRooms} occupied room${carriedRooms === 1 ? '' : 's'} were carried forward, so the shift began with continuity pressure already active.`);
   }

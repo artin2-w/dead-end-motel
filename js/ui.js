@@ -1283,6 +1283,14 @@ export function renderFailure(failure) {
   document.getElementById('failure-reason').textContent = failure?.reason || 'Motel Failure';
   document.getElementById('failure-text').textContent =
     failure?.text || 'The motel could not sustain operations for the rest of the night.';
+  const retryBtn = document.getElementById('restart-night-btn');
+  if (retryBtn) {
+    retryBtn.title = 'Restore the exact frozen opening state of the current night.';
+  }
+  const restartCampaignBtn = document.getElementById('restart-campaign-btn');
+  if (restartCampaignBtn) {
+    restartCampaignBtn.title = 'Start a full new campaign from Night 1.';
+  }
 }
 
 function getSummaryGradeClass(grade = 'C') {
