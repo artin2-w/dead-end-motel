@@ -819,6 +819,126 @@ function appendUniqueLogs(lines = []) {
   });
 }
 
+function cloneSerializable(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (_) {
+    return null;
+  }
+}
+
+function captureNightStartSnapshot(reason = 'night-open') {
+  if (!state || typeof state !== 'object') return;
+  const snapshotBase = { ...state };
+  delete snapshotBase.nightStartSnapshot;
+  delete snapshotBase.nightStartSnapshotReason;
+  const snapshotState = cloneSerializable(snapshotBase);
+  if (!snapshotState) return;
+  state.nightStartSnapshot = {
+    night: Math.max(1, Number(state?.night || 1)),
+    guestIdCounter: Math.max(1, Number(guestIdCounter || 1)),
+    state: snapshotState
+  };
+  state.nightStartSnapshotReason = reason;
+}
+
+function restoreNightStartSnapshot(options = {}) {
+  const snapshot = state?.nightStartSnapshot;
+  if (!snapshot?.state) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'No opening-night snapshot is available for reset.',
+      dedupeKey: `reset-missing-${state?.night || 1}`
+    });
+    renderAll();
+    return false;
+  }
+
+  const restoredState = cloneSerializable(snapshot.state);
+  if (!restoredState) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'Night reset failed safely because the restore snapshot was invalid.',
+      dedupeKey: `reset-invalid-${state?.night || 1}`
+    });
+    renderAll();
+    return false;
+  }
+
+  state = restoredState;
+  guestIdCounter = Math.max(1, Number(snapshot.guestIdCounter || 1));
+  state.failedState = null;
+  state.guests = Array.isArray(state.guests) ? state.guests : [];
+  state.guests = normalizeGuestFlags(state.guests);
+  state.guests = normalizePolicyGuests(state.guests, state.night);
+  state.guests = state.guests.map((guest) => {
+    const normalizedGuest = normalizeGuestArchetype(guest);
+    const readyGuest = normalizedGuest.archetypeKey
+      ? normalizedGuest
+      : assignArchetypeToGuest(normalizedGuest, state);
+    return Number(readyGuest?.expectedStayNights || 0) > 0
+      ? readyGuest
+      : { ...readyGuest, expectedStayNights: computeStayNightsForGuest(readyGuest) };
+  });
+  state.rooms = normalizeEscalationRooms(applyRoomUnlockFlags(state.rooms || [], state.night));
+  state.rooms = normalizeResponseRooms(state.rooms);
+  state.rooms = normalizeTacticalRooms(state.rooms);
+  state.shiftStats = normalizeShiftStats(state.shiftStats);
+  state = normalizeNightCycleState(state);
+  state = normalizePowerEconomyState(state);
+  state = normalizeCameraSceneState(state);
+  state = normalizeLocationState(state);
+  state = normalizePresentationState(state);
+  state = normalizeSpecialEncounterState(state);
+  state = normalizeNightEventState(state);
+  state = normalizeDeskConsequenceState(state);
+  normalizeIdentitySystems();
+  normalizeRunMemoryState();
+  normalizeCampaignSystems();
+  refreshProgressionDerivedState();
+  normalizeIntakeState(state);
+  normalizeAdminSpamState(state);
+  state.deferredShiftCosts = Array.isArray(state.deferredShiftCosts) ? state.deferredShiftCosts : [];
+  runtimeBranchContext = null;
+  syncFinaleStateForNight({ refreshBranch: true });
+  cleanupTransientUiState('restart-night');
+  pushLiveAlert(state, {
+    type: 'info',
+    message: options.message || `Night ${state.night} restored to opening conditions.`,
+    dedupeKey: `reset-restored-${state.night}-${Date.now()}`
+  });
+  captureNightStartSnapshot('restored-opening');
+  renderAll();
+  setActiveScreen('game-screen');
+  setActivePanel('frontdesk-panel');
+  return true;
+}
+
+function pushOpeningTensionBeat(context = 'opening') {
+  const night = Math.max(1, Number(state?.night || 1));
+  const occupiedCarryovers = (state?.rooms || []).filter((room) => room?.occupiedBy).length;
+  let alertMessage = '';
+  let logLine = '';
+
+  if (occupiedCarryovers > 0) {
+    alertMessage = `${occupiedCarryovers} occupied room${occupiedCarryovers === 1 ? '' : 's'} carried over into tonight. Continuity pressure starts immediately.`;
+    logLine = 'Opening tension: last night did not fully leave the property. Occupied rooms are carrying weight into this shift.';
+  } else if (night <= 2) {
+    alertMessage = 'Opening tension: the property feels wrong before the first arrival even reaches the desk.';
+    logLine = 'Opening tension: the lobby hum sits a little too low and empty hallways already feel watched.';
+  } else {
+    alertMessage = 'Opening tension: early shift drift is already visible. Small mistakes are likely to echo farther tonight.';
+    logLine = 'Opening tension: the motel opens under a thin layer of strain; early reads and first decisions will matter more than usual.';
+  }
+
+  state.logs.push(logLine);
+  pushLiveAlert(state, {
+    type: context === 'carryover' || occupiedCarryovers > 0 ? 'warning' : 'info',
+    message: alertMessage,
+    dedupeKey: `opening-tension-${state.night}-${context}`
+  });
+}
+
 function normalizeIntakeState(targetState = state) {
   if (!targetState || typeof targetState !== 'object') return targetState;
   if (!targetState.intake || typeof targetState.intake !== 'object') {
@@ -862,6 +982,13 @@ function tickDeferredShiftCosts() {
       const dr = Number(entry.reputationDelta || 0);
       if (dr) state.reputation = clampReputation(state.reputation + dr);
       if (entry.logLine) state.logs.push(entry.logLine);
+      if (dr < 0 || entry.logLine) {
+        pushLiveAlert(state, {
+          type: dr < 0 ? 'warning' : 'info',
+          message: entry.logLine || 'A delayed operational consequence just landed.',
+          dedupeKey: `deferred-cost-${entry.id || 'x'}-${state.night}-${state.shiftElapsedMinutes}`
+        });
+      }
     } else {
       kept.push({ ...entry, turnsRemaining: turns });
     }
@@ -1137,6 +1264,9 @@ function applyQueuedDeskConsequences() {
 
     const chainSeverity = Number(entry?.chainSeverity || 0);
     if (chainSeverity > 0 && entry?.roomId != null) {
+      state.logs.push(
+        `Chain reaction: an earlier desk call added ${chainSeverity} pressure near ${entry.zoneLabel || `Room ${entry.roomId}`}.`
+      );
       registerRoomChainSignal({
         roomId: entry.roomId,
         type: `desk-followup-${entry.type || 'thread'}`,
@@ -1144,6 +1274,9 @@ function applyQueuedDeskConsequences() {
       });
     }
     if (chainSeverity < 0 && entry?.roomId != null) {
+      state.logs.push(
+        `Chain reaction interrupted: earlier monitoring cooled ${entry.zoneLabel || `Room ${entry.roomId}`}.`
+      );
       calmRoomChain(entry.roomId, Math.max(1, Math.abs(chainSeverity)));
     }
 
@@ -1396,9 +1529,12 @@ function bootstrapState() {
   state.guests = normalizePolicyGuests(state.guests, state.night);
   state.guests = state.guests.map((guest) => {
     const normalizedGuest = normalizeGuestArchetype(guest);
-    return normalizedGuest.archetypeKey
+    const readyGuest = normalizedGuest.archetypeKey
       ? normalizedGuest
       : assignArchetypeToGuest(normalizedGuest, state);
+    return Number(readyGuest?.expectedStayNights || 0) > 0
+      ? readyGuest
+      : { ...readyGuest, expectedStayNights: computeStayNightsForGuest(readyGuest) };
   });
   state.logs = Array.isArray(state.logs) ? state.logs : [];
   state.activeEvents = Array.isArray(state.activeEvents) ? state.activeEvents : [];
@@ -1447,6 +1583,9 @@ function bootstrapState() {
   normalizeIntakeState(state);
   normalizeAdminSpamState(state);
   state.deferredShiftCosts = Array.isArray(state.deferredShiftCosts) ? state.deferredShiftCosts : [];
+  if (!state?.nightStartSnapshot?.state) {
+    captureNightStartSnapshot('bootstrap-fallback');
+  }
 }
 function renderAll() {
   evaluatePresentationState();
@@ -1515,8 +1654,8 @@ function renderAll() {
   saveState(state);
 }
 
-function resetNightState() {
-  if (!confirmIfNeeded('Start a new run from Night 1? Current run progress will be replaced. Archive progression and settings are kept.')) {
+function startFreshCampaignRun() {
+  if (!confirmIfNeeded('Begin a fresh campaign from Night 1? Current run progress will be replaced. Archive progression and settings are kept.')) {
     return;
   }
   onMeaningfulAction();
@@ -1539,7 +1678,7 @@ function resetNightState() {
   state.rooms = normalizeTacticalRooms(state.rooms);
   state.cameras = createDefaultCameras();
   state.guests = [];
-  state.logs = ['Night reset. Motel systems back online.'];
+  state.logs = ['New campaign initialized. Motel systems back online for Night 1.'];
   state.activeEvents = [];
   state.incidents = [];
   state.storyChains = [];
@@ -1586,12 +1725,23 @@ function resetNightState() {
   state.doctrine = beginDoctrineNight(state.doctrine);
   pushLiveAlert(state, {
     type: 'info',
-    message: 'Night reset. Motel systems are back online.',
-    dedupeKey: `reset-night-${Date.now()}`
+    message: 'Fresh campaign prepared. Night 1 is ready.',
+    dedupeKey: `new-campaign-${Date.now()}`
   });
   guestIdCounter = 1;
   renderAll();
   setActiveScreen('main-menu');
+}
+
+function resetNightState() {
+  if (!confirmIfNeeded(`Reset Night ${Math.max(1, Number(state?.night || 1))} to its opening state? Progress made during the current night will be lost.`)) {
+    return;
+  }
+  onMeaningfulAction();
+  audioController.playUiClick();
+  restoreNightStartSnapshot({
+    message: `Night ${Math.max(1, Number(state?.night || 1))} reset to its opening state.`
+  });
 }
 
 function purchaseMetaPerkFromMenu(perkId) {
@@ -1701,6 +1851,8 @@ function startShift() {
     message: `Shift started — Scenario: ${state?.activeScenario?.label || 'Standard Shift'}.`,
     dedupeKey: `scenario-start-${state.night}`
   });
+  pushOpeningTensionBeat('shift-start');
+  captureNightStartSnapshot('shift-start');
   setActiveScreen('game-screen');
   setActivePanel('frontdesk-panel');
   updateOnboarding((current) => markTutorialEvent(current, 'shift-started'));
@@ -1917,31 +2069,41 @@ function callNextArrival() {
     : directedGuest;
   const withSpecialEncounter = maybeAssignSpecialEncounterToGuest(variedGuest, state, branchContext);
   const finaleAdjustedGuest = maybeAttachFinaleEncounter(withSpecialEncounter, state, branchContext);
+  const guestWithStay = {
+    ...finaleAdjustedGuest,
+    expectedStayNights: Math.max(
+      1,
+      Number(finaleAdjustedGuest?.expectedStayNights || computeStayNightsForGuest(finaleAdjustedGuest))
+    )
+  };
 
-  state.guests.push(finaleAdjustedGuest);
+  state.guests.push(guestWithStay);
   registerContentExposure(state, {
     kind: 'guest',
-    archetype: finaleAdjustedGuest?.archetypeKey,
+    archetype: guestWithStay?.archetypeKey,
     outsideHeavy: Number(branchContext?.signals?.outsideRisk || 0) >= 6
   });
-  registerContentExposure(state, { kind: 'guestMood', mood: finaleAdjustedGuest?.mood });
-  if (finaleAdjustedGuest?.specialEncounter?.id) {
-    registerContentExposure(state, { kind: 'special', id: finaleAdjustedGuest.specialEncounter.id });
+  registerContentExposure(state, { kind: 'guestMood', mood: guestWithStay?.mood });
+  if (guestWithStay?.specialEncounter?.id) {
+    registerContentExposure(state, { kind: 'special', id: guestWithStay.specialEncounter.id });
   }
   guestIdCounter += 1;
   state.logs.push('A new arrival reached the front desk (intake slot consumed).');
-  if (finaleAdjustedGuest?.specialEncounter?.id) {
+  state.logs.push(
+    `${guestWithStay.name} looks booked for roughly ${guestWithStay.expectedStayNights} night${guestWithStay.expectedStayNights === 1 ? '' : 's'} if approved.`
+  );
+  if (guestWithStay?.specialEncounter?.id) {
     pushLiveAlert(state, {
       type: 'warning',
       kind: 'actionable',
-      message: `${finaleAdjustedGuest.name} presents a special encounter.`,
-      dedupeKey: `special-guest-${finaleAdjustedGuest.id}-${finaleAdjustedGuest.specialEncounter.id}`
+      message: `${guestWithStay.name} presents a special encounter.`,
+      dedupeKey: `special-guest-${guestWithStay.id}-${guestWithStay.specialEncounter.id}`
     });
   }
   pushLiveAlert(state, {
     type: 'info',
-    message: `${finaleAdjustedGuest.name} arrived at reception.`,
-    dedupeKey: `guest-arrival-${finaleAdjustedGuest.id}`
+    message: `${guestWithStay.name} arrived at reception for a likely ${guestWithStay.expectedStayNights}-night stay.`,
+    dedupeKey: `guest-arrival-${guestWithStay.id}`
   });
   updateOnboarding((current) => markTutorialEvent(current, 'guest-spawned'));
   if (checkFailureState()) return;
@@ -2219,7 +2381,7 @@ function checkInGuest(guestId) {
   room.occupantChainBias =
     typeof guest.chainBias === 'number' ? guest.chainBias : 0;
   room.escalationCooldown = typeof room.escalationCooldown === 'number' ? room.escalationCooldown : 0;
-  room.stayNightsRemaining = computeStayNightsForGuest(guest);
+  room.stayNightsRemaining = Math.max(1, Number(guest.expectedStayNights || computeStayNightsForGuest(guest)));
 
   if (room.deskFlagged && room.condition === 'Stable') {
     room.condition = 'Watch';
@@ -2321,6 +2483,14 @@ function checkInGuest(guestId) {
       type: 'check-in-pressure',
       severity: 1,
       extraBias: guest.incidentBias || 0
+    });
+    state.logs.push(
+      `Chain reaction: desk approval seeded pressure in ${room.label}. If that room slides, incidents and rep loss will follow.`
+    );
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: `${room.label} now carries elevated pressure from this check-in. Watch chain growth before it becomes incidents.`,
+      dedupeKey: `checkin-chain-${room.id}-${guest.id}`
     });
   }
 
@@ -3464,6 +3634,13 @@ function lockDownRoom(roomId) {
       logLine: result.deferredLogLine || 'Deferred lockdown audit pressure lands on the desk.'
     });
   }
+  if (result.success) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: `${state.rooms[roomIndex].label} locked down. Immediate spillover is lower, but delayed complaint pressure is now pending.`,
+      dedupeKey: `lockdown-now-later-${roomId}-${state.night}`
+    });
+  }
 
   if (checkFailureState()) return;
   if (progressShift('lockdown')) return;
@@ -3552,6 +3729,13 @@ function cutPowerToRoom(roomId) {
       logLine: result.deferredLogLine || 'Deferred maintenance and guest backlash from the hard power cut arrives.'
     });
   }
+  if (result.success) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: `${state.rooms[roomIndex].label} went dark. Immediate activity drops, but maintenance and guest backlash are now queued.`,
+      dedupeKey: `cutpower-now-later-${roomId}-${state.night}`
+    });
+  }
 
   if (checkFailureState()) return;
   if (progressShift('cutPower')) return;
@@ -3614,93 +3798,9 @@ function restartCurrentNight() {
   }
   onMeaningfulAction();
   audioController.playUiClick();
-  const currentNight = Math.max(1, state?.night || 1);
-  const progressionSnapshot = JSON.parse(JSON.stringify(state?.progression || {}));
-  const carryoverSnapshot = JSON.parse(JSON.stringify(state?.carryover || []));
-  const returningHistorySnapshot = JSON.parse(JSON.stringify(state?.returningGuestHistory || {}));
-  const storyThreadsSnapshot = JSON.parse(JSON.stringify(state?.storyThreads || []));
-  const storyThreadMetaSnapshot = JSON.parse(JSON.stringify(state?.storyThreadMeta || { recentTemplateIds: [], lastBeatNight: 0 }));
-  const storyMemorySnapshot = JSON.parse(JSON.stringify(state?.storyMemory || { lastNightSummary: [] }));
-  const activeStoryBeatSnapshot = state?.activeStoryBeat ? { ...state.activeStoryBeat } : null;
-  const doctrineSnapshot = JSON.parse(JSON.stringify(state?.doctrine || {}));
-  const factionsSnapshot = JSON.parse(JSON.stringify(state?.factions || {}));
-  const contentDirectorSnapshot = JSON.parse(JSON.stringify(state?.contentDirector || {}));
-  const contentHistorySnapshot = JSON.parse(JSON.stringify(state?.contentHistory || {}));
-  const campaignSnapshot = JSON.parse(JSON.stringify(state?.campaign || {}));
-  const runSetupSnapshot = JSON.parse(JSON.stringify(state?.runSetup || createDefaultRunSetup()));
-  const runModifiersSnapshot = JSON.parse(JSON.stringify(state?.runModifiers || {}));
-  const runSetupSummarySnapshot = JSON.parse(JSON.stringify(state?.runSetupSummary || {}));
-  const runEndingSnapshot = state?.runEnding ? JSON.parse(JSON.stringify(state.runEnding)) : null;
-  const pendingRunCompletionSnapshot = Boolean(state?.pendingRunCompletion);
-  const metaRunStateSnapshot = JSON.parse(JSON.stringify(state?.metaRunState || {}));
-  state = createInitialState();
-  state.night = currentNight;
-  state.progression = progressionSnapshot;
-  state.carryover = carryoverSnapshot;
-  state.returningGuestHistory = returningHistorySnapshot;
-  state.storyThreads = storyThreadsSnapshot;
-  state.storyThreadMeta = storyThreadMetaSnapshot;
-  state.storyMemory = storyMemorySnapshot;
-  state.activeStoryBeat = activeStoryBeatSnapshot;
-  state.doctrine = doctrineSnapshot;
-  state.factions = factionsSnapshot;
-  state.contentDirector = contentDirectorSnapshot;
-  state.contentHistory = contentHistorySnapshot;
-  state.campaign = campaignSnapshot;
-  state.runSetup = runSetupSnapshot;
-  state.runModifiers = runModifiersSnapshot;
-  state.runSetupSummary = runSetupSummarySnapshot;
-  state.runEnding = runEndingSnapshot;
-  state.pendingRunCompletion = pendingRunCompletionSnapshot;
-  state.metaRunState = metaRunStateSnapshot;
-  state = normalizeScenarioState(state);
-  state = normalizeChainState(state);
-  state = assignScenarioForNight(state);
-  state.failedState = null;
-  state.rooms = normalizeEscalationRooms(
-    applyRoomUnlockFlags(state.rooms || createDefaultRooms({ unlockedCap: getUnlockedRoomCapForNight(currentNight) }), currentNight)
-  );
-  state.rooms = normalizeResponseRooms(state.rooms);
-  state.rooms = normalizeTacticalRooms(state.rooms);
-  state.cameras = state.cameras?.length ? state.cameras : createDefaultCameras();
-  state.guests = [];
-  state.activeEvents = [];
-  state.incidents = [];
-  state.storyChains = [];
-  state.autoIncidentCooldown = 0;
-  state.escalationTick = 0;
-  state.shiftStats = createShiftStats();
-  state.powerEconomy = buildFreshPowerEconomy();
-  applyNightStartProgression(state);
-  state.cameraScene = buildFreshCameraSceneState();
-  resetLocationStateForNight(state);
-  state.shiftElapsedMinutes = 0;
-  state.dawnProcessed = false;
-  state.lastAdvanceReason = null;
-  state.deferredShiftCosts = [];
-  refreshIntakeBudgetForNight(state);
-  state = normalizePresentationState(state);
-  state = normalizeSpecialEncounterState(state);
-  state = normalizeNightEventState(state);
-  state = normalizeDeskConsequenceState(state);
-  normalizeIdentitySystems();
-  normalizeCampaignSystems();
-  syncFinaleStateForNight({ refreshBranch: true });
-  state.doctrine = beginDoctrineNight(state.doctrine || {});
-  normalizeRunMemoryState();
-  const replayCarryover = applyCarryoverForNight(state, currentNight, { allowReplay: true });
-  state.shiftStats.carryoverWarningsTriggered =
-    (state.shiftStats.carryoverWarningsTriggered || 0) + Number(replayCarryover?.appliedNotes?.length || 0);
-  if (!state.activeStoryBeat) {
-    maybeGenerateNightStoryBeat(state, state.night);
-  }
-  refreshProgressionDerivedState();
-  runtimeBranchContext = null;
-  cleanupTransientUiState('restart-night');
-  state.logs = [`Night ${state.night} restarted.`];
-  renderAll();
-  setActiveScreen('game-screen');
-  setActivePanel('frontdesk-panel');
+  restoreNightStartSnapshot({
+    message: `Night ${Math.max(1, Number(state?.night || 1))} restarted from failure to its opening state.`
+  });
 }
 
 function applyEscalationResult(result) {
@@ -3760,6 +3860,7 @@ function nextNight() {
   }
   state.guests = [];
   state.deferredShiftCosts = [];
+  const previousRooms = Array.isArray(state.rooms) ? state.rooms.map((room) => ({ ...room })) : [];
   let nextRooms = applyStayDecrementBetweenNights(state.rooms || []);
   nextRooms = applyRoomUnlockFlags(nextRooms, state.night);
   state.rooms = normalizeEscalationRooms(nextRooms);
@@ -3767,6 +3868,19 @@ function nextNight() {
   state.rooms = normalizeTacticalRooms(state.rooms);
   state.cameras = createDefaultCameras();
   state.logs = [`Night ${state.night} started. Carrying forward room ledger, unlocked capacity, and outstanding stays.`];
+  previousRooms.forEach((room) => {
+    const nextRoom = state.rooms.find((entry) => entry.id === room.id);
+    if (!room?.occupiedBy) return;
+    if (!nextRoom?.occupiedBy) {
+      state.logs.push(`${room.label || `Room ${room.id}`} checked out at dawn. The stay counter reached zero.`);
+      return;
+    }
+    if (Number(nextRoom.stayNightsRemaining || 0) !== Number(room.stayNightsRemaining || 0)) {
+      state.logs.push(
+        `${nextRoom.label || `Room ${nextRoom.id}`} carried ${nextRoom.occupiedBy} into the next night with ${nextRoom.stayNightsRemaining} night${nextRoom.stayNightsRemaining === 1 ? '' : 's'} remaining.`
+      );
+    }
+  });
   refreshIntakeBudgetForNight(state);
   normalizeIntakeState(state);
   state.activeEvents = [];
@@ -3813,6 +3927,8 @@ function nextNight() {
     message: `Night ${state.night} started — ${state?.activeScenario?.label || 'Standard Shift'}.`,
     dedupeKey: `scenario-start-${state.night}`
   });
+  pushOpeningTensionBeat('carryover');
+  captureNightStartSnapshot('next-night-open');
 
   renderAll();
   setActiveScreen('game-screen');
@@ -3861,7 +3977,7 @@ function bindEvents() {
   document.getElementById('prep-menu-btn').addEventListener('click', moveToMainMenuSafely);
   document.getElementById('back-menu-btn').addEventListener('click', moveToMainMenuSafely);
   document.getElementById('run-ending-menu-btn').addEventListener('click', moveToMainMenuSafely);
-  document.getElementById('run-ending-new-run-btn').addEventListener('click', resetNightState);
+  document.getElementById('run-ending-new-run-btn').addEventListener('click', startFreshCampaignRun);
   document.getElementById('restart-night-btn').addEventListener('click', restartCurrentNight);
   document.getElementById('failure-menu-btn').addEventListener('click', moveToMainMenuSafely);
   document.getElementById('audio-toggle-btn').addEventListener('click', toggleAudio);

@@ -2104,12 +2104,23 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.guest-stay-chip {
+  border-color: rgba(110, 231, 255, 0.28);
+  background: rgba(110, 231, 255, 0.08);
+}
+
 .room-occupant-block {
   margin-bottom: 0.38rem;
 }
 
 .room-occupant-block .room-meta {
   margin: 0;
+}
+
+.room-stay-line {
+  margin: 0.22rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
 }
 
 .room-pressure-row {

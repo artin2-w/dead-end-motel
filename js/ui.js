@@ -626,6 +626,7 @@ export function renderGuests(state, onCheckIn, onFlagGuest, onRejectGuest, onHan
       <div class="guest-chip-row guest-chip-row-secondary">
         ${buildSignalChips(guest)}
         ${guest?.contradictoryClue ? '<span class="guest-meta-chip guest-meta-chip-contradiction">Mixed Cues</span>' : ''}
+        ${Number(guest?.expectedStayNights || 0) > 0 ? `<span class="guest-meta-chip guest-stay-chip" title="Expected stay length if approved.">Stay: ${guest.expectedStayNights}N</span>` : ''}
       </div>
       ${guest?.specialEncounter && !guest.specialEncounter.resolved
         ? `
@@ -823,7 +824,7 @@ export function renderRooms(
         </div>
         <div class="room-occupant-block">
           <p class="room-meta">Occupied by <strong>${room.guestName || room.occupiedBy}</strong></p>
-          ${Number(room.stayNightsRemaining) > 0 ? `<p class="room-stay-line muted">Stay ledger: ${room.stayNightsRemaining} night${Number(room.stayNightsRemaining) === 1 ? '' : 's'} left on the books</p>` : ''}
+          ${Number(room.stayNightsRemaining) > 0 ? `<p class="room-stay-line muted">Stay remaining: ${room.stayNightsRemaining} night${Number(room.stayNightsRemaining) === 1 ? '' : 's'} incl. tonight${Number(room.stayNightsRemaining) === 1 ? ' • checkout at dawn' : ''}</p>` : ''}
           ${room.occupantArchetypeLabel ? `<p class="room-archetype-line">Archetype: ${room.occupantArchetypeLabel}</p>` : ''}
         </div>
         <div class="room-pressure-row">

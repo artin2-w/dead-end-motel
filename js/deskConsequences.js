@@ -51,12 +51,12 @@ function buildConsequenceTemplate({ guest, action, room, policyResult }) {
       ticksRemaining: 2,
       zoneLabel,
       roomId,
-      logLine: `${guest.name}'s check-in read starts a thread near ${zoneLabel}. The mood around that area is tightening.`,
-      alert: `Thread pressure rising near ${zoneLabel}. Earlier desk judgment may be involved.`,
+      logLine: `${guest.name}'s approval is now echoing near ${zoneLabel}. What looked manageable at the desk is starting to feel wrong in the room.`,
+      alert: `Chain warning: pressure is rising near ${zoneLabel} because of an earlier desk approval.`,
       reputationDelta: -1,
       chainSeverity: 1,
       statKey: 'deskConsequencesTriggered',
-      teachLine: 'Readback: confident approval on a deceptive profile increased delayed pressure.'
+      teachLine: 'Readback: confident approval on a deceptive or unstable profile translated into room pressure.'
     };
   }
 
@@ -66,12 +66,12 @@ function buildConsequenceTemplate({ guest, action, room, policyResult }) {
       ticksRemaining: 2,
       zoneLabel: 'Parking Lot',
       roomId: null,
-      logLine: `${guest.name} lingers outside and starts drawing attention in the Parking Lot after rejection.`,
-      alert: 'A rejected guest is still nearby. Parking lot attention is climbing.',
+      logLine: `${guest.name} never really left. The rejection is now creating outside attention in the Parking Lot.`,
+      alert: 'Outside pressure is climbing: a rejected guest is still hanging around the property edge.',
       reputationDelta: -1,
       chainSeverity: 0,
       statKey: 'deskConsequencesTriggered',
-      teachLine: 'Readback: rejecting manipulative guests can be safe, but often causes outside pressure.'
+      teachLine: 'Readback: rejection solved the desk problem, but it spilled the pressure outside instead.'
     };
   }
 
@@ -82,7 +82,7 @@ function buildConsequenceTemplate({ guest, action, room, policyResult }) {
       zoneLabel,
       roomId,
       logLine: `Monitoring note: the ${zoneLabel} thread cooled because ${guest.name} was flagged early.`,
-      alert: `Flag watch paid off near ${zoneLabel}. Escalation was softened.`,
+      alert: `Flag watch paid off near ${zoneLabel}. Escalation was softened before it turned into an incident.`,
       reputationDelta: 0,
       chainSeverity: -1,
       statKey: 'deskConsequencesPrevented',
@@ -193,6 +193,25 @@ export function queueDeskFollowupForDecision(state, { guest, action, room = null
       chainSeverity: 1,
       statKey: 'deskRareMoments',
       teachLine: 'Rare thread surfaced: watch for repeating patterns across zones.'
+    });
+  }
+
+  const revealChance =
+    (template.type === 'room-disturbance-thread' || template.type === 'public-callback-thread')
+    && (Boolean(guest?.contradictoryClue) || Number(guest?.deceptionSignal || 0) >= 2 || Number(guest?.instabilitySignal || 0) >= 2);
+  if (revealChance && Math.random() < 0.24 && state.deskConsequences.queue.length < MAX_QUEUE) {
+    queueDeskConsequence(state, {
+      key: `${key}-reveal`,
+      type: 'guest-reveal-thread',
+      ticksRemaining: 2,
+      zoneLabel: room?.label || template.zoneLabel || 'Lobby Edge',
+      roomId: room?.id ?? template.roomId ?? null,
+      logLine: `Reveal beat: later observation makes ${guest.name}'s story look worse, not better. The room read is no longer lining up with what the desk was told.`,
+      alert: `${guest.name}'s situation just became clearer in the worst way. Earlier assumptions are now feeding pressure.`,
+      reputationDelta: -1,
+      chainSeverity: room?.id != null ? 1 : 0,
+      statKey: 'deskRevealMoments',
+      teachLine: 'Reveal beat: a contradictory guest read resolved late, and it resolved against the safer interpretation.'
     });
   }
 
