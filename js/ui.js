@@ -937,6 +937,7 @@ export function renderRooms(
           <span class="room-state-chip">Locked: ${getBooleanText(room.lockedDown)}</span>
           <span class="room-state-chip">Power Cut: ${getBooleanText(room.powerCut)}</span>
           <span class="room-state-chip">Mood: ${room?.serviceState?.mood || 'steady'}</span>
+          <span class="room-state-chip">Attitude: ${room?.serviceState?.attitudeLabel || 'Guarded'}</span>
         </div>
         ${room?.serviceState?.pendingRequest
           ? `<div class="room-service-alert room-service-alert-${room.serviceState.pendingRequest.urgency || 'low'}">
@@ -952,6 +953,7 @@ export function renderRooms(
           <p class="room-meta-line"><span>Service</span><strong>${room?.serviceState?.responseStatus || 'Quiet'}</strong></p>
         </div>
         ${room?.serviceState?.lastCheckLine ? `<p class="room-service-note muted">${room.serviceState.lastCheckLine}</p>` : ''}
+        ${room?.serviceState?.attitudeNote ? `<p class="room-service-note muted">${room.serviceState.attitudeNote}</p>` : ''}
         ${room?.serviceState?.serviceHistory?.length
           ? `<p class="room-service-note muted">Recent service: ${room.serviceState.serviceHistory[0]}</p>`
           : ''}
@@ -970,19 +972,25 @@ export function renderRooms(
       const serviceActions = card.querySelector('.room-service-row');
       const actions = card.querySelector('.room-tactical-row');
       const hasPendingRequest = Boolean(room?.serviceState?.pendingRequest);
+      const hallwayLabel = hasPendingRequest ? 'Hallway Check' : 'Quiet Check';
+      const deskLabel = hasPendingRequest ? 'Handle Desk' : 'Courtesy Call';
+      const securityLabel = hasPendingRequest ? 'Send Security' : 'Mark Watch';
+      const ignoreLabel = hasPendingRequest ? 'Delay' : 'Leave Alone';
 
       const hallwayButton = document.createElement('button');
       hallwayButton.className = 'button button-secondary';
-      hallwayButton.textContent = 'Hallway Check';
-      hallwayButton.title = 'Quick verification action that clarifies the room call before committing staff.';
-      hallwayButton.disabled = !hasPendingRequest;
+      hallwayButton.textContent = hallwayLabel;
+      hallwayButton.title = hasPendingRequest
+        ? 'Quick verification action that clarifies the room call before committing staff.'
+        : 'Low-intensity quiet check for a room that is not actively calling the desk.';
       bindAtomicActionButton(hallwayButton, () => onRoomServiceAction(room.id, 'hallway'), { groupRoot: serviceActions });
 
       const deskButton = document.createElement('button');
       deskButton.className = 'button button-utility';
-      deskButton.textContent = 'Handle Desk';
-      deskButton.title = 'Try to settle the request from the desk. Fast, but not always enough.';
-      deskButton.disabled = !hasPendingRequest;
+      deskButton.textContent = deskLabel;
+      deskButton.title = hasPendingRequest
+        ? 'Try to settle the request from the desk. Fast, but not always enough.'
+        : 'A light courtesy call that can build trust if the room only needs reassurance.';
       bindAtomicActionButton(deskButton, () => onRoomServiceAction(room.id, 'desk'), { groupRoot: serviceActions });
 
       const maintenanceButton = document.createElement('button');
@@ -994,9 +1002,10 @@ export function renderRooms(
 
       const securityButton = document.createElement('button');
       securityButton.className = 'button button-warning';
-      securityButton.textContent = 'Send Security';
-      securityButton.title = 'Best for door-side tension and disturbance calls, but socially risky.';
-      securityButton.disabled = !hasPendingRequest;
+      securityButton.textContent = securityLabel;
+      securityButton.title = hasPendingRequest
+        ? 'Best for door-side tension and disturbance calls, but socially risky.'
+        : 'Mark the room for extra watch. Useful rarely, invasive when overused.';
       bindAtomicActionButton(securityButton, () => onRoomServiceAction(room.id, 'security'), { groupRoot: serviceActions });
 
       const runnerButton = document.createElement('button');
@@ -1008,9 +1017,10 @@ export function renderRooms(
 
       const ignoreButton = document.createElement('button');
       ignoreButton.className = 'button button-danger';
-      ignoreButton.textContent = 'Delay';
-      ignoreButton.title = 'Delay or ignore the call. Fast, but often dangerous.';
-      ignoreButton.disabled = !hasPendingRequest;
+      ignoreButton.textContent = ignoreLabel;
+      ignoreButton.title = hasPendingRequest
+        ? 'Delay or ignore the call. Fast, but often dangerous.'
+        : 'Deliberately leave a quiet room alone instead of escalating it.';
       bindAtomicActionButton(ignoreButton, () => onRoomServiceAction(room.id, 'ignore'), { groupRoot: serviceActions });
 
       const reassignButton = document.createElement('button');

@@ -41,6 +41,21 @@ export function buildNightSummary(state) {
   if (Number(state?.shiftStats?.roomCallsMissed || 0) > 0) {
     identity.push('At least one occupied-room service failure fed back into the motel’s wider pressure instead of staying contained.');
   }
+  if (Number(state?.shiftStats?.overManagementPenalties || 0) > 0) {
+    identity.push('Over-management hurt the shift: unnecessary interventions irritated guests and created social fallout instead of safety.');
+  }
+  if (Number(state?.shiftStats?.smartRestraintMoments || 0) > 0) {
+    identity.push('Smart restraint mattered: some rooms improved because the desk resisted the urge to escalate them unnecessarily.');
+  }
+  if (Number(state?.shiftStats?.falseAlarmReads || 0) > 0) {
+    identity.push('The desk correctly read at least one false alarm and avoided turning anxiety into a bigger problem.');
+  }
+  if (Number(state?.shiftStats?.realThreatsMissed || 0) > 0) {
+    identity.push('At least one real threat was handled too softly or too late, and the consequences spread outward.');
+  }
+  if (Number(state?.shiftStats?.socialFalloutEvents || 0) > 0) {
+    identity.push('Social fallout spread beyond one room, proving the motel reacts to judgment mistakes as a shared environment.');
+  }
 
   return {
     ...base,

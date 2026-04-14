@@ -1257,16 +1257,138 @@ function getDefaultRoomServiceState(serviceState = {}) {
     responseStatus: String(serviceState?.responseStatus || ''),
     dispatchLocked: Boolean(serviceState?.dispatchLocked),
     hallwayChecked: Boolean(serviceState?.hallwayChecked),
-    handledFromDesk: Math.max(0, Number(serviceState?.handledFromDesk || 0))
+    handledFromDesk: Math.max(0, Number(serviceState?.handledFromDesk || 0)),
+    trust: Math.max(0, Math.min(3, Number(serviceState?.trust ?? 1))),
+    irritation: Math.max(0, Math.min(3, Number(serviceState?.irritation || 0))),
+    anxiety: Math.max(0, Math.min(3, Number(serviceState?.anxiety || 0))),
+    hostility: Math.max(0, Math.min(3, Number(serviceState?.hostility || 0))),
+    rumorPressure: Math.max(0, Number(serviceState?.rumorPressure || 0)),
+    overmanagedCount: Math.max(0, Number(serviceState?.overmanagedCount || 0)),
+    attitudeLabel: String(serviceState?.attitudeLabel || 'Guarded'),
+    attitudeNote: String(serviceState?.attitudeNote || '')
   };
+}
+
+function clampServiceGauge(value) {
+  return Math.max(0, Math.min(3, Number(value || 0)));
+}
+
+function deriveRoomAttitudeMeta(serviceState = {}) {
+  const trust = clampServiceGauge(serviceState?.trust ?? 1);
+  const irritation = clampServiceGauge(serviceState?.irritation || 0);
+  const anxiety = clampServiceGauge(serviceState?.anxiety || 0);
+  const hostility = clampServiceGauge(serviceState?.hostility || 0);
+  if (hostility >= 2) {
+    return { label: 'Hostile', note: 'Bad handling or pressure has turned this guest actively resentful.' };
+  }
+  if (irritation >= 2) {
+    return { label: 'Irritated', note: 'The guest is losing patience and may start spreading complaints.' };
+  }
+  if (anxiety >= 2) {
+    return { label: 'Anxious', note: 'The guest is reactive and prone to false alarms or panic escalation.' };
+  }
+  if (trust >= 2 && irritation === 0 && hostility === 0) {
+    return { label: 'Trusting', note: 'The guest is still giving the desk the benefit of the doubt.' };
+  }
+  return { label: 'Guarded', note: 'The guest is watchful but still manageable.' };
+}
+
+function withAdjustedServiceState(serviceState = {}, deltas = {}) {
+  const base = getDefaultRoomServiceState(serviceState);
+  const next = {
+    ...base,
+    trust: clampServiceGauge(base.trust + Number(deltas.trust || 0)),
+    irritation: clampServiceGauge(base.irritation + Number(deltas.irritation || 0)),
+    anxiety: clampServiceGauge(base.anxiety + Number(deltas.anxiety || 0)),
+    hostility: clampServiceGauge(base.hostility + Number(deltas.hostility || 0)),
+    rumorPressure: Math.max(0, Number(base.rumorPressure || 0) + Number(deltas.rumorPressure || 0)),
+    overmanagedCount: Math.max(0, Number(base.overmanagedCount || 0) + Number(deltas.overmanagedCount || 0))
+  };
+  const attitude = deriveRoomAttitudeMeta(next);
+  next.attitudeLabel = attitude.label;
+  next.attitudeNote = attitude.note;
+  return next;
+}
+
+function registerSocialFallout(originRoomId, options = {}) {
+  const sourceRoom = (state.rooms || []).find((room) => Number(room?.id) === Number(originRoomId));
+  const others = (state.rooms || []).filter((room) => room?.occupiedBy && Number(room?.id) !== Number(originRoomId));
+  if (!others.length) return;
+  const severity = Math.max(1, Number(options?.severity || 1));
+  const spreadTargets = others
+    .sort((a, b) => Math.abs(Number(a.id || 0) - Number(originRoomId || 0)) - Math.abs(Number(b.id || 0) - Number(originRoomId || 0)))
+    .slice(0, Math.min(2, severity));
+  spreadTargets.forEach((room) => {
+    updateRoomById(room.id, (currentRoom) => {
+      const serviceState = withAdjustedServiceState(currentRoom?.serviceState, {
+        anxiety: 1,
+        irritation: severity >= 2 ? 1 : 0,
+        rumorPressure: 1
+      });
+      return {
+        ...currentRoom,
+        serviceState: {
+          ...serviceState,
+          responseStatus: options?.label || 'Rumor pressure spreading from another room.',
+          serviceHistory: [`Social fallout from ${sourceRoom?.label || `Room ${originRoomId}`}`, ...serviceState.serviceHistory].slice(0, 4)
+        }
+      };
+    });
+    registerRoomChainSignal({
+      roomId: room.id,
+      guestName: room.occupiedBy,
+      type: `social-fallout-${options?.reason || 'spill'}`,
+      severity: 1
+    });
+  });
+  state.logs.push(`${sourceRoom?.label || `Room ${originRoomId}`} caused social fallout: nearby occupied rooms grew uneasy and started trading the story.`);
+  state.shiftStats.socialFalloutEvents = (state.shiftStats.socialFalloutEvents || 0) + 1;
+}
+
+function registerOvermanagementPenalty(roomId, options = {}) {
+  const room = (state.rooms || []).find((entry) => Number(entry?.id) === Number(roomId));
+  if (!room) return;
+  updateRoomById(roomId, (currentRoom) => {
+    const nextService = withAdjustedServiceState(currentRoom?.serviceState, {
+      trust: -1,
+      irritation: Number(options?.irritation || 1),
+      anxiety: Number(options?.anxiety || 0),
+      hostility: Number(options?.hostility || 0),
+      rumorPressure: Number(options?.rumorPressure || 1),
+      overmanagedCount: 1
+    });
+    return {
+      ...currentRoom,
+      serviceState: {
+        ...nextService,
+        responseStatus: options?.status || 'Guest upset by unnecessary intervention.',
+        serviceHistory: [`Overmanaged: ${options?.reason || 'unnecessary intervention'}`, ...nextService.serviceHistory].slice(0, 4)
+      }
+    };
+  });
+  state.reputation = clampReputation(state.reputation - Math.max(1, Number(options?.reputationLoss || 1)));
+  state.logs.push(`${room.label}: ${options?.logLine || 'The guest reacted badly to unnecessary intervention.'}`);
+  pushLiveAlert(state, {
+    type: 'warning',
+    message: `${room.label}: over-management caused irritation and social fallout risk.`,
+    dedupeKey: `overmanage-${roomId}-${state.night}-${options?.reason || 'x'}`
+  });
+  state.shiftStats.overManagementPenalties = (state.shiftStats.overManagementPenalties || 0) + 1;
+  registerSocialFallout(roomId, {
+    severity: Number(options?.falloutSeverity || 1),
+    reason: options?.reason || 'overreaction',
+    label: 'Guests heard about aggressive handling nearby.'
+  });
 }
 
 function buildRoomServiceMood(room) {
   const risk = String(room?.riskLevel || 'Low');
   const chain = Number(getVisibleChainPressureForRoom(state, room?.id) || 0);
   const unresolved = Number(room?.serviceState?.unresolvedIssues || 0);
-  if (risk === 'High' || chain >= 5 || unresolved >= 2) return 'volatile';
-  if (risk === 'Medium' || chain >= 2 || unresolved >= 1) return 'tense';
+  const hostility = Number(room?.serviceState?.hostility || 0);
+  const irritation = Number(room?.serviceState?.irritation || 0);
+  if (hostility >= 2 || risk === 'High' || chain >= 5 || unresolved >= 2) return 'volatile';
+  if (irritation >= 2 || risk === 'Medium' || chain >= 2 || unresolved >= 1) return 'tense';
   return 'steady';
 }
 
@@ -1278,11 +1400,11 @@ function normalizeRoomServiceState(targetState = state) {
     const occupied = Boolean(room?.occupiedBy);
     const nextService = occupied
       ? {
-        ...serviceState,
+        ...withAdjustedServiceState(serviceState),
         mood: buildRoomServiceMood({ ...room, serviceState })
       }
       : {
-        ...getDefaultRoomServiceState(),
+        ...withAdjustedServiceState(getDefaultRoomServiceState()),
         mood: crisis.kind === 'hostile-social-night' ? 'touchy' : 'steady'
       };
     return {
@@ -1308,6 +1430,7 @@ function buildRoomCallFor(room, targetState = state) {
   const archetype = String(room?.occupantArchetypeLabel || '').toLowerCase();
   const chain = Number(getVisibleChainPressureForRoom(targetState, room?.id) || 0);
   const memoryPressure = getRoomMemoryPressureBonus(room);
+  const serviceState = getDefaultRoomServiceState(room?.serviceState);
   const templates = [
     {
       id: 'door-visitor',
@@ -1366,6 +1489,23 @@ function buildRoomCallFor(room, targetState = state) {
     pool = pool.filter((entry) => entry.id !== 'noise-complaint');
   }
   const chosen = pool[(Number(room?.id || 1) + Number(targetState?.shiftElapsedMinutes || 0) + Number(targetState?.night || 1)) % pool.length];
+  const falseAlarmBias =
+    (chosen.serviceTag === 'paranoia' ? 0.34 : 0)
+    + (chosen.serviceTag === 'complaint' ? 0.18 : 0)
+    + Math.max(0, Number(serviceState.anxiety || 0) - 1) * 0.08;
+  const threatBias =
+    (chosen.serviceTag === 'suspicion' ? 0.2 : 0)
+    + (chain >= 4 ? 0.12 : 0)
+    + (memoryPressure >= 2 ? 0.08 : 0)
+    + (crisis.active ? 0.06 : 0)
+    + (String(room?.riskLevel || 'Low') === 'High' ? 0.1 : 0);
+  let truthState = 'unclear';
+  const truthRoll = Math.random();
+  if (truthRoll < Math.max(0.16, falseAlarmBias)) {
+    truthState = 'false-alarm';
+  } else if (truthRoll > Math.max(0.46, 0.72 - threatBias)) {
+    truthState = 'real-threat';
+  }
   return {
     id: `${chosen.id}-${room.id}-${targetState.night}-${targetState.shiftElapsedMinutes}`,
     kind: chosen.id,
@@ -1374,7 +1514,9 @@ function buildRoomCallFor(room, targetState = state) {
     urgency: chosen.urgency,
     preferred: chosen.preferred,
     serviceTag: chosen.serviceTag,
-    verified: false
+    verified: false,
+    truthState,
+    threatDrift: truthState === 'unclear' && (chosen.serviceTag === 'suspicion' || chosen.serviceTag === 'paranoia')
   };
 }
 
@@ -1387,12 +1529,21 @@ function maybeGenerateOccupiedRoomRequest(source = 'tick') {
   });
   if (!candidates.length) return false;
   const crisis = state?.crisisNight || {};
-  const baseChance = crisis.active ? 0.2 : 0.1;
+  const averageAnxiety = candidates.reduce((sum, room) => sum + Number(room?.serviceState?.anxiety || 0), 0) / Math.max(1, candidates.length);
+  const baseChance = (crisis.active ? 0.2 : 0.1) + Math.min(0.08, averageAnxiety * 0.02);
   const roll = Math.random();
   if (roll > baseChance) return false;
   const target = candidates.sort((a, b) => {
-    const aPressure = Number(getVisibleChainPressureForRoom(state, a.id) || 0) + getRoomMemoryPressureBonus(a);
-    const bPressure = Number(getVisibleChainPressureForRoom(state, b.id) || 0) + getRoomMemoryPressureBonus(b);
+    const aPressure =
+      Number(getVisibleChainPressureForRoom(state, a.id) || 0)
+      + getRoomMemoryPressureBonus(a)
+      + Number(a?.serviceState?.anxiety || 0)
+      + Number(a?.serviceState?.hostility || 0);
+    const bPressure =
+      Number(getVisibleChainPressureForRoom(state, b.id) || 0)
+      + getRoomMemoryPressureBonus(b)
+      + Number(b?.serviceState?.anxiety || 0)
+      + Number(b?.serviceState?.hostility || 0);
     return bPressure - aPressure;
   })[0];
   if (!target) return false;
@@ -1430,6 +1581,7 @@ function getServiceActionSpec(room, actionType) {
   const preferredMatch = preferred.includes(actionType);
   const urgency = String(request?.urgency || 'low');
   const mood = service.mood || 'steady';
+  const truthState = String(request?.truthState || 'unclear');
   let successChance = 0.72;
   if (actionType === 'desk') successChance -= 0.1;
   if (actionType === 'security') successChance += (request?.serviceTag === 'suspicion' || request?.serviceTag === 'disturbance') ? 0.12 : -0.04;
@@ -1439,9 +1591,24 @@ function getServiceActionSpec(room, actionType) {
   if (urgency === 'high') successChance -= 0.08;
   if (mood === 'volatile') successChance -= 0.08;
   if (service.hallwayChecked) successChance += 0.06;
+  if (service.irritation >= 2) successChance -= 0.05;
+  if (service.hostility >= 2) successChance -= 0.08;
+  if (truthState === 'false-alarm' && actionType === 'desk') successChance += 0.12;
+  if (truthState === 'false-alarm' && actionType === 'security') successChance -= 0.16;
+  if (truthState === 'real-threat' && actionType === 'desk') successChance -= 0.1;
+  if (truthState === 'real-threat' && actionType === 'security') successChance += 0.08;
   successChance = Math.max(0.22, Math.min(0.9, successChance));
   return {
     successChance,
+    partialChance: Math.max(0.1, Math.min(0.35, 0.18 + (service.hallwayChecked ? 0.04 : 0) + (truthState === 'unclear' ? 0.06 : 0))),
+    overreactionRisk:
+      actionType === 'security' && truthState === 'false-alarm'
+        ? 0.42
+        : actionType === 'maintenance' && truthState === 'false-alarm'
+          ? 0.2
+          : actionType === 'runner' && truthState === 'real-threat'
+            ? 0.08
+            : 0,
     moneyCost:
       actionType === 'security' ? 5
       : actionType === 'maintenance' ? 4
@@ -1464,6 +1631,113 @@ function resolveRoomServiceAction(roomId, actionType) {
   const service = getDefaultRoomServiceState(room?.serviceState);
   const request = service.pendingRequest;
   if (!request) {
+    if (actionType === 'hallway') {
+      const repeated = Number(service.overmanagedCount || 0) >= 1 || Boolean(service.hallwayChecked);
+      if (Number(getVisibleChainPressureForRoom(state, room.id) || 0) <= 1 && Number(service.unresolvedIssues || 0) === 0 && repeated) {
+        registerOvermanagementPenalty(room.id, {
+          reason: 'repeat quiet check',
+          logLine: 'Repeated quiet checks made the guest feel watched rather than protected.',
+          falloutSeverity: 1
+        });
+      } else {
+        updateRoomById(room.id, (currentRoom) => {
+          const nextService = withAdjustedServiceState(currentRoom?.serviceState, {
+            trust: Number(service.anxiety || 0) > 0 ? 1 : 0,
+            anxiety: Number(service.anxiety || 0) > 0 ? -1 : 0
+          });
+          return {
+            ...currentRoom,
+            serviceState: {
+              ...nextService,
+              hallwayChecked: true,
+              responseStatus: 'Quiet check logged',
+              lastCheckLine: Number(service.anxiety || 0) > 0
+                ? 'Quiet check settled the room without making a scene.'
+                : 'Quiet check found nothing immediate and the room likely needed space.',
+              serviceHistory: ['Quiet check', ...nextService.serviceHistory].slice(0, 4)
+            }
+          };
+        });
+        state.logs.push(`${room.label}: quiet check finished with no obvious threat. Restraint mattered more than force here.`);
+      }
+      if (checkFailureState()) return;
+      if (progressShift('review', { timeScale: 0.4, passiveDrainScale: 0.35 })) return;
+      renderAll();
+      return;
+    }
+    if (actionType === 'desk') {
+      updateRoomById(room.id, (currentRoom) => {
+        const nextService = withAdjustedServiceState(currentRoom?.serviceState, {
+          trust: 1,
+          anxiety: -1
+        });
+        return {
+          ...currentRoom,
+          serviceState: {
+            ...nextService,
+            handledFromDesk: Number(nextService.handledFromDesk || 0) + 1,
+            responseStatus: 'Courtesy call logged',
+            serviceHistory: ['Courtesy call', ...nextService.serviceHistory].slice(0, 4),
+            lastCheckLine: 'The desk checked in without escalating the room.'
+          }
+        };
+      });
+      state.logs.push(`${room.label}: courtesy call landed cleanly and did not provoke new tension.`);
+      state.shiftStats.smartRestraintMoments = (state.shiftStats.smartRestraintMoments || 0) + 1;
+      if (checkFailureState()) return;
+      if (progressShift('review', { timeScale: 0.35, passiveDrainScale: 0.3 })) return;
+      renderAll();
+      return;
+    }
+    if (actionType === 'security') {
+      if (Number(getVisibleChainPressureForRoom(state, room.id) || 0) <= 2 && Number(service.unresolvedIssues || 0) === 0) {
+        registerOvermanagementPenalty(room.id, {
+          reason: 'quiet-room security',
+          logLine: 'Security presence on a calm room felt invasive and started gossip.',
+          hostility: 1,
+          rumorPressure: 2,
+          reputationLoss: 2,
+          falloutSeverity: 2
+        });
+      } else {
+        updateRoomById(room.id, (currentRoom) => {
+          const nextService = withAdjustedServiceState(currentRoom?.serviceState, { anxiety: -1 });
+          return {
+            ...currentRoom,
+            deskFlagged: true,
+            serviceState: {
+              ...nextService,
+              responseStatus: 'Marked for watch',
+              serviceHistory: ['Marked for watch', ...nextService.serviceHistory].slice(0, 4)
+            }
+          };
+        });
+        state.logs.push(`${room.label}: marked for watch without a live call. Cautious, but visible to the guest.`);
+      }
+      if (checkFailureState()) return;
+      if (progressShift('dispatch', { timeScale: 0.55, passiveDrainScale: 0.55 })) return;
+      renderAll();
+      return;
+    }
+    if (actionType === 'ignore') {
+      updateRoomById(room.id, (currentRoom) => {
+        const nextService = withAdjustedServiceState(currentRoom?.serviceState, { trust: 1, anxiety: -1 });
+        return {
+          ...currentRoom,
+          serviceState: {
+            ...nextService,
+            responseStatus: 'Left alone deliberately',
+            serviceHistory: ['Left alone', ...nextService.serviceHistory].slice(0, 4)
+          }
+        };
+      });
+      state.logs.push(`${room.label}: desk chose restraint and left a quiet room alone.`);
+      state.shiftStats.smartRestraintMoments = (state.shiftStats.smartRestraintMoments || 0) + 1;
+      if (checkFailureState()) return;
+      if (progressShift('review', { timeScale: 0.2, passiveDrainScale: 0.2 })) return;
+      renderAll();
+      return;
+    }
     pushLiveAlert(state, {
       type: 'info',
       message: `${room.label} has no active room call right now.`,
@@ -1473,18 +1747,28 @@ function resolveRoomServiceAction(roomId, actionType) {
     return;
   }
   if (actionType === 'ignore') {
+    const ignoredTrueThreat = request.truthState === 'real-threat' || request.threatDrift;
     updateRoomById(roomId, (currentRoom) => {
       const currentService = getDefaultRoomServiceState(currentRoom?.serviceState);
       return {
         ...currentRoom,
-        condition: currentRoom.condition === 'Stable' ? 'Watch' : 'Critical',
+        condition: ignoredTrueThreat || currentRoom.condition !== 'Stable' ? 'Critical' : 'Watch',
         serviceState: {
-          ...currentService,
+          ...withAdjustedServiceState(currentService, {
+            trust: -1,
+            irritation: 1,
+            anxiety: ignoredTrueThreat ? 1 : 0,
+            hostility: ignoredTrueThreat ? 1 : 0
+          }),
           unresolvedIssues: currentService.unresolvedIssues + 1,
           responseStatus: 'Desk delayed response',
           serviceHistory: [`Ignored: ${request.title}`, ...currentService.serviceHistory].slice(0, 4),
           requestCooldown: 1,
-          mood: 'volatile'
+          mood: 'volatile',
+          pendingRequest: {
+            ...currentService.pendingRequest,
+            truthState: ignoredTrueThreat ? 'real-threat' : currentService.pendingRequest?.truthState
+          }
         }
       };
     });
@@ -1492,10 +1776,14 @@ function resolveRoomServiceAction(roomId, actionType) {
       roomId,
       guestName: room.occupiedBy,
       type: `room-call-ignored-${request.kind}`,
-      severity: request.urgency === 'high' ? 2 : 1
+      severity: ignoredTrueThreat || request.urgency === 'high' ? 2 : 1
     });
-    state.reputation = clampReputation(state.reputation - (request.urgency === 'high' ? 2 : 1));
-    state.logs.push(`${room.label} was told to wait on ${request.title}. The call cooled nothing and room pressure worsened.`);
+    state.reputation = clampReputation(state.reputation - (ignoredTrueThreat || request.urgency === 'high' ? 2 : 1));
+    state.logs.push(
+      ignoredTrueThreat
+        ? `${room.label} was told to wait on ${request.title}, but the threat was real enough to get worse in the delay.`
+        : `${room.label} was told to wait on ${request.title}. The call cooled nothing and room pressure worsened.`
+    );
     if (checkFailureState()) return;
     if (progressShift('dispatch', { timeScale: 0.55, passiveDrainScale: 0.6 })) return;
     renderAll();
@@ -1505,25 +1793,41 @@ function resolveRoomServiceAction(roomId, actionType) {
     updateRoomById(roomId, (currentRoom) => {
       const currentService = getDefaultRoomServiceState(currentRoom?.serviceState);
       const line =
-        request.kind === 'door-visitor'
-          ? 'Hallway check found movement near the door, but no clean identification.'
-          : request.kind === 'watching-me'
-            ? 'Hallway check caught a bad angle and enough unease to justify caution.'
-            : request.kind === 'noise-complaint'
-              ? 'Hallway check confirmed there is real noise bleed around the room.'
-              : 'Hallway check narrowed the problem before staff committed.';
+        request.truthState === 'false-alarm'
+          ? 'Hallway check suggests nerves or misunderstanding more than a real threat.'
+          : request.truthState === 'real-threat'
+            ? 'Hallway check found enough evidence to treat the room call as real.'
+            : request.kind === 'door-visitor'
+              ? 'Hallway check found movement near the door, but no clean identification.'
+              : request.kind === 'watching-me'
+                ? 'Hallway check caught a bad angle and enough unease to justify caution.'
+                : request.kind === 'noise-complaint'
+                  ? 'Hallway check confirmed there is real noise bleed around the room.'
+                  : 'Hallway check narrowed the problem before staff committed.';
       return {
         ...currentRoom,
         serviceState: {
           ...currentService,
           hallwayChecked: true,
+          pendingRequest: {
+            ...currentService.pendingRequest,
+            verified: true
+          },
           lastCheckLine: line,
           responseStatus: 'Hallway check complete',
           serviceHistory: [`Hallway check: ${request.title}`, ...currentService.serviceHistory].slice(0, 4)
         }
       };
     });
-    state.logs.push(`${room.label}: hallway check complete. ${request.kind === 'door-visitor' ? 'The desk now has more reason to treat the call as real.' : 'The desk has clearer context before acting.'}`);
+    state.logs.push(
+      `${room.label}: hallway check complete. ${
+        request.truthState === 'false-alarm'
+          ? 'This looks closer to anxiety or misunderstanding than a true threat.'
+          : request.truthState === 'real-threat'
+            ? 'This looks real enough that a soft response may backfire.'
+            : 'The desk has clearer context before acting.'
+      }`
+    );
     if (checkFailureState()) return;
     if (progressShift('review', { timeScale: 0.65, passiveDrainScale: 0.5 })) return;
     renderAll();
@@ -1542,53 +1846,159 @@ function resolveRoomServiceAction(roomId, actionType) {
   }
   state.money = Math.max(0, state.money - spec.moneyCost);
   state.power = clampPower(state.power - spec.powerCost);
-  const success = Math.random() <= spec.successChance;
+  const roll = Math.random();
+  const overreaction = roll < Number(spec.overreactionRisk || 0);
+  const success = !overreaction && roll <= spec.successChance;
+  const partial = !overreaction && !success && roll <= spec.successChance + spec.partialChance;
+  const truthState = String(request.truthState || 'unclear');
   updateRoomById(roomId, (currentRoom) => {
     const currentService = getDefaultRoomServiceState(currentRoom?.serviceState);
     const nextCondition = success
       ? (currentRoom.condition === 'Critical' ? 'Watch' : 'Stable')
-      : (currentRoom.condition === 'Stable' ? 'Watch' : 'Critical');
-    const nextUnresolved = success ? Math.max(0, currentService.unresolvedIssues - 1) : currentService.unresolvedIssues + 1;
+      : partial
+        ? (currentRoom.condition === 'Stable' ? 'Watch' : currentRoom.condition)
+        : (currentRoom.condition === 'Stable' ? 'Watch' : 'Critical');
+    const nextUnresolved = success
+      ? Math.max(0, currentService.unresolvedIssues - 1)
+      : partial
+        ? currentService.unresolvedIssues
+        : currentService.unresolvedIssues + 1;
+    const pendingRequest = success
+      ? null
+      : partial && truthState === 'false-alarm'
+        ? null
+        : currentService.pendingRequest;
+    const adjustedService = withAdjustedServiceState(currentService, success
+      ? {
+          trust: truthState === 'false-alarm' && actionType === 'desk' ? 1 : 0,
+          anxiety: -1,
+          irritation: actionType === 'security' && truthState === 'false-alarm' ? 1 : 0
+        }
+      : partial
+        ? {
+            trust: truthState === 'false-alarm' ? -1 : 0,
+            irritation: 1,
+            anxiety: truthState === 'real-threat' ? 0 : -1
+          }
+        : {
+            trust: -1,
+            irritation: 1,
+            hostility: truthState === 'real-threat' ? 1 : 0,
+            anxiety: truthState === 'false-alarm' ? 1 : 0
+          });
     return {
       ...currentRoom,
       condition: nextCondition,
       serviceState: {
-        ...currentService,
-        pendingRequest: success ? null : currentService.pendingRequest,
-        urgency: success ? 'low' : currentService.urgency,
+        ...adjustedService,
+        pendingRequest,
+        urgency: success || (partial && truthState === 'false-alarm') ? 'low' : currentService.urgency,
         unresolvedIssues: nextUnresolved,
-        requestCooldown: success ? 2 : 1,
-        responseStatus: success ? `${actionType} resolved ${request.title}` : `${actionType} failed to settle ${request.title}`,
-        serviceHistory: [`${success ? 'Resolved' : 'Missed'} via ${actionType}: ${request.title}`, ...currentService.serviceHistory].slice(0, 4),
-        mood: success ? 'steady' : 'volatile',
+        requestCooldown: success ? 2 : partial ? 1 : 1,
+        responseStatus: success
+          ? `${actionType} resolved ${request.title}`
+          : partial
+            ? `${actionType} only partly settled ${request.title}`
+            : `${actionType} failed to settle ${request.title}`,
+        serviceHistory: [`${success ? 'Resolved' : partial ? 'Partial' : 'Missed'} via ${actionType}: ${request.title}`, ...currentService.serviceHistory].slice(0, 4),
+        mood: success ? 'steady' : partial ? 'tense' : 'volatile',
         handledFromDesk: currentService.handledFromDesk + (actionType === 'desk' ? 1 : 0),
         hallwayChecked: false
       }
     };
   });
-  if (success) {
+  if (overreaction) {
+    registerOvermanagementPenalty(roomId, {
+      reason: `${actionType}-false-alarm`,
+      logLine: `${actionType} hit ${room.label} too hard for what turned out to be more false alarm than threat.`,
+      hostility: actionType === 'security' ? 1 : 0,
+      rumorPressure: 2,
+      reputationLoss: actionType === 'security' ? 2 : 1,
+      falloutSeverity: 2
+    });
+    updateRoomById(roomId, (currentRoom) => {
+      const currentService = getDefaultRoomServiceState(currentRoom?.serviceState);
+      return {
+        ...currentRoom,
+        serviceState: {
+          ...currentService,
+          pendingRequest: null,
+          responseStatus: `${actionType} overreacted to ${request.title}`,
+          serviceHistory: [`Overreacted via ${actionType}: ${request.title}`, ...currentService.serviceHistory].slice(0, 4),
+          requestCooldown: 2
+        }
+      };
+    });
+    state.logs.push(`${room.label}: ${request.title} was closer to a false alarm, and ${actionType} turned it into a social problem instead of a safety solution.`);
+  } else if (success) {
     calmRoomChain(roomId, actionType === 'security' ? 3 : 2);
     state.reputation = clampReputation(state.reputation + 1);
-    state.logs.push(`${room.label}: ${actionType} handled ${request.title} cleanly. Occupied-room pressure eased instead of carrying forward.`);
+    state.logs.push(
+      `${room.label}: ${actionType} handled ${request.title} cleanly. ${
+        truthState === 'false-alarm'
+          ? 'The desk read the false alarm correctly and avoided making it worse.'
+          : truthState === 'real-threat'
+            ? 'The threat was real, and the response matched it in time.'
+            : 'Occupied-room pressure eased instead of carrying forward.'
+      }`
+    );
     state.shiftStats.roomCallsResolved = (state.shiftStats.roomCallsResolved || 0) + 1;
+    if (truthState === 'false-alarm') {
+      state.shiftStats.falseAlarmReads = (state.shiftStats.falseAlarmReads || 0) + 1;
+    }
     markRoomMemory(roomId, {
       note: `${request.title} was handled cleanly here during the night.`
     });
+  } else if (partial) {
+    state.logs.push(
+      `${room.label}: ${actionType} only partly settled ${request.title}. ${
+        truthState === 'real-threat'
+          ? 'The response was not wrong, just incomplete.'
+          : 'The guest calmed down somewhat, but the handling still left friction behind.'
+      }`
+    );
+    state.shiftStats.partialServiceOutcomes = (state.shiftStats.partialServiceOutcomes || 0) + 1;
+    if (truthState === 'real-threat') {
+      registerRoomChainSignal({
+        roomId,
+        guestName: room.occupiedBy,
+        type: `service-partial-${actionType}-${request.kind}`,
+        severity: 1
+      });
+    }
   } else {
     registerRoomChainSignal({
       roomId,
       guestName: room.occupiedBy,
       type: `service-fail-${actionType}-${request.kind}`,
-      severity: request.urgency === 'high' ? 2 : 1
+      severity: request.urgency === 'high' || truthState === 'real-threat' ? 2 : 1
     });
     state.reputation = clampReputation(state.reputation - 1);
-    state.logs.push(`${room.label}: ${actionType} failed to calm ${request.title}. The room is now carrying fresh escalation risk.`);
+    state.logs.push(
+      `${room.label}: ${actionType} failed to calm ${request.title}. ${
+        truthState === 'real-threat'
+          ? 'The threat was real and the weak fit made it spread.'
+          : truthState === 'false-alarm'
+            ? 'The handling itself became the problem.'
+            : 'The room is now carrying fresh escalation risk.'
+      }`
+    );
     state.shiftStats.roomCallsMissed = (state.shiftStats.roomCallsMissed || 0) + 1;
+    if (truthState === 'real-threat') {
+      state.shiftStats.realThreatsMissed = (state.shiftStats.realThreatsMissed || 0) + 1;
+    }
     if (request.urgency === 'high') {
       queueDeferredShiftCost({
         turnsRemaining: 2,
         reputationDelta: -1,
         logLine: `${room.label} remembered the bad service response and the complaint came back harder later.`
+      });
+    }
+    if (truthState === 'false-alarm') {
+      registerSocialFallout(roomId, {
+        severity: 1,
+        reason: 'bad-read',
+        label: 'Guests heard the desk mishandled a minor situation.'
       });
     }
   }
@@ -1641,6 +2051,10 @@ function reassignRoomGuest(roomId) {
   }
   state.money = Math.max(0, state.money - cost);
   const carriedService = getDefaultRoomServiceState(fromRoom?.serviceState);
+  const unnecessaryMove =
+    !carriedService.pendingRequest &&
+    Number(carriedService.unresolvedIssues || 0) === 0 &&
+    Number(getVisibleChainPressureForRoom(state, fromRoom.id) || 0) <= 2;
   const movedRequest = carriedService.pendingRequest;
   updateRoomById(targetRoom.id, (room) => ({
     ...room,
@@ -1658,7 +2072,9 @@ function reassignRoomGuest(roomId) {
     occupantHiddenIntent: fromRoom.occupantHiddenIntent,
     occupantChainBias: fromRoom.occupantChainBias,
     serviceState: {
-      ...getDefaultRoomServiceState(carriedService),
+      ...withAdjustedServiceState(getDefaultRoomServiceState(carriedService), unnecessaryMove
+        ? { trust: -1, irritation: 1, rumorPressure: 1, overmanagedCount: 1 }
+        : { anxiety: -1 }),
       pendingRequest: movedRequest && (movedRequest.kind === 'refund-change' || movedRequest.kind === 'watching-me' || movedRequest.kind === 'noise-complaint')
         ? null
         : movedRequest,
@@ -1681,6 +2097,14 @@ function reassignRoomGuest(roomId) {
   state.reputation = clampReputation(state.reputation - 1);
   state.logs.push(`${fromRoom.occupiedBy} was reassigned from ${fromRoom.label} to ${targetRoom.label}. The move bought space, but guests noticed the disruption.`);
   state.shiftStats.roomReassignments = (state.shiftStats.roomReassignments || 0) + 1;
+  if (unnecessaryMove) {
+    registerOvermanagementPenalty(targetRoom.id, {
+      reason: 'needless reassignment',
+      logLine: `${fromRoom.occupiedBy} did not need a move, and the reassignment itself started irritation and rumor spread.`,
+      reputationLoss: 1,
+      falloutSeverity: 1
+    });
+  }
   if (checkFailureState()) return;
   if (progressShift('dispatch', { timeScale: 1.05, passiveDrainScale: 1 })) return;
   renderAll();
@@ -3665,6 +4089,13 @@ function checkInGuest(guestId, requestedRoomId = null) {
   room.serviceState.responseStatus = 'Checked in and settled.';
   room.serviceState.requestCooldown = guest.depositRequested || guest.secondaryVerified ? 1 : 0;
   room.serviceState.serviceHistory = [];
+  room.serviceState.trust = guest.depositRequested || guest.secondaryVerified ? 1 : 2;
+  room.serviceState.anxiety = guest.flagged ? 1 : 0;
+  room.serviceState.irritation = 0;
+  room.serviceState.hostility = 0;
+  const attitude = deriveRoomAttitudeMeta(room.serviceState);
+  room.serviceState.attitudeLabel = attitude.label;
+  room.serviceState.attitudeNote = attitude.note;
 
   if (room.deskFlagged && room.condition === 'Stable') {
     room.condition = 'Watch';
