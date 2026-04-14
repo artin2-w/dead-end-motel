@@ -2528,10 +2528,33 @@
 
 .night-prep-doctrine,
 .night-prep-factions,
+.night-prep-owner,
 .night-prep-director,
 .night-prep-carryover,
-.night-prep-threads {
+.night-prep-threads,
+.night-prep-suspect-board {
   margin-top: 0;
+}
+
+.night-prep-owner,
+.night-prep-suspect-board {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 0.7rem 0.78rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.night-prep-plan-grid {
+  margin-top: 0.8rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.prep-plan-btn.is-active {
+  border-color: rgba(125, 211, 252, 0.4);
+  box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.2);
+  background: rgba(125, 211, 252, 0.08);
 }
 
 .failure-polish-card .failure-reason {

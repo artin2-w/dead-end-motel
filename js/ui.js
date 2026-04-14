@@ -676,6 +676,9 @@ export function renderGuests(
         ${guest?.contradictoryClue ? '<span class="guest-meta-chip guest-meta-chip-contradiction">Mixed Cues</span>' : ''}
         ${Number(guest?.expectedStayNights || 0) > 0 ? `<span class="guest-meta-chip guest-stay-chip" title="Expected stay length if approved.">Stay: ${guest.expectedStayNights}N</span>` : ''}
         ${guest?.scannerMatches?.length ? '<span class="guest-meta-chip guest-meta-chip-scanner">Scanner Link</span>' : ''}
+        ${guest?.forgeryProfile?.isForged ? '<span class="guest-meta-chip guest-meta-chip-contradiction">Forgery Risk</span>' : ''}
+        ${guest?.factionProfile?.label ? `<span class="guest-meta-chip guest-meta-chip-scanner">${guest.factionProfile.label}</span>` : ''}
+        ${guest?.linkedArrival?.groupId ? '<span class="guest-meta-chip guest-meta-chip-verified">Linked Arrival</span>' : ''}
         ${guest?.idInspected ? '<span class="guest-meta-chip guest-meta-chip-verified">ID Read</span>' : ''}
         ${guest?.uvInspected ? '<span class="guest-meta-chip guest-meta-chip-uv">UV Used</span>' : ''}
       </div>
@@ -695,6 +698,7 @@ export function renderGuests(
         ${(guest?.contextTag || guest?.visualHint)
           ? `<p class="guest-scan-line">${guest.contextTag ? `Context: ${guest.contextTag}. ` : ''}${guest.visualHint ? `Visual: ${guest.visualHint}.` : ''}</p>`
           : ''}
+        ${guest?.linkedArrival?.note ? `<p class="guest-scan-line guest-scan-line-warning">${guest.linkedArrival.note}</p>` : ''}
         ${guest?.scannerMatches?.length
           ? `<p class="guest-scan-line guest-scan-line-warning">${guest.scannerMatches.join(' ')}</p>`
           : ''}
@@ -712,6 +716,10 @@ export function renderGuests(
           <div class="guest-detail-block guest-uv-block">
             <p class="guest-id-line"><strong>UV Read:</strong> ${guest?.uvInspected ? (guest?.uvProfile?.suspicious ? 'Suspicious' : 'Clear') : 'Not used yet'}</p>
             <p class="guest-id-line muted">${guest?.uvInspected ? (guest?.uvProfile?.markers || []).join('; ') : 'Use UV only when the desk read feels off or scanner chatter lines up.'}</p>
+          </div>
+          <div class="guest-detail-block guest-uv-block">
+            <p class="guest-id-line"><strong>Pattern:</strong> ${guest?.factionProfile?.label || 'No strong local-network sign yet'}</p>
+            <p class="guest-id-line muted">${guest?.factionProfile?.clue || guest?.linkedArrival?.note || 'No linked traveler or faction pattern surfaced yet.'}</p>
           </div>
         </div>
       </details>
@@ -1554,6 +1562,9 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
   const director = document.getElementById('night-prep-director');
   const carryover = document.getElementById('night-prep-carryover');
   const threads = document.getElementById('night-prep-threads');
+  const owner = document.getElementById('night-prep-owner');
+  const suspectBoard = document.getElementById('night-prep-suspect-board');
+  const plans = document.getElementById('night-prep-plan-grid');
   const grid = document.getElementById('night-prep-upgrade-grid');
 
   if (title) title.textContent = 'Night Prep';
@@ -1655,6 +1666,50 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
             .join('')}</ul>`
         : '<p class="muted">No active long-running thread pressure.</p>'}
     `;
+  }
+
+  if (owner) {
+    const brief = state?.ownerPressureBrief || {};
+    const lines = Array.isArray(brief?.lines) ? brief.lines.slice(0, 4) : [];
+    owner.innerHTML = `
+      <p class="section-tag">Owner Pressure</p>
+      <p><strong>${brief?.mood || 'Watchful'}</strong> oversight • Last settlement: ${formatMoney(Number(brief?.settlement || 0))}</p>
+      <p class="muted">${brief?.memo || 'Ownership has not issued a new morning memo.'}</p>
+      ${lines.length
+        ? `<ul class="prep-notes-list">${lines.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
+        : '<p class="muted">No additional owner notes.</p>'}
+    `;
+  }
+
+  if (suspectBoard) {
+    const board = state?.suspectBoard || {};
+    const entries = Array.isArray(board?.entries) ? board.entries.slice(0, 4) : [];
+    suspectBoard.innerHTML = `
+      <p class="section-tag">Evidence / Suspect Board</p>
+      ${entries.length
+        ? `<ul class="prep-notes-list">${entries
+            .map((entry) => `<li><strong>${entry.label}</strong><span>${entry.detail || ''}</span></li>`)
+            .join('')}</ul>`
+        : '<p class="muted">No durable suspect patterns on the board yet.</p>'}
+      <p class="muted">Names: ${(board?.namesSeen || []).join(' • ') || 'none yet'}</p>
+      <p class="muted">Marks: ${(board?.marksSeen || []).join(' • ') || 'none yet'}</p>
+    `;
+  }
+
+  if (plans) {
+    const ownerBrief = state?.ownerPressureBrief || {};
+    const planOptions = Array.isArray(ownerBrief?.plans) ? ownerBrief.plans : [];
+    plans.innerHTML = '';
+    planOptions.forEach((plan) => {
+      const button = document.createElement('button');
+      button.className = `button button-secondary prep-plan-btn ${ownerBrief?.selectedPlanId === plan.id ? 'is-active' : ''}`.trim();
+      button.textContent = plan.title;
+      button.title = plan.summary || '';
+      if (typeof state?.onSetDayShiftPlan === 'function') {
+        button.addEventListener('click', () => state.onSetDayShiftPlan(plan.id));
+      }
+      plans.appendChild(button);
+    });
   }
 
   if (!grid) return;

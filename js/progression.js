@@ -56,6 +56,28 @@ const UPGRADE_DEFS = Object.freeze([
     }
   },
   {
+    id: 'desk-forgery-lamp',
+    title: 'Forgery Lamp Kit',
+    category: 'Front Desk',
+    cost: 90,
+    description: 'Improved lamp and laminate tools make forged IDs easier to read cleanly.',
+    oneTime: true,
+    effects: {
+      forgeryRevealBonus: 1
+    }
+  },
+  {
+    id: 'desk-local-ledger',
+    title: 'Local Pattern Ledger',
+    category: 'Front Desk',
+    cost: 85,
+    description: 'Desk notes and scanner sorting surface stronger local-network pattern matches.',
+    oneTime: true,
+    effects: {
+      scannerIntelBonus: 1
+    }
+  },
+  {
     id: 'power-load-balancer',
     title: 'Load Balancer Retrofit',
     category: 'Maintenance / Power',
@@ -101,6 +123,17 @@ const UPGRADE_DEFS = Object.freeze([
     }
   },
   {
+    id: 'response-service-pagers',
+    title: 'Service Pager Net',
+    category: 'Response / Security',
+    cost: 88,
+    description: 'Runner and support responses land with better clarity when rooms start drifting.',
+    oneTime: true,
+    effects: {
+      serviceResponseClarity: 0.06
+    }
+  },
+  {
     id: 'response-stabilization-team',
     title: 'Stabilization Team SOP',
     category: 'Response / Security',
@@ -111,6 +144,39 @@ const UPGRADE_DEFS = Object.freeze([
       tacticalPenaltyMult: 0.72,
       tacticalStabilizeChance: 0.24,
       tacticalChainCalmBonus: 1
+    }
+  },
+  {
+    id: 'security-door-braces',
+    title: 'Door Brace Retrofit',
+    category: 'Response / Security',
+    cost: 92,
+    description: 'Reinforced locks and door braces make risky rooms less likely to destabilize immediately.',
+    oneTime: true,
+    effects: {
+      roomSecurityBonus: 1
+    }
+  },
+  {
+    id: 'power-battery-buffer',
+    title: 'Battery Buffer Rack',
+    category: 'Maintenance / Power',
+    cost: 96,
+    description: 'Backup storage softens blackout escalation and keeps the grid steadier under pressure.',
+    oneTime: true,
+    effects: {
+      powerBlackoutSoftener: 0.08
+    }
+  },
+  {
+    id: 'ownership-guestbook',
+    title: 'Owner Guestbook Pack',
+    category: 'Operations',
+    cost: 70,
+    description: 'Structured day-shift ledgers buy a little more patience from ownership after messy nights.',
+    oneTime: true,
+    effects: {
+      ownerGrace: 1
     }
   }
 ]);
@@ -139,7 +205,13 @@ const DEFAULT_MODIFIERS = Object.freeze({
   dispatchSuccessBonus: 0,
   tacticalPenaltyMult: 1,
   tacticalStabilizeChance: 0,
-  tacticalChainCalmBonus: 0
+  tacticalChainCalmBonus: 0,
+  forgeryRevealBonus: 0,
+  scannerIntelBonus: 0,
+  serviceResponseClarity: 0,
+  roomSecurityBonus: 0,
+  powerBlackoutSoftener: 0,
+  ownerGrace: 0
 });
 
 function toOwnedIds(progression) {

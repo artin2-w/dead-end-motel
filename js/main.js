@@ -647,6 +647,7 @@ function normalizeRunMemoryState() {
   state = normalizeStoryThreadState(state);
   state = normalizeCarryoverState(state);
   state = normalizeContentDirectorState(state);
+  normalizeCampaignDepthState();
   state.carryoverBriefing = buildIncomingNightNotes(state, Number(state?.night || 1));
 }
 
@@ -731,6 +732,7 @@ function syncFinaleStateForNight(options = {}) {
 
 function getCampaignContext() {
   normalizeCampaignSystems();
+  normalizeCampaignDepthState();
   ensureCrisisNightState(state);
   const progress = getCampaignProgress(state);
   const currentMilestone = getMilestoneMeta(progress.currentNight, state.campaign);
@@ -744,6 +746,349 @@ function getCampaignContext() {
       ...(state?.crisisNight?.active ? [state.crisisNight.note] : [])
     ].slice(0, 5)
   };
+}
+
+const DAY_SHIFT_PLAN_CATALOG = Object.freeze([
+  {
+    id: 'balanced',
+    title: 'Balanced Books',
+    summary: 'Hold the line without provoking either occupancy or control pressure too hard.'
+  },
+  {
+    id: 'occupancy-push',
+    title: 'Push Occupancy',
+    summary: 'Day shift squeezes in one more intake slot tomorrow, but linked travelers and soft stories become more common.'
+  },
+  {
+    id: 'paper-crackdown',
+    title: 'Paper Crackdown',
+    summary: 'Desk tools and staff briefings focus on forged IDs and local-network signs over raw throughput.'
+  },
+  {
+    id: 'service-calm',
+    title: 'Quiet Hospitality',
+    summary: 'Room handling starts softer and steadier, but ownership sees it as expensive if occupancy slips.'
+  }
+]);
+
+const LOCAL_FACTION_CATALOG = Object.freeze([
+  {
+    id: 'watcher-circle',
+    label: 'Watcher Circle',
+    visibleMark: 'same pale motel-map fold',
+    hiddenMark: 'UV ring stamped beneath the laminate edge',
+    scannerHook: 'watcher pattern',
+    clue: 'Patterns suggest someone is logging who comes and goes rather than simply renting a room.'
+  },
+  {
+    id: 'county-drifters',
+    label: 'County Drifters',
+    visibleMark: 'shared county-fair wrist cord',
+    hiddenMark: 'dusty route mark hidden in the card sleeve',
+    scannerHook: 'drifter pattern',
+    clue: 'A local movement pattern keeps reappearing between roadside lots and cheap rooms.'
+  },
+  {
+    id: 'service-ring',
+    label: 'Service Ring',
+    visibleMark: 'maintenance-adjacent badge clip with no active issue ticket',
+    hiddenMark: 'UV service glyph printed beneath the card laminate',
+    scannerHook: 'fake contractor chatter',
+    clue: 'Someone is moving under staff-adjacent cover and testing access stories.'
+  },
+  {
+    id: 'lookout-chain',
+    label: 'Lookout Chain',
+    visibleMark: 'matching parking stub tears',
+    hiddenMark: 'paired corner-notch code on the backing card',
+    scannerHook: 'paired vehicle movement',
+    clue: 'Arrivals may be working in pairs, with one reading the desk while the other hangs back.'
+  },
+  {
+    id: 'false-family-route',
+    label: 'False Family Route',
+    visibleMark: 'luggage tags that do not quite match the family story',
+    hiddenMark: 'hidden child-rate scribble beneath the photocopy layer',
+    scannerHook: 'false family account',
+    clue: 'The group story sounds domestic, but the paperwork feels assembled rather than lived in.'
+  }
+]);
+
+function clampCampaignDepthValue(value, min = 0, max = 10) {
+  return Math.max(min, Math.min(max, Number.isFinite(Number(value)) ? Number(value) : min));
+}
+
+function limitRecentStrings(value, limit = 12) {
+  if (!Array.isArray(value)) return [];
+  const next = [];
+  value.forEach((entry) => {
+    const cleaned = String(entry || '').trim();
+    if (!cleaned || next.includes(cleaned)) return;
+    next.push(cleaned);
+  });
+  return next.slice(-limit);
+}
+
+function normalizeCampaignDepthState() {
+  state.dayShift = state?.dayShift && typeof state.dayShift === 'object' ? state.dayShift : {};
+  state.dayShift.selectedPlan = DAY_SHIFT_PLAN_CATALOG.some((plan) => plan.id === state.dayShift.selectedPlan)
+    ? state.dayShift.selectedPlan
+    : 'balanced';
+  state.dayShift.activeNightPlan = DAY_SHIFT_PLAN_CATALOG.some((plan) => plan.id === state.dayShift.activeNightPlan)
+    ? state.dayShift.activeNightPlan
+    : 'balanced';
+  state.dayShift.ownerPressure = clampCampaignDepthValue(state.dayShift.ownerPressure, -8, 12);
+  state.dayShift.ownerMood = String(state.dayShift.ownerMood || 'Watchful');
+  state.dayShift.ownerMemo = String(state.dayShift.ownerMemo || 'Ownership is waiting to see whether the motel grows or slips.');
+  state.dayShift.lastSettlement = Number.isFinite(Number(state.dayShift.lastSettlement)) ? Number(state.dayShift.lastSettlement) : 0;
+  state.dayShift.lastOccupancyRate = clampCampaignDepthValue(state.dayShift.lastOccupancyRate, 0, 1);
+  state.dayShift.lastTroubleLoad = clampCampaignDepthValue(state.dayShift.lastTroubleLoad, 0, 10);
+  state.dayShift.lastHospitalityBias = Number.isFinite(Number(state.dayShift.lastHospitalityBias)) ? Number(state.dayShift.lastHospitalityBias) : 0;
+  state.dayShift.memoLines = Array.isArray(state.dayShift.memoLines) ? state.dayShift.memoLines.slice(-4) : [];
+  state.dayShift.planHistory = limitRecentStrings(state.dayShift.planHistory, 6);
+
+  state.suspectBoard = state?.suspectBoard && typeof state.suspectBoard === 'object' ? state.suspectBoard : {};
+  state.suspectBoard.entries = Array.isArray(state.suspectBoard.entries) ? state.suspectBoard.entries.slice(-18) : [];
+  state.suspectBoard.namesSeen = limitRecentStrings(state.suspectBoard.namesSeen, 12);
+  state.suspectBoard.marksSeen = limitRecentStrings(state.suspectBoard.marksSeen, 12);
+  state.suspectBoard.vehiclesSeen = limitRecentStrings(state.suspectBoard.vehiclesSeen, 10);
+  state.suspectBoard.factionLabels = limitRecentStrings(state.suspectBoard.factionLabels, 10);
+  state.suspectBoard.updatedNight = Math.max(0, Number(state.suspectBoard.updatedNight || 0));
+
+  state.linkedArrivalState = state?.linkedArrivalState && typeof state.linkedArrivalState === 'object' ? state.linkedArrivalState : {};
+  state.linkedArrivalState.pendingLead = state.linkedArrivalState.pendingLead && typeof state.linkedArrivalState.pendingLead === 'object'
+    ? { ...state.linkedArrivalState.pendingLead }
+    : null;
+  state.linkedArrivalState.recentGroups = Array.isArray(state.linkedArrivalState.recentGroups)
+    ? state.linkedArrivalState.recentGroups.slice(-8)
+    : [];
+}
+
+function getCurrentDayShiftPlan() {
+  normalizeCampaignDepthState();
+  return DAY_SHIFT_PLAN_CATALOG.find((plan) => plan.id === state?.dayShift?.selectedPlan) || DAY_SHIFT_PLAN_CATALOG[0];
+}
+
+function addSuspectBoardEntry(entry = {}) {
+  normalizeCampaignDepthState();
+  const label = String(entry.label || '').trim();
+  const detail = String(entry.detail || '').trim();
+  if (!label && !detail) return;
+  const id = `${entry.kind || 'pattern'}:${label}:${detail}`.toLowerCase();
+  const current = Array.isArray(state.suspectBoard.entries) ? state.suspectBoard.entries : [];
+  const withoutDuplicate = current.filter((item) => String(item?.id || '') !== id);
+  withoutDuplicate.push({
+    id,
+    kind: entry.kind || 'pattern',
+    label: label || 'Unresolved Pattern',
+    detail,
+    heat: Math.max(1, Math.min(3, Number(entry.heat || 1))),
+    night: Math.max(1, Number(entry.night || state.night || 1))
+  });
+  state.suspectBoard.entries = withoutDuplicate.slice(-18);
+  state.suspectBoard.updatedNight = Math.max(1, Number(state?.night || 1));
+}
+
+function recordSuspectEvidence(guest, source = 'desk') {
+  if (!guest) return;
+  normalizeCampaignDepthState();
+  if (guest.name) {
+    state.suspectBoard.namesSeen = limitRecentStrings([...(state.suspectBoard.namesSeen || []), guest.name], 12);
+  }
+  if (guest?.factionProfile?.label) {
+    state.suspectBoard.factionLabels = limitRecentStrings(
+      [...(state.suspectBoard.factionLabels || []), guest.factionProfile.label],
+      10
+    );
+    if (guest.factionProfile.visibleMark || guest.factionProfile.hiddenMark) {
+      state.suspectBoard.marksSeen = limitRecentStrings(
+        [
+          ...(state.suspectBoard.marksSeen || []),
+          guest.factionProfile.visibleMark || guest.factionProfile.hiddenMark
+        ],
+        12
+      );
+    }
+    addSuspectBoardEntry({
+      kind: 'faction',
+      label: guest.factionProfile.label,
+      detail: guest.factionProfile.clue || `${source} linked this arrival to a known local pattern.`,
+      heat: guest?.factionProfile?.strength >= 2 ? 3 : 2
+    });
+  }
+  if (guest?.forgeryProfile?.isForged) {
+    addSuspectBoardEntry({
+      kind: 'document',
+      label: guest.name || 'Forged document lead',
+      detail: [
+        ...(guest?.idProfile?.irregularities || []).slice(0, 1),
+        ...(guest?.uvProfile?.markers || []).slice(0, 1)
+      ].filter(Boolean).join(' • ') || `${source} flagged unresolved document tampering.`,
+      heat: guest?.documentSuspicionScore >= 3 ? 3 : 2
+    });
+  }
+  if (guest?.linkedArrival?.groupId) {
+    addSuspectBoardEntry({
+      kind: 'linked-arrival',
+      label: guest.linkedArrival.kind || 'Linked arrivals',
+      detail: guest.linkedArrival.note || `${guest.name} did not look like a fully isolated walk-in.`,
+      heat: 2
+    });
+  }
+  if (String(guest?.contextTag || '').toLowerCase().includes('vehicle')) {
+    state.suspectBoard.vehiclesSeen = limitRecentStrings(
+      [...(state.suspectBoard.vehiclesSeen || []), String(guest.contextTag)],
+      10
+    );
+  }
+}
+
+function buildOwnerPressureBrief() {
+  normalizeCampaignDepthState();
+  const pressure = Number(state?.dayShift?.ownerPressure || 0);
+  const plan = getCurrentDayShiftPlan();
+  const mood = pressure >= 6
+    ? 'Severe'
+    : pressure >= 3
+      ? 'Tense'
+      : pressure <= -2
+        ? 'Relieved'
+        : 'Watchful';
+  return {
+    pressure,
+    mood,
+    memo: state?.dayShift?.ownerMemo || 'Ownership is watching the books and the complaint line.',
+    lines: Array.isArray(state?.dayShift?.memoLines) ? state.dayShift.memoLines.slice(0, 4) : [],
+    settlement: Number(state?.dayShift?.lastSettlement || 0),
+    selectedPlanId: plan.id,
+    selectedPlanTitle: plan.title,
+    plans: DAY_SHIFT_PLAN_CATALOG
+  };
+}
+
+function buildSuspectBoardSnapshot() {
+  normalizeCampaignDepthState();
+  const entries = Array.isArray(state?.suspectBoard?.entries) ? [...state.suspectBoard.entries] : [];
+  return {
+    entries: entries
+      .sort((a, b) => Number(b?.heat || 0) - Number(a?.heat || 0) || Number(b?.night || 0) - Number(a?.night || 0))
+      .slice(0, 5),
+    namesSeen: Array.isArray(state?.suspectBoard?.namesSeen) ? state.suspectBoard.namesSeen.slice(-4) : [],
+    marksSeen: Array.isArray(state?.suspectBoard?.marksSeen) ? state.suspectBoard.marksSeen.slice(-4) : [],
+    factionLabels: Array.isArray(state?.suspectBoard?.factionLabels) ? state.suspectBoard.factionLabels.slice(-4) : [],
+    vehiclesSeen: Array.isArray(state?.suspectBoard?.vehiclesSeen) ? state.suspectBoard.vehiclesSeen.slice(-3) : []
+  };
+}
+
+function settleBetweenNightDayShift(summary = null) {
+  normalizeCampaignDepthState();
+  const unlockedRooms = Math.max(1, (state.rooms || []).filter((room) => room?.unlocked !== false).length);
+  const occupiedRooms = (state.rooms || []).filter((room) => room?.occupiedBy).length;
+  const occupancyRate = occupiedRooms / unlockedRooms;
+  const troubleLoad =
+    Number(state?.shiftStats?.incidentsResolved || 0) * 0.4 +
+    Number(state?.shiftStats?.roomCallsMissed || 0) * 1.2 +
+    Number(state?.shiftStats?.nightEventsMissed || 0) * 1.4 +
+    Number(state?.shiftStats?.overManagementPenalties || 0) * 0.8 +
+    Math.max(0, 3 - Math.floor(Number(state?.reputation || 0) / 20));
+  const hospitalityBias =
+    Number(state?.shiftStats?.checkedIn || 0) -
+    Number(state?.shiftStats?.rejected || 0) -
+    Number(state?.shiftStats?.harshDeskActions || 0);
+  const incomeCredit = Math.round(occupiedRooms * 4 + Number(state?.shiftStats?.checkedIn || 0) * 3);
+  const repairCosts = Math.round(
+    Number(state?.shiftStats?.nightEventsMissed || 0) * 3 +
+    Number(state?.shiftStats?.roomCallsMissed || 0) * 2 +
+    Number(state?.shiftStats?.realThreatsMissed || 0) * 2
+  );
+  const ownerGrace = Math.max(0, Number(state?.progressionModifiers?.ownerGrace || 0));
+  const settlement = incomeCredit - Math.max(0, repairCosts - ownerGrace);
+  state.money = Math.max(0, Number(state.money || 0) + settlement);
+
+  const pressureDelta =
+    (occupancyRate < 0.45 ? 2 : occupancyRate >= 0.75 ? -1 : 0) +
+    (troubleLoad >= 5 ? 2 : troubleLoad <= 2 ? -1 : 0) +
+    (hospitalityBias <= -2 ? 1 : hospitalityBias >= 3 ? 0 : 0);
+  state.dayShift.ownerPressure = clampCampaignDepthValue(Number(state.dayShift.ownerPressure || 0) + pressureDelta, -8, 12);
+  state.dayShift.lastSettlement = settlement;
+  state.dayShift.lastOccupancyRate = occupancyRate;
+  state.dayShift.lastTroubleLoad = troubleLoad;
+  state.dayShift.lastHospitalityBias = hospitalityBias;
+  state.dayShift.ownerMood =
+    state.dayShift.ownerPressure >= 6 ? 'Severe'
+    : state.dayShift.ownerPressure >= 3 ? 'Tense'
+    : state.dayShift.ownerPressure <= -2 ? 'Relieved'
+    : 'Watchful';
+  state.dayShift.ownerMemo =
+    state.dayShift.ownerPressure >= 6
+      ? 'Ownership wants cleaner books, fewer public scenes, and no more desk improvisation.'
+      : state.dayShift.ownerPressure >= 3
+        ? 'Ownership is questioning whether the motel is growing in the right direction.'
+        : occupancyRate >= 0.75 && troubleLoad <= 2
+          ? 'Ownership sees momentum: the motel is making money without slipping too hard.'
+          : 'Ownership is waiting for the next night before deciding whether to tighten control.';
+  state.dayShift.memoLines = [
+    `Day shift ledger: ${settlement >= 0 ? '+' : '-'}$${Math.abs(settlement)} after occupancy and repair balancing.`,
+    `Owner read: ${Math.round(occupancyRate * 100)}% of licensed rooms carried business value into morning.`,
+    troubleLoad >= 5
+      ? 'Complaint and incident spillover made management more suspicious this morning.'
+      : 'Morning briefing stayed readable enough to avoid a full ownership escalation.',
+    hospitalityBias <= -2
+      ? 'Harsh control was noticed; ownership likes compliance more than visible hostility.'
+      : hospitalityBias >= 3
+        ? 'Soft handling improved guest-facing tone, but ownership will keep watching the numbers.'
+        : `Next plan selected: ${getCurrentDayShiftPlan().title}.`
+  ].slice(0, 4);
+  state.dayShift.planHistory = limitRecentStrings(
+    [...(state.dayShift.planHistory || []), getCurrentDayShiftPlan().id],
+    6
+  );
+
+  applyIdentityImpact({
+    factions: { ownership: pressureDelta > 0 ? -1 : pressureDelta < 0 ? 1 : 0 },
+    reason: 'day shift owner review'
+  });
+
+  if (summary?.identity?.length) {
+    addSuspectBoardEntry({
+      kind: 'night-ledger',
+      label: `Night ${state.night} carryover`,
+      detail: String(summary.identity[0] || 'Morning review preserved an unresolved motel pattern.'),
+      heat: 1
+    });
+  }
+}
+
+function setDayShiftPlan(planId) {
+  normalizeCampaignDepthState();
+  const chosen = DAY_SHIFT_PLAN_CATALOG.find((plan) => plan.id === planId);
+  if (!chosen) return;
+  state.dayShift.selectedPlan = chosen.id;
+  state.dayShift.planHistory = limitRecentStrings([...(state.dayShift.planHistory || []), chosen.id], 6);
+  state.logs.push(`Day-shift plan set: ${chosen.title}. ${chosen.summary}`);
+  pushLiveAlert(state, {
+    type: 'info',
+    message: `Day-shift plan locked: ${chosen.title}.`,
+    dedupeKey: `day-plan-${chosen.id}-${state.night}`
+  });
+  renderNightPrepScreen();
+  renderAll();
+}
+
+function applyDayShiftPlanForNightStart() {
+  normalizeCampaignDepthState();
+  const plan = getCurrentDayShiftPlan();
+  state.dayShift.activeNightPlan = plan.id;
+  if (plan.id === 'occupancy-push') {
+    state.intake.arrivalsRemaining = Math.max(0, Number(state.intake.arrivalsRemaining || 0) + 1);
+    state.logs.push('Day shift squeezed in one extra arrival slot for tonight.');
+  } else if (plan.id === 'paper-crackdown') {
+    state.logs.push('Day shift briefed the desk to focus on forged IDs, hidden marks, and linked stories.');
+  } else if (plan.id === 'service-calm') {
+    state.logs.push('Day shift prioritized softer room handling and calmer service tone for the next shift.');
+  } else {
+    state.logs.push('Day shift held a balanced operating stance going into tonight.');
+  }
 }
 
 function showRunEndingScreen() {
@@ -1097,12 +1442,161 @@ function buildNightIdentitySummary(targetState = state) {
   return tags.slice(0, 3).join(' • ');
 }
 
+function buildFactionProfileForGuest(guest, targetState = state) {
+  if (!guest) return null;
+  const night = Math.max(1, Number(targetState?.night || 1));
+  const activePlan = String(targetState?.dayShift?.activeNightPlan || targetState?.dayShift?.selectedPlan || 'balanced');
+  const archetype = String(guest?.archetypeKey || '').toLowerCase();
+  const context = String(guest?.contextTag || '').toLowerCase();
+  let chance =
+    0.12 +
+    Number(guest?.deceptionSignal || 0) * 0.06 +
+    Number(guest?.instabilitySignal || 0) * 0.04 +
+    (activePlan === 'occupancy-push' ? 0.05 : 0) +
+    (night >= 4 ? 0.05 : 0);
+  if (guest?.isReturningGuest) chance += 0.06;
+  chance = Math.max(0.1, Math.min(0.48, chance));
+  if (Math.random() > chance) return null;
+
+  const scored = LOCAL_FACTION_CATALOG.map((entry) => {
+    let weight = 1;
+    if (entry.id === 'service-ring' && (archetype.includes('contractor') || context.includes('maintenance'))) weight += 2.2;
+    if (entry.id === 'lookout-chain' && (context.includes('vehicle') || archetype.includes('drifter'))) weight += 1.8;
+    if (entry.id === 'false-family-route' && (archetype.includes('family') || archetype.includes('couple'))) weight += 2;
+    if (entry.id === 'watcher-circle' && archetype.includes('observer')) weight += 2.1;
+    if (entry.id === 'county-drifters' && archetype.includes('drifter')) weight += 1.8;
+    if (guest?.isReturningGuest && entry.id === 'watcher-circle') weight += 0.8;
+    return { entry, weight };
+  });
+  const total = scored.reduce((sum, item) => sum + item.weight, 0);
+  let roll = Math.random() * total;
+  let picked = scored[0]?.entry || LOCAL_FACTION_CATALOG[0];
+  for (let i = 0; i < scored.length; i += 1) {
+    roll -= scored[i].weight;
+    if (roll <= 0) {
+      picked = scored[i].entry;
+      break;
+    }
+  }
+
+  return {
+    ...picked,
+    strength: night >= 5 || guest?.isReturningGuest ? 2 : 1
+  };
+}
+
+function buildForgeryProfileForGuest(guest, targetState = state) {
+  if (!guest) return { isForged: false, severity: 0, visibleSigns: [], hiddenSigns: [] };
+  const activePlan = String(targetState?.dayShift?.activeNightPlan || targetState?.dayShift?.selectedPlan || 'balanced');
+  const forgeryBonus = Number(targetState?.progressionModifiers?.forgeryRevealBonus || 0) + (activePlan === 'paper-crackdown' ? 1 : 0);
+  const suspicionScore =
+    Number(guest?.deceptionSignal || 0) +
+    (guest?.contradictoryClue ? 1 : 0) +
+    (guest?.factionProfile ? 1 : 0) +
+    (String(guest?.archetypeKey || '').includes('contractor') ? 1 : 0);
+  const forged = suspicionScore >= 4 || (suspicionScore >= 2 && Math.random() < 0.45 + forgeryBonus * 0.08);
+  const visibleSigns = [];
+  const hiddenSigns = [];
+  if (forged || suspicionScore >= 3) visibleSigns.push('Photo grain does not match the printed age of the card');
+  if (forged && (guest?.contradictoryClue || Number(guest?.urgencySignal || 0) >= 2)) visibleSigns.push('Date field looks pressure-smoothed');
+  if (String(guest?.contextTag || '').toLowerCase().includes('maintenance')) visibleSigns.push('Work credential does not line up with lodging reason');
+  if (guest?.factionProfile?.hiddenMark) hiddenSigns.push(guest.factionProfile.hiddenMark);
+  if (forged) hiddenSigns.push('UV adhesive halo trails the altered number strip');
+  return {
+    isForged: forged,
+    severity: Math.max(0, Math.min(4, suspicionScore + forgeryBonus)),
+    visibleSigns: visibleSigns.slice(0, 3),
+    hiddenSigns: hiddenSigns.slice(0, 3)
+  };
+}
+
+function buildLinkedArrivalProfileForGuest(guest, targetState = state) {
+  if (!guest) return null;
+  normalizeCampaignDepthState();
+  const activePlan = String(targetState?.dayShift?.activeNightPlan || targetState?.dayShift?.selectedPlan || 'balanced');
+  const pendingLead = targetState?.linkedArrivalState?.pendingLead;
+  if (pendingLead && Number(pendingLead.night || 0) === Number(targetState?.night || 1)) {
+    targetState.linkedArrivalState.pendingLead = null;
+    targetState.linkedArrivalState.recentGroups = [...(targetState.linkedArrivalState.recentGroups || []), pendingLead.groupId].slice(-8);
+    return {
+      groupId: pendingLead.groupId,
+      kind: pendingLead.kind,
+      role: 'follow',
+      linkedGuestName: pendingLead.name,
+      note: `${guest.name} feels linked to ${pendingLead.name}; the cover story may be shared rather than separate.`
+    };
+  }
+
+  const archetype = String(guest?.archetypeKey || '').toLowerCase();
+  let chance =
+    0.08 +
+    (activePlan === 'occupancy-push' ? 0.08 : 0) +
+    (guest?.factionProfile?.id === 'lookout-chain' ? 0.15 : 0) +
+    (archetype.includes('family') || archetype.includes('couple') ? 0.12 : 0);
+  chance = Math.max(0.05, Math.min(0.35, chance));
+  if (Math.random() > chance) return null;
+  const kind = archetype.includes('family')
+    ? 'false family pair'
+    : guest?.factionProfile?.id === 'lookout-chain'
+      ? 'lookout pair'
+      : 'linked travelers';
+  const groupId = `linked-${targetState?.night || 1}-${guest?.id || guestIdCounter}-${Math.floor(Math.random() * 1000)}`;
+  targetState.linkedArrivalState.pendingLead = {
+    groupId,
+    kind,
+    name: guest.name,
+    night: Math.max(1, Number(targetState?.night || 1))
+  };
+  return {
+    groupId,
+    kind,
+    role: 'lead',
+    linkedGuestName: null,
+    note: `${guest.name} may not be traveling alone; a partner or cover story may be one arrival behind.`
+  };
+}
+
+function applyCampaignGuestWorldSignals(guest, targetState = state) {
+  if (!guest) return guest;
+  const factionProfile = guest?.factionProfile || buildFactionProfileForGuest(guest, targetState);
+  const linkedFactionGuest = factionProfile ? { ...guest, factionProfile } : guest;
+  const forgeryProfile = guest?.forgeryProfile || buildForgeryProfileForGuest(linkedFactionGuest, targetState);
+  const linkedArrival = guest?.linkedArrival || buildLinkedArrivalProfileForGuest({ ...linkedFactionGuest, forgeryProfile }, targetState);
+  const suspicionScore = Math.max(
+    0,
+    Number(forgeryProfile?.severity || 0) +
+      (linkedArrival ? 1 : 0) +
+      (factionProfile?.strength >= 2 ? 1 : 0)
+  );
+  const worldLines = [
+    factionProfile?.clue ? `Local sign: ${factionProfile.clue}` : '',
+    linkedArrival?.note || '',
+    forgeryProfile?.isForged ? 'Document feel: some details look assembled instead of issued.' : ''
+  ].filter(Boolean);
+  return {
+    ...guest,
+    factionProfile,
+    forgeryProfile,
+    linkedArrival,
+    documentSuspicionScore: suspicionScore,
+    riskNote: [guest?.riskNote || '', ...worldLines].filter(Boolean).join(' '),
+    priorHistoryLine: [
+      guest?.priorHistoryLine || '',
+      linkedArrival?.role === 'follow' ? 'Front desk read: this arrival may be following someone already in the night flow.' : ''
+    ].filter(Boolean).join(' ')
+  };
+}
+
 function buildDeskIdProfile(guest, targetState = state) {
   const name = String(guest?.name || 'Unknown Guest');
   const night = Math.max(1, Number(targetState?.night || 1));
-  const mismatch = Boolean(guest?.contradictoryClue) || Number(guest?.deceptionSignal || 0) >= 2;
+  const activePlan = String(targetState?.dayShift?.activeNightPlan || targetState?.dayShift?.selectedPlan || 'balanced');
+  const revealBonus = Number(targetState?.progressionModifiers?.forgeryRevealBonus || 0) + (activePlan === 'paper-crackdown' ? 1 : 0);
+  const mismatch = Boolean(guest?.contradictoryClue)
+    || Number(guest?.deceptionSignal || 0) >= 2
+    || Boolean(guest?.forgeryProfile?.isForged && guest?.forgeryProfile?.severity >= Math.max(2, 4 - revealBonus));
   const validity = mismatch
-    ? (Math.random() < 0.55 ? 'Questionable' : 'Valid')
+    ? (Math.random() < 0.7 ? 'Questionable' : 'Valid')
     : (Math.random() < 0.14 ? 'Near Expiry' : 'Valid');
   const reasons = [
     'Passing through for one night',
@@ -1116,12 +1610,15 @@ function buildDeskIdProfile(guest, targetState = state) {
   if (mismatch) irregularities.push('Photo-lighting mismatch');
   if (Number(guest?.urgencySignal || 0) >= 2) irregularities.push('Signed too quickly');
   if (String(guest?.contextTag || '').toLowerCase().includes('maintenance')) irregularities.push('Work claim not supported');
+  if (guest?.forgeryProfile?.visibleSigns?.length) irregularities.push(...guest.forgeryProfile.visibleSigns.slice(0, Math.max(1, revealBonus)));
+  if (guest?.factionProfile?.visibleMark && (revealBonus > 0 || night >= 4)) irregularities.push(`Repeating local sign: ${guest.factionProfile.visibleMark}`);
+  if (guest?.linkedArrival?.role === 'follow') irregularities.push('Story timing matches a linked arrival already seen tonight');
   return {
     cardName: name,
     validity,
     visitReason: reasons[(name.length + night) % reasons.length],
     issuingRegion: ['County', 'State', 'Cross-State', 'Local'][night % 4],
-    irregularities: irregularities.slice(0, 2)
+    irregularities: irregularities.slice(0, 3)
   };
 }
 
@@ -1131,15 +1628,21 @@ function buildUvInspectionProfile(guest) {
   if (Number(guest?.instabilitySignal || 0) >= 2) markers.push('Chemical smear on sleeve cuff');
   if (String(guest?.archetypeKey || '').includes('contractor')) markers.push('Hidden service-tag outline under laminate');
   if (String(guest?.contextTag || '').toLowerCase().includes('vehicle')) markers.push('Parking stub residue on wallet seam');
+  if (guest?.forgeryProfile?.hiddenSigns?.length) markers.push(...guest.forgeryProfile.hiddenSigns);
+  if (guest?.factionProfile?.hiddenMark) markers.push(`Faction-linked mark: ${guest.factionProfile.hiddenMark}`);
   return {
     suspicious: markers.length > 0,
-    markers: markers.length ? markers.slice(0, 2) : ['No obvious UV-reactive tampering found.']
+    markers: markers.length ? markers.slice(0, 3) : ['No obvious UV-reactive tampering found.']
   };
 }
 
 function buildScannerFeedForNight(targetState = state) {
   const night = Math.max(1, Number(targetState?.night || 1));
   const crisis = targetState?.crisisNight || {};
+  const suspectSnapshot = buildSuspectBoardSnapshot();
+  const factionHook = suspectSnapshot?.factionLabels?.[suspectSnapshot.factionLabels.length - 1] || '';
+  const markHook = suspectSnapshot?.marksSeen?.[suspectSnapshot.marksSeen.length - 1] || '';
+  const plan = String(targetState?.dayShift?.activeNightPlan || targetState?.dayShift?.selectedPlan || 'balanced');
   const feed = [
     {
       id: `desk-feed-${night}-0`,
@@ -1160,6 +1663,27 @@ function buildScannerFeedForNight(targetState = state) {
         ? 'Scanner note: local desk chatter says some late-night travelers are using soft stories to push through tired clerks.'
         : 'Scanner note: repeat disturbances are being described as “people who looked ordinary until they were inside.”'
     },
+    ...(factionHook
+      ? [{
+        id: `desk-feed-${night}-faction`,
+        tone: 'warning',
+        text: `Scanner follow-up: ${factionHook} keeps surfacing in roadside complaints and repeat desk chatter.`
+      }]
+      : []),
+    ...(markHook
+      ? [{
+        id: `desk-feed-${night}-mark`,
+        tone: 'desk',
+        text: `Scanner memo: dispatch logged another traveler carrying a repeating sign: ${markHook}.`
+      }]
+      : []),
+    ...(plan === 'paper-crackdown'
+      ? [{
+        id: `desk-feed-${night}-crackdown`,
+        tone: 'warning',
+        text: 'Scanner assist: day shift flagged more altered paperwork and paired cover stories in this corridor.'
+      }]
+      : []),
     ...(crisis?.blackoutRisk
       ? [{
         id: `desk-feed-${night}-3`,
@@ -1175,6 +1699,7 @@ function buildScannerFeedForNight(targetState = state) {
 function buildGuestScannerMatches(guest, targetState = state) {
   const feed = Array.isArray(targetState?.localScannerFeed) ? targetState.localScannerFeed : [];
   const matches = [];
+  const intelBonus = Number(targetState?.progressionModifiers?.scannerIntelBonus || 0);
   const context = String(guest?.contextTag || '').toLowerCase();
   const archetype = String(guest?.archetypeKey || '').toLowerCase();
   if (feed.some((entry) => String(entry.text || '').toLowerCase().includes('vehicle')) && context.includes('vehicle')) {
@@ -1186,7 +1711,16 @@ function buildGuestScannerMatches(guest, targetState = state) {
   if (feed.some((entry) => String(entry.text || '').toLowerCase().includes('ordinary until they were inside')) && (Number(guest?.instabilitySignal || 0) >= 2 || archetype.includes('quiet-family-fracture'))) {
     matches.push('Scanner overlap: calm first reads have been turning worse later tonight.');
   }
-  return matches.slice(0, 2);
+  if (guest?.factionProfile?.scannerHook && feed.some((entry) => String(entry.text || '').toLowerCase().includes(guest.factionProfile.scannerHook.toLowerCase()))) {
+    matches.push(`Scanner overlap: local feed is echoing the ${guest.factionProfile.label.toLowerCase()} pattern.`);
+  }
+  if (guest?.forgeryProfile?.isForged && feed.some((entry) => String(entry.text || '').toLowerCase().includes('altered paperwork'))) {
+    matches.push('Scanner overlap: altered-paperwork chatter lines up with this ID read.');
+  }
+  if (guest?.linkedArrival?.groupId && feed.some((entry) => String(entry.text || '').toLowerCase().includes('paired'))) {
+    matches.push('Scanner overlap: paired-traveler chatter supports a linked-arrival read.');
+  }
+  return matches.slice(0, 2 + Math.max(0, intelBonus));
 }
 
 function normalizeDeskInspectionGuest(guest, targetState = state) {
@@ -1199,6 +1733,10 @@ function normalizeDeskInspectionGuest(guest, targetState = state) {
     idProfile,
     uvProfile,
     scannerMatches,
+    factionProfile: guest?.factionProfile || null,
+    forgeryProfile: guest?.forgeryProfile || { isForged: false, severity: 0, visibleSigns: [], hiddenSigns: [] },
+    linkedArrival: guest?.linkedArrival || null,
+    documentSuspicionScore: Math.max(0, Number(guest?.documentSuspicionScore || guest?.forgeryProfile?.severity || 0)),
     idInspected: Boolean(guest.idInspected),
     uvInspected: Boolean(guest.uvInspected),
     secondaryVerified: Boolean(guest.secondaryVerified),
@@ -1588,6 +2126,7 @@ function getServiceActionSpec(room, actionType) {
   const service = getDefaultRoomServiceState(room?.serviceState);
   const request = service.pendingRequest;
   const blackout = getBlackoutPressureState(state);
+  const activePlan = String(state?.dayShift?.activeNightPlan || state?.dayShift?.selectedPlan || 'balanced');
   const preferred = Array.isArray(request?.preferred) ? request.preferred : [];
   const preferredMatch = preferred.includes(actionType);
   const urgency = String(request?.urgency || 'low');
@@ -1608,6 +2147,8 @@ function getServiceActionSpec(room, actionType) {
   if (truthState === 'false-alarm' && actionType === 'security') successChance -= 0.16;
   if (truthState === 'real-threat' && actionType === 'desk') successChance -= 0.1;
   if (truthState === 'real-threat' && actionType === 'security') successChance += 0.08;
+  successChance += Number(state?.progressionModifiers?.serviceResponseClarity || 0);
+  if (activePlan === 'service-calm' && (actionType === 'desk' || actionType === 'runner')) successChance += 0.05;
   successChance -= Number(blackout.servicePenalty || 0);
   successChance = Math.max(0.18, Math.min(0.9, successChance));
   return {
@@ -2339,6 +2880,7 @@ function maybeTriggerBlackoutPressure(source = 'general') {
   ensureCrisisEscalationState(state);
   const crisis = state?.crisisNight || {};
   if (!crisis.blackoutRisk) return false;
+  const blackoutSoftener = Math.max(0, Number(state?.progressionModifiers?.powerBlackoutSoftener || 0));
   const lowPower = Number(state?.power || 100) <= 35;
   const lateNight = Number(state?.shiftElapsedMinutes || 0) >= 180;
   const criticalRooms = getCriticalOccupiedRoomCount();
@@ -2360,7 +2902,7 @@ function maybeTriggerBlackoutPressure(source = 'general') {
     state.crisisEscalation.blackoutLevel === 'full' ? 3 : 2
   );
   state.power = clampPower(
-    state.power - (state.crisisEscalation.blackoutLevel === 'full' ? 18 : crisis.kind === 'partial-blackout' ? 12 : 8)
+    state.power - Math.max(4, Math.round((state.crisisEscalation.blackoutLevel === 'full' ? 18 : crisis.kind === 'partial-blackout' ? 12 : 8) * (1 - blackoutSoftener)))
   );
   const occupied = (state.rooms || []).filter((room) => room?.occupiedBy);
   occupied.slice(0, Math.max(1, Math.min(state.crisisEscalation.blackoutLevel === 'full' ? 3 : 2, occupied.length))).forEach((room) => {
@@ -2519,6 +3061,8 @@ function buildRenderState() {
   const identity = getIdentityContext();
   const branchContext = getBranchContext(true);
   const campaign = getCampaignContext();
+  const ownerBrief = buildOwnerPressureBrief();
+  const suspectBoard = buildSuspectBoardSnapshot();
   const metaSurface = getMetaSurfaceState();
   const onboardingUi = buildOnboardingUiModel(state, onboardingState, {
     activePanelId,
@@ -2555,11 +3099,14 @@ function buildRenderState() {
     onSetTutorialMode: setTutorialMode,
     onToggleSettingsOverlay: toggleSettingsOverlay,
     onUpdateSetting: updateSetting,
+    onSetDayShiftPlan: setDayShiftPlan,
     audioMuted: audioController.isMuted(),
     settings: settingsState,
     settingsOverlayOpen,
     settingsStorageHealthy: Boolean(settingsState?.__storageLoaded),
     activeUpgradeSummary: buildActiveUpgradeSummary(state),
+    ownerPressureBrief: ownerBrief,
+    suspectBoard,
     uiPressureLevel,
     topbarWarningFlags: getTopbarWarningFlags(state),
     rooms: roomsWithChainPressure,
@@ -3271,6 +3818,24 @@ function startFreshCampaignRun() {
   state.summaryIdentityLines = [];
   state.summaryBranchNotes = [];
   state.campaignSummaryNotes = [];
+  state.dayShift = {
+    selectedPlan: 'balanced',
+    activeNightPlan: 'balanced',
+    ownerPressure: 0,
+    ownerMood: 'Watchful',
+    ownerMemo: 'Ownership is waiting to see whether the motel grows or slips.',
+    lastSettlement: 0,
+    memoLines: []
+  };
+  state.suspectBoard = {
+    entries: [],
+    namesSeen: [],
+    marksSeen: [],
+    vehiclesSeen: [],
+    factionLabels: [],
+    updatedNight: 0
+  };
+  state.linkedArrivalState = { pendingLead: null, recentGroups: [] };
   state.contentDirector = {};
   state.contentHistory = {};
   state.pendingRunCompletion = false;
@@ -3652,7 +4217,8 @@ function callNextArrival() {
     state
   );
   const recurringGuest = maybeGenerateReturningGuestVariant(archetypedGuest, state, state.night);
-  const branchedRecurringGuest = applyReturningGuestBranchFlavor(recurringGuest, branchContext);
+  const worldGuest = applyCampaignGuestWorldSignals(recurringGuest, state);
+  const branchedRecurringGuest = applyReturningGuestBranchFlavor(worldGuest, branchContext);
   const directedGuest = applyDirectorGuestBias(branchedRecurringGuest, branchContext);
   const variedGuest = window.DeadEndPhase2?.applyGuestVariation
     ? window.DeadEndPhase2.applyGuestVariation(directedGuest, state)
@@ -3676,6 +4242,15 @@ function callNextArrival() {
       preparedDeskGuest.threadMemoryLine = [preparedDeskGuest.threadMemoryLine, preparedDeskGuest.returningGuestNote].filter(Boolean).join(' ');
     }
   }
+  if (preparedDeskGuest?.factionProfile?.label) {
+    preparedDeskGuest.threadMemoryLine = [
+      preparedDeskGuest.threadMemoryLine,
+      `Pattern note: ${preparedDeskGuest.factionProfile.label} may be active around this arrival.`
+    ].filter(Boolean).join(' ');
+  }
+  if (preparedDeskGuest?.linkedArrival?.note) {
+    preparedDeskGuest.threadMemoryLine = [preparedDeskGuest.threadMemoryLine, preparedDeskGuest.linkedArrival.note].filter(Boolean).join(' ');
+  }
 
   state.guests.push(preparedDeskGuest);
   registerContentExposure(state, {
@@ -3692,6 +4267,12 @@ function callNextArrival() {
   state.logs.push(
     `${preparedDeskGuest.name} looks booked for roughly ${preparedDeskGuest.expectedStayNights} night${preparedDeskGuest.expectedStayNights === 1 ? '' : 's'} if approved.`
   );
+  if (preparedDeskGuest?.linkedArrival?.role === 'lead') {
+    state.logs.push(`${preparedDeskGuest.name} may be the first half of a linked arrival pattern tonight.`);
+  }
+  if (preparedDeskGuest?.factionProfile?.label) {
+    state.logs.push(`Desk unease: subtle signs suggest ${preparedDeskGuest.factionProfile.label.toLowerCase()} ties.`);
+  }
   if (preparedDeskGuest?.specialEncounter?.id) {
     pushLiveAlert(state, {
       type: 'warning',
@@ -3782,6 +4363,7 @@ function flagGuest(guestId) {
     mood: updatedGuest.mood,
     night: state.night
   });
+  recordSuspectEvidence(updatedGuest, 'flag');
   if (updatedGuest.isReturningGuest) {
     state.shiftStats.recurringGuestsHandled = (state.shiftStats.recurringGuestsHandled || 0) + 1;
   }
@@ -3902,6 +4484,7 @@ function rejectGuest(guestId) {
     mood: guest.mood,
     night: state.night
   });
+  recordSuspectEvidence(guest, 'reject');
   if (guest.isReturningGuest) {
     state.shiftStats.recurringGuestsMissed = (state.shiftStats.recurringGuestsMissed || 0) + 1;
   }
@@ -3977,10 +4560,11 @@ function inspectGuestId(guestId) {
       const irregularities = Array.isArray(currentGuest?.idProfile?.irregularities)
         ? currentGuest.idProfile.irregularities
         : [];
+      const forged = Boolean(currentGuest?.forgeryProfile?.isForged);
       return {
         ...currentGuest,
         idInspected: true,
-        flagged: currentGuest.flagged || irregularities.length > 0 || currentGuest?.idProfile?.validity === 'Questionable',
+        flagged: currentGuest.flagged || irregularities.length > 0 || currentGuest?.idProfile?.validity === 'Questionable' || forged,
         policyAlignmentLine: irregularities.length > 0 || currentGuest?.idProfile?.validity === 'Questionable'
           ? 'Desk read: document details do not line up cleanly.'
           : 'Desk read: identity details held together under closer inspection.',
@@ -3999,6 +4583,10 @@ function inspectGuestId(guestId) {
     state.logs.push(idLine);
     if (updatedGuest?.idProfile?.irregularities?.length) {
       state.logs.push(`ID note: ${updatedGuest.idProfile.irregularities.join('; ')}.`);
+    }
+    if (updatedGuest?.forgeryProfile?.isForged) {
+      state.logs.push(`${updatedGuest.name}'s paperwork now reads like an assembled identity rather than a clean issue.`);
+      recordSuspectEvidence(updatedGuest, 'id-check');
     }
     pushLiveAlert(state, {
       type: updatedGuest.flagged ? 'warning' : 'info',
@@ -4051,6 +4639,9 @@ function deepInspectGuest(guestId) {
         ? `UV inspection on ${updatedGuest.name} exposed hidden marks: ${(updatedGuest.uvProfile.markers || []).join('; ')}.`
         : `UV inspection on ${updatedGuest.name} found no obvious tampering.`
     );
+    if (updatedGuest?.uvProfile?.suspicious || updatedGuest?.factionProfile?.label) {
+      recordSuspectEvidence(updatedGuest, 'uv-check');
+    }
     pushLiveAlert(state, {
       type: updatedGuest?.uvProfile?.suspicious ? 'warning' : 'info',
       message: updatedGuest?.uvProfile?.suspicious
@@ -4285,6 +4876,12 @@ function checkInGuest(guestId, requestedRoomId = null) {
   } else if (guest.archetypeLabel) {
     room.memory.note = `${guest.archetypeLabel} pressure has touched this room before.`;
   }
+  if (guest?.factionProfile?.label) {
+    room.memory.note = `${room.memory.note} Local network sign: ${guest.factionProfile.label}.`.trim();
+  }
+  if (guest?.linkedArrival?.groupId) {
+    room.memory.note = `${room.memory.note} Linked-arrival pattern remains associated with this check-in.`.trim();
+  }
   if (guest.secondaryVerified) {
     room.memory.note = `${room.memory.note} Desk completed secondary verification before releasing the room.`.trim();
   }
@@ -4365,6 +4962,7 @@ function checkInGuest(guestId, requestedRoomId = null) {
     linkedZone: room?.label,
     night: state.night
   });
+  recordSuspectEvidence(guest, 'checkin');
   if (guest.isReturningGuest) {
     state.shiftStats.recurringGuestsHandled = (state.shiftStats.recurringGuestsHandled || 0) + 1;
   }
@@ -5291,6 +5889,7 @@ function endNight(options = {}) {
     outcomeFlavor.note = `${outcomeFlavor.note || ''}${outcomeFlavor.note ? ' • ' : ''}Run Result: ${phase2ResultLabel}`;
     state.campaignSummaryNotes = [`Run Result: ${phase2ResultLabel}`, ...(state.campaignSummaryNotes || [])].slice(0, 3);
   }
+  settleBetweenNightDayShift(summary);
   state.shiftPressureSnapshot = buildShiftPressureSnapshot(summary);
   if (options.force) {
     audioController.playDawn();
@@ -5904,6 +6503,7 @@ function nextNight() {
   state.shiftStats = createShiftStats();
   state.powerEconomy = buildFreshPowerEconomy();
   applyNightStartProgression(state);
+  applyDayShiftPlanForNightStart();
   state.cameraScene = buildFreshCameraSceneState();
   resetLocationStateForNight(state);
   state.autoIncidentCooldown = 0;

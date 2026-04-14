@@ -158,7 +158,14 @@ function ensureHistoryRecord(history, guestName) {
       lastRoomId: null,
       lastArchetype: null,
       roomMemoryWeight: 0,
-      returnModifier: 'neutral'
+      returnModifier: 'neutral',
+      lastFactionId: null,
+      lastFactionLabel: null,
+      lastFactionMark: null,
+      lastForgeryState: null,
+      lastLinkedArrivalKind: null,
+      storyFlags: [],
+      lastDeskTreatment: null
     };
   }
   return history[guestName];
@@ -249,10 +256,26 @@ function buildReturningGuestVariant(baseGuest, history, activeStoryBeat) {
   variant.extraEncounterNote = history.wasHarshlyRejected
     ? 'Desk tone may escalate quickly if rejected again.'
     : 'Known guest: de-escalation may produce cleaner outcomes.';
+  variant.factionMemoryLine = history.lastFactionLabel
+    ? `Prior network sign: ${history.lastFactionLabel}${history.lastFactionMark ? ` (${history.lastFactionMark})` : ''}.`
+    : '';
+  variant.documentMemoryLine = history.lastForgeryState
+    ? `Document history: ${history.lastForgeryState}.`
+    : '';
+  variant.linkedArrivalMemoryLine = history.lastLinkedArrivalKind
+    ? `Previous linked-arrival pattern: ${history.lastLinkedArrivalKind}.`
+    : '';
 
   if (activeStoryBeat?.title) {
     variant.threadMemoryLine = `Thread clue: ${activeStoryBeat.title} remains unresolved.`;
   }
+
+  variant.threadMemoryLine = [
+    variant.threadMemoryLine,
+    variant.factionMemoryLine,
+    variant.documentMemoryLine,
+    variant.linkedArrivalMemoryLine
+  ].filter(Boolean).join(' ');
 
   return variant;
 }
@@ -293,25 +316,41 @@ export function markThreadOutcome(state, payload = {}) {
     record.lastMood = mood;
     record.lastRoomId = payload?.guest?.assignedRoomId || payload?.linkedRoomId || payload?.roomId || record.lastRoomId || null;
     record.lastArchetype = payload?.guest?.archetypeKey || payload?.guest?.archetypeLabel || record.lastArchetype || null;
+    record.lastFactionId = payload?.guest?.factionProfile?.id || record.lastFactionId || null;
+    record.lastFactionLabel = payload?.guest?.factionProfile?.label || record.lastFactionLabel || null;
+    record.lastFactionMark = payload?.guest?.factionProfile?.visibleMark || payload?.guest?.factionProfile?.hiddenMark || record.lastFactionMark || null;
+    record.lastForgeryState = payload?.guest?.forgeryProfile?.isForged
+      ? payload?.guest?.uvProfile?.suspicious || payload?.guest?.idProfile?.validity === 'Questionable'
+        ? 'prior desk checks exposed suspicious document tampering'
+        : 'prior file carries unresolved forgery risk'
+      : record.lastForgeryState || null;
+    record.lastLinkedArrivalKind = payload?.guest?.linkedArrival?.kind || record.lastLinkedArrivalKind || null;
+    record.lastDeskTreatment = action;
+    record.storyFlags = Array.isArray(record.storyFlags) ? record.storyFlags : [];
 
     if (action === 'reject') {
       record.lastOutcome = 'rejected';
       record.wasHarshlyRejected = riskLevel !== 'High';
       record.wasHandledCleanly = false;
       record.returnModifier = record.wasHarshlyRejected ? 'resentful' : 'deflecting';
+      if (!record.storyFlags.includes('turned-away')) record.storyFlags.push('turned-away');
     } else if (action === 'checkin') {
       record.lastOutcome = 'checkedIn';
       record.wasHandledCleanly = true;
       record.wasHarshlyRejected = false;
       record.returnModifier = 'recognizes-you';
+      if (!record.storyFlags.includes('was-housed')) record.storyFlags.push('was-housed');
     } else if (action === 'flag') {
       record.lastOutcome = 'flagged';
       record.returnModifier = 'knows-you-watched';
+      if (!record.storyFlags.includes('desk-watch')) record.storyFlags.push('desk-watch');
     } else if (action === 'evicted') {
       record.lastOutcome = 'evicted';
       record.wasHandledCleanly = false;
       record.returnModifier = 'hostile-return';
+      if (!record.storyFlags.includes('forced-out')) record.storyFlags.push('forced-out');
     }
+    record.storyFlags = record.storyFlags.slice(-6);
   }
 
   const linked = safeArray(state.storyThreads).find(
