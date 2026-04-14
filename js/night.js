@@ -32,6 +32,15 @@ export function buildNightSummary(state) {
   if (Number(state?.shiftStats?.recurringGuestsHandled || 0) > 0 || Number(state?.shiftStats?.recurringGuestsMissed || 0) > 0) {
     identity.push('Returning guest history shaped the tone of the shift more directly than a clean first-time desk flow.');
   }
+  if (Number(state?.shiftStats?.roomCallsTriggered || 0) > 0) {
+    identity.push(`Occupied rooms stayed active: ${state.shiftStats.roomCallsTriggered} room call${state.shiftStats.roomCallsTriggered === 1 ? '' : 's'} reached the desk during the shift.`);
+  }
+  if (Number(state?.shiftStats?.roomReassignments || 0) > 0) {
+    identity.push('Room reassignment changed the flow of the night, buying control in one place at the cost of visible disruption elsewhere.');
+  }
+  if (Number(state?.shiftStats?.roomCallsMissed || 0) > 0) {
+    identity.push('At least one occupied-room service failure fed back into the motel’s wider pressure instead of staying contained.');
+  }
 
   return {
     ...base,

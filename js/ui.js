@@ -894,6 +894,8 @@ export function renderNightEventOverlay(state) {
 
 export function renderRooms(
   state,
+  onRoomServiceAction,
+  onReassignRoomGuest,
   onLockDownRoom,
   onCallPoliceForRoom,
   onCutPowerToRoom,
@@ -934,12 +936,26 @@ export function renderRooms(
           ${typeof room.chainPressure === 'number' && room.chainPressure > 0 ? `<p class="room-chain-line ${room.chainPressure >= 6 ? 'is-high' : ''}" title="Chain pressure tracks linked incident momentum across rooms.">Chain Pressure: ${room.chainPressure}</p>` : '<p class="room-chain-line" title="Chain pressure tracks linked incident momentum across rooms.">Chain Pressure: Low</p>'}
           <span class="room-state-chip">Locked: ${getBooleanText(room.lockedDown)}</span>
           <span class="room-state-chip">Power Cut: ${getBooleanText(room.powerCut)}</span>
+          <span class="room-state-chip">Mood: ${room?.serviceState?.mood || 'steady'}</span>
         </div>
+        ${room?.serviceState?.pendingRequest
+          ? `<div class="room-service-alert room-service-alert-${room.serviceState.pendingRequest.urgency || 'low'}">
+              <p class="room-service-title">Red Phone: ${room.serviceState.pendingRequest.title}</p>
+              <p class="room-service-detail">${room.serviceState.pendingRequest.detail || ''}</p>
+            </div>`
+          : ''}
         <div class="room-meta-grid room-meta-grid-compact">
           ${presentation.compactMetaRows
             .map((row) => `<p class="room-meta-line"><span>${row.label}</span><strong>${row.value}</strong></p>`)
             .join('')}
+          <p class="room-meta-line"><span>Open Issues</span><strong>${Number(room?.serviceState?.unresolvedIssues || 0)}</strong></p>
+          <p class="room-meta-line"><span>Service</span><strong>${room?.serviceState?.responseStatus || 'Quiet'}</strong></p>
         </div>
+        ${room?.serviceState?.lastCheckLine ? `<p class="room-service-note muted">${room.serviceState.lastCheckLine}</p>` : ''}
+        ${room?.serviceState?.serviceHistory?.length
+          ? `<p class="room-service-note muted">Recent service: ${room.serviceState.serviceHistory[0]}</p>`
+          : ''}
+        <div class="room-service-row"></div>
         <div class="room-tactical-row"></div>
       `
       : `
@@ -951,7 +967,65 @@ export function renderRooms(
       `;
 
     if (room.occupied) {
+      const serviceActions = card.querySelector('.room-service-row');
       const actions = card.querySelector('.room-tactical-row');
+      const hasPendingRequest = Boolean(room?.serviceState?.pendingRequest);
+
+      const hallwayButton = document.createElement('button');
+      hallwayButton.className = 'button button-secondary';
+      hallwayButton.textContent = 'Hallway Check';
+      hallwayButton.title = 'Quick verification action that clarifies the room call before committing staff.';
+      hallwayButton.disabled = !hasPendingRequest;
+      bindAtomicActionButton(hallwayButton, () => onRoomServiceAction(room.id, 'hallway'), { groupRoot: serviceActions });
+
+      const deskButton = document.createElement('button');
+      deskButton.className = 'button button-utility';
+      deskButton.textContent = 'Handle Desk';
+      deskButton.title = 'Try to settle the request from the desk. Fast, but not always enough.';
+      deskButton.disabled = !hasPendingRequest;
+      bindAtomicActionButton(deskButton, () => onRoomServiceAction(room.id, 'desk'), { groupRoot: serviceActions });
+
+      const maintenanceButton = document.createElement('button');
+      maintenanceButton.className = 'button button-utility';
+      maintenanceButton.textContent = 'Send Maint.';
+      maintenanceButton.title = 'Send maintenance for locks, water, and power complaints.';
+      maintenanceButton.disabled = !hasPendingRequest;
+      bindAtomicActionButton(maintenanceButton, () => onRoomServiceAction(room.id, 'maintenance'), { groupRoot: serviceActions });
+
+      const securityButton = document.createElement('button');
+      securityButton.className = 'button button-warning';
+      securityButton.textContent = 'Send Security';
+      securityButton.title = 'Best for door-side tension and disturbance calls, but socially risky.';
+      securityButton.disabled = !hasPendingRequest;
+      bindAtomicActionButton(securityButton, () => onRoomServiceAction(room.id, 'security'), { groupRoot: serviceActions });
+
+      const runnerButton = document.createElement('button');
+      runnerButton.className = 'button button-secondary';
+      runnerButton.textContent = 'Send Runner';
+      runnerButton.title = 'Light service response for complaints and room-calming support.';
+      runnerButton.disabled = !hasPendingRequest;
+      bindAtomicActionButton(runnerButton, () => onRoomServiceAction(room.id, 'runner'), { groupRoot: serviceActions });
+
+      const ignoreButton = document.createElement('button');
+      ignoreButton.className = 'button button-danger';
+      ignoreButton.textContent = 'Delay';
+      ignoreButton.title = 'Delay or ignore the call. Fast, but often dangerous.';
+      ignoreButton.disabled = !hasPendingRequest;
+      bindAtomicActionButton(ignoreButton, () => onRoomServiceAction(room.id, 'ignore'), { groupRoot: serviceActions });
+
+      const reassignButton = document.createElement('button');
+      reassignButton.className = 'button button-warning';
+      reassignButton.textContent = 'Reassign Room';
+      reassignButton.title = 'Move the guest to a cleaner vacant room when pressure or complaints justify it.';
+      bindAtomicActionButton(reassignButton, () => onReassignRoomGuest(room.id), { groupRoot: serviceActions });
+
+      serviceActions.appendChild(hallwayButton);
+      serviceActions.appendChild(deskButton);
+      serviceActions.appendChild(maintenanceButton);
+      serviceActions.appendChild(securityButton);
+      serviceActions.appendChild(runnerButton);
+      serviceActions.appendChild(ignoreButton);
+      serviceActions.appendChild(reassignButton);
 
       const lockDownButton = document.createElement('button');
       lockDownButton.className = 'button button-warning';

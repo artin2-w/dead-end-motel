@@ -2267,8 +2267,51 @@
   margin-top: 0.2rem;
 }
 
+.room-service-alert {
+  margin: 0.3rem 0 0.45rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.room-service-alert-medium {
+  border-color: rgba(251, 191, 36, 0.25);
+  background: rgba(120, 53, 15, 0.12);
+}
+
+.room-service-alert-high {
+  border-color: rgba(244, 63, 94, 0.3);
+  background: rgba(127, 29, 29, 0.16);
+}
+
+.room-service-title,
+.room-service-detail,
+.room-service-note {
+  margin: 0;
+}
+
+.room-service-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.room-service-detail,
+.room-service-note {
+  margin-top: 0.18rem;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.room-service-row,
 .room-tactical-row {
   margin-top: 0.68rem;
+}
+
+.room-service-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
 }
 
 .report-panel-actions {

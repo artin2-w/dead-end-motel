@@ -5,6 +5,7 @@ import {
   getAvailableRoom,
   applyRoomUnlockFlags,
   applyStayDecrementBetweenNights,
+  checkoutVacatedRoom,
   computeStayNightsForGuest,
   getUnlockedRoomCapForNight
 } from './rooms.js';
@@ -916,6 +917,7 @@ function restoreNightStartSnapshot(options = {}) {
   state.rooms = normalizeEscalationRooms(applyRoomUnlockFlags(state.rooms || [], state.night));
   state.rooms = normalizeResponseRooms(state.rooms);
   state.rooms = normalizeTacticalRooms(state.rooms);
+  state = normalizeRoomServiceState(state);
   state.shiftStats = normalizeShiftStats(state.shiftStats);
   state = normalizeNightCycleState(state);
   state = normalizePowerEconomyState(state);
@@ -1238,6 +1240,450 @@ function getRoomAssignmentOptionsForGuest(guest, rooms = state?.rooms || []) {
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
+}
+
+function getDefaultRoomServiceState(serviceState = {}) {
+  return {
+    pendingRequest: serviceState?.pendingRequest && typeof serviceState.pendingRequest === 'object'
+      ? { ...serviceState.pendingRequest }
+      : null,
+    urgency: serviceState?.urgency || 'low',
+    mood: serviceState?.mood || 'steady',
+    unresolvedIssues: Math.max(0, Number(serviceState?.unresolvedIssues || 0)),
+    serviceHistory: Array.isArray(serviceState?.serviceHistory) ? serviceState.serviceHistory.slice(-4) : [],
+    requestCooldown: Math.max(0, Number(serviceState?.requestCooldown || 0)),
+    requestCount: Math.max(0, Number(serviceState?.requestCount || 0)),
+    lastCheckLine: String(serviceState?.lastCheckLine || ''),
+    responseStatus: String(serviceState?.responseStatus || ''),
+    dispatchLocked: Boolean(serviceState?.dispatchLocked),
+    hallwayChecked: Boolean(serviceState?.hallwayChecked),
+    handledFromDesk: Math.max(0, Number(serviceState?.handledFromDesk || 0))
+  };
+}
+
+function buildRoomServiceMood(room) {
+  const risk = String(room?.riskLevel || 'Low');
+  const chain = Number(getVisibleChainPressureForRoom(state, room?.id) || 0);
+  const unresolved = Number(room?.serviceState?.unresolvedIssues || 0);
+  if (risk === 'High' || chain >= 5 || unresolved >= 2) return 'volatile';
+  if (risk === 'Medium' || chain >= 2 || unresolved >= 1) return 'tense';
+  return 'steady';
+}
+
+function normalizeRoomServiceState(targetState = state) {
+  if (!targetState || typeof targetState !== 'object') return targetState;
+  const crisis = targetState?.crisisNight || {};
+  targetState.rooms = (Array.isArray(targetState.rooms) ? targetState.rooms : []).map((room) => {
+    const serviceState = getDefaultRoomServiceState(room?.serviceState);
+    const occupied = Boolean(room?.occupiedBy);
+    const nextService = occupied
+      ? {
+        ...serviceState,
+        mood: buildRoomServiceMood({ ...room, serviceState })
+      }
+      : {
+        ...getDefaultRoomServiceState(),
+        mood: crisis.kind === 'hostile-social-night' ? 'touchy' : 'steady'
+      };
+    return {
+      ...room,
+      serviceState: nextService
+    };
+  });
+  return targetState;
+}
+
+function updateRoomById(roomId, updater) {
+  let nextRoom = null;
+  state.rooms = (state.rooms || []).map((room) => {
+    if (Number(room?.id) !== Number(roomId)) return room;
+    nextRoom = typeof updater === 'function' ? updater(room) : room;
+    return nextRoom;
+  });
+  return nextRoom;
+}
+
+function buildRoomCallFor(room, targetState = state) {
+  const crisis = targetState?.crisisNight || {};
+  const archetype = String(room?.occupantArchetypeLabel || '').toLowerCase();
+  const chain = Number(getVisibleChainPressureForRoom(targetState, room?.id) || 0);
+  const memoryPressure = getRoomMemoryPressureBonus(room);
+  const templates = [
+    {
+      id: 'door-visitor',
+      title: 'Someone At The Door',
+      detail: `${room.occupiedBy} says somebody keeps stopping outside the door and not identifying themselves.`,
+      urgency: chain >= 4 ? 'high' : 'medium',
+      preferred: ['security', 'hallway', 'desk'],
+      serviceTag: 'suspicion'
+    },
+    {
+      id: 'noise-complaint',
+      title: 'Noise Complaint',
+      detail: `${room.occupiedBy} is calling about hallway noise and repeated wall-thumps near the room.`,
+      urgency: crisis.kind === 'guest-surge' ? 'high' : 'medium',
+      preferred: ['security', 'runner', 'hallway'],
+      serviceTag: 'disturbance'
+    },
+    {
+      id: 'lock-issue',
+      title: 'Lock Issue',
+      detail: `${room.occupiedBy} says the lock feels wrong and wants somebody to verify the door before they settle.`,
+      urgency: 'medium',
+      preferred: ['maintenance', 'hallway', 'desk'],
+      serviceTag: 'maintenance'
+    },
+    {
+      id: 'water-power',
+      title: 'Water / Power Issue',
+      detail: `${room.occupiedBy} reports bad water pressure or flickering power inside the room.`,
+      urgency: crisis.blackoutRisk ? 'high' : 'medium',
+      preferred: ['maintenance', 'runner', 'desk'],
+      serviceTag: 'utility'
+    },
+    {
+      id: 'refund-change',
+      title: 'Refund Or Room Change',
+      detail: `${room.occupiedBy} is demanding a refund or a move because the room feels wrong to them.`,
+      urgency: 'medium',
+      preferred: ['desk', 'runner', 'reassign'],
+      serviceTag: 'complaint'
+    },
+    {
+      id: 'watching-me',
+      title: 'Thinks Someone Is Watching',
+      detail: `${room.occupiedBy} sounds frightened and insists someone is watching from the hallway or lot.`,
+      urgency: crisis.kind === 'hostile-social-night' || memoryPressure >= 2 ? 'high' : 'medium',
+      preferred: ['hallway', 'security', 'reassign'],
+      serviceTag: 'paranoia'
+    }
+  ];
+  let pool = templates.slice();
+  if (archetype.includes('contractor') || archetype.includes('professional')) {
+    pool = pool.filter((entry) => entry.id !== 'refund-change');
+  }
+  if (archetype.includes('quiet') && Math.random() < 0.4) {
+    pool = pool.filter((entry) => entry.id !== 'noise-complaint');
+  }
+  const chosen = pool[(Number(room?.id || 1) + Number(targetState?.shiftElapsedMinutes || 0) + Number(targetState?.night || 1)) % pool.length];
+  return {
+    id: `${chosen.id}-${room.id}-${targetState.night}-${targetState.shiftElapsedMinutes}`,
+    kind: chosen.id,
+    title: chosen.title,
+    detail: chosen.detail,
+    urgency: chosen.urgency,
+    preferred: chosen.preferred,
+    serviceTag: chosen.serviceTag,
+    verified: false
+  };
+}
+
+function maybeGenerateOccupiedRoomRequest(source = 'tick') {
+  const occupied = (state.rooms || []).filter((room) => room?.occupiedBy);
+  if (!occupied.length) return false;
+  const candidates = occupied.filter((room) => {
+    const service = getDefaultRoomServiceState(room?.serviceState);
+    return !service.pendingRequest && service.requestCooldown <= 0;
+  });
+  if (!candidates.length) return false;
+  const crisis = state?.crisisNight || {};
+  const baseChance = crisis.active ? 0.2 : 0.1;
+  const roll = Math.random();
+  if (roll > baseChance) return false;
+  const target = candidates.sort((a, b) => {
+    const aPressure = Number(getVisibleChainPressureForRoom(state, a.id) || 0) + getRoomMemoryPressureBonus(a);
+    const bPressure = Number(getVisibleChainPressureForRoom(state, b.id) || 0) + getRoomMemoryPressureBonus(b);
+    return bPressure - aPressure;
+  })[0];
+  if (!target) return false;
+  const request = buildRoomCallFor(target, state);
+  updateRoomById(target.id, (room) => {
+    const serviceState = getDefaultRoomServiceState(room?.serviceState);
+    return {
+      ...room,
+      serviceState: {
+        ...serviceState,
+        pendingRequest: request,
+        urgency: request.urgency,
+        requestCount: serviceState.requestCount + 1,
+        responseStatus: `Desk call active: ${request.title}`,
+        hallwayChecked: false,
+        lastCheckLine: ''
+      }
+    };
+  });
+  state.logs.push(`Red phone: ${target.label} called the desk. ${request.detail}`);
+  pushLiveAlert(state, {
+    type: request.urgency === 'high' ? 'warning' : 'info',
+    kind: 'actionable',
+    message: `${target.label}: ${request.title}`,
+    dedupeKey: `room-call-${target.id}-${request.kind}-${state.night}-${source}`
+  });
+  state.shiftStats.roomCallsTriggered = (state.shiftStats.roomCallsTriggered || 0) + 1;
+  return true;
+}
+
+function getServiceActionSpec(room, actionType) {
+  const service = getDefaultRoomServiceState(room?.serviceState);
+  const request = service.pendingRequest;
+  const preferred = Array.isArray(request?.preferred) ? request.preferred : [];
+  const preferredMatch = preferred.includes(actionType);
+  const urgency = String(request?.urgency || 'low');
+  const mood = service.mood || 'steady';
+  let successChance = 0.72;
+  if (actionType === 'desk') successChance -= 0.1;
+  if (actionType === 'security') successChance += (request?.serviceTag === 'suspicion' || request?.serviceTag === 'disturbance') ? 0.12 : -0.04;
+  if (actionType === 'maintenance') successChance += (request?.serviceTag === 'utility' || request?.serviceTag === 'maintenance') ? 0.14 : -0.05;
+  if (actionType === 'runner') successChance += (request?.serviceTag === 'complaint') ? 0.1 : 0;
+  if (preferredMatch) successChance += 0.08;
+  if (urgency === 'high') successChance -= 0.08;
+  if (mood === 'volatile') successChance -= 0.08;
+  if (service.hallwayChecked) successChance += 0.06;
+  successChance = Math.max(0.22, Math.min(0.9, successChance));
+  return {
+    successChance,
+    moneyCost:
+      actionType === 'security' ? 5
+      : actionType === 'maintenance' ? 4
+      : actionType === 'runner' ? 3
+      : actionType === 'desk' ? 0
+      : 0,
+    powerCost:
+      actionType === 'maintenance' ? 2
+      : actionType === 'security' ? 1
+      : 0,
+    timeAction: actionType === 'desk' ? 'review' : 'dispatch'
+  };
+}
+
+function resolveRoomServiceAction(roomId, actionType) {
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const room = (state.rooms || []).find((entry) => Number(entry?.id) === Number(roomId));
+  if (!room?.occupiedBy) return;
+  const service = getDefaultRoomServiceState(room?.serviceState);
+  const request = service.pendingRequest;
+  if (!request) {
+    pushLiveAlert(state, {
+      type: 'info',
+      message: `${room.label} has no active room call right now.`,
+      dedupeKey: `service-no-request-${room.id}`
+    });
+    renderAll();
+    return;
+  }
+  if (actionType === 'ignore') {
+    updateRoomById(roomId, (currentRoom) => {
+      const currentService = getDefaultRoomServiceState(currentRoom?.serviceState);
+      return {
+        ...currentRoom,
+        condition: currentRoom.condition === 'Stable' ? 'Watch' : 'Critical',
+        serviceState: {
+          ...currentService,
+          unresolvedIssues: currentService.unresolvedIssues + 1,
+          responseStatus: 'Desk delayed response',
+          serviceHistory: [`Ignored: ${request.title}`, ...currentService.serviceHistory].slice(0, 4),
+          requestCooldown: 1,
+          mood: 'volatile'
+        }
+      };
+    });
+    registerRoomChainSignal({
+      roomId,
+      guestName: room.occupiedBy,
+      type: `room-call-ignored-${request.kind}`,
+      severity: request.urgency === 'high' ? 2 : 1
+    });
+    state.reputation = clampReputation(state.reputation - (request.urgency === 'high' ? 2 : 1));
+    state.logs.push(`${room.label} was told to wait on ${request.title}. The call cooled nothing and room pressure worsened.`);
+    if (checkFailureState()) return;
+    if (progressShift('dispatch', { timeScale: 0.55, passiveDrainScale: 0.6 })) return;
+    renderAll();
+    return;
+  }
+  if (actionType === 'hallway') {
+    updateRoomById(roomId, (currentRoom) => {
+      const currentService = getDefaultRoomServiceState(currentRoom?.serviceState);
+      const line =
+        request.kind === 'door-visitor'
+          ? 'Hallway check found movement near the door, but no clean identification.'
+          : request.kind === 'watching-me'
+            ? 'Hallway check caught a bad angle and enough unease to justify caution.'
+            : request.kind === 'noise-complaint'
+              ? 'Hallway check confirmed there is real noise bleed around the room.'
+              : 'Hallway check narrowed the problem before staff committed.';
+      return {
+        ...currentRoom,
+        serviceState: {
+          ...currentService,
+          hallwayChecked: true,
+          lastCheckLine: line,
+          responseStatus: 'Hallway check complete',
+          serviceHistory: [`Hallway check: ${request.title}`, ...currentService.serviceHistory].slice(0, 4)
+        }
+      };
+    });
+    state.logs.push(`${room.label}: hallway check complete. ${request.kind === 'door-visitor' ? 'The desk now has more reason to treat the call as real.' : 'The desk has clearer context before acting.'}`);
+    if (checkFailureState()) return;
+    if (progressShift('review', { timeScale: 0.65, passiveDrainScale: 0.5 })) return;
+    renderAll();
+    return;
+  }
+
+  const spec = getServiceActionSpec(room, actionType);
+  if (state.money < spec.moneyCost) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: `Not enough money to send ${actionType}.`,
+      dedupeKey: `service-funds-${room.id}-${actionType}`
+    });
+    renderAll();
+    return;
+  }
+  state.money = Math.max(0, state.money - spec.moneyCost);
+  state.power = clampPower(state.power - spec.powerCost);
+  const success = Math.random() <= spec.successChance;
+  updateRoomById(roomId, (currentRoom) => {
+    const currentService = getDefaultRoomServiceState(currentRoom?.serviceState);
+    const nextCondition = success
+      ? (currentRoom.condition === 'Critical' ? 'Watch' : 'Stable')
+      : (currentRoom.condition === 'Stable' ? 'Watch' : 'Critical');
+    const nextUnresolved = success ? Math.max(0, currentService.unresolvedIssues - 1) : currentService.unresolvedIssues + 1;
+    return {
+      ...currentRoom,
+      condition: nextCondition,
+      serviceState: {
+        ...currentService,
+        pendingRequest: success ? null : currentService.pendingRequest,
+        urgency: success ? 'low' : currentService.urgency,
+        unresolvedIssues: nextUnresolved,
+        requestCooldown: success ? 2 : 1,
+        responseStatus: success ? `${actionType} resolved ${request.title}` : `${actionType} failed to settle ${request.title}`,
+        serviceHistory: [`${success ? 'Resolved' : 'Missed'} via ${actionType}: ${request.title}`, ...currentService.serviceHistory].slice(0, 4),
+        mood: success ? 'steady' : 'volatile',
+        handledFromDesk: currentService.handledFromDesk + (actionType === 'desk' ? 1 : 0),
+        hallwayChecked: false
+      }
+    };
+  });
+  if (success) {
+    calmRoomChain(roomId, actionType === 'security' ? 3 : 2);
+    state.reputation = clampReputation(state.reputation + 1);
+    state.logs.push(`${room.label}: ${actionType} handled ${request.title} cleanly. Occupied-room pressure eased instead of carrying forward.`);
+    state.shiftStats.roomCallsResolved = (state.shiftStats.roomCallsResolved || 0) + 1;
+    markRoomMemory(roomId, {
+      note: `${request.title} was handled cleanly here during the night.`
+    });
+  } else {
+    registerRoomChainSignal({
+      roomId,
+      guestName: room.occupiedBy,
+      type: `service-fail-${actionType}-${request.kind}`,
+      severity: request.urgency === 'high' ? 2 : 1
+    });
+    state.reputation = clampReputation(state.reputation - 1);
+    state.logs.push(`${room.label}: ${actionType} failed to calm ${request.title}. The room is now carrying fresh escalation risk.`);
+    state.shiftStats.roomCallsMissed = (state.shiftStats.roomCallsMissed || 0) + 1;
+    if (request.urgency === 'high') {
+      queueDeferredShiftCost({
+        turnsRemaining: 2,
+        reputationDelta: -1,
+        logLine: `${room.label} remembered the bad service response and the complaint came back harder later.`
+      });
+    }
+  }
+  if ((spec.moneyCost >= 4 || spec.powerCost >= 2) && (state.money <= 24 || state.power <= 28)) {
+    registerPanicSpend();
+  }
+  if (checkFailureState()) return;
+  if (progressShift(spec.timeAction, {
+    timeScale: actionType === 'desk' ? 0.9 : 1,
+    passiveDrainScale: actionType === 'maintenance' ? 1.1 : 1
+  })) return;
+  renderAll();
+}
+
+function getBestVacantReassignmentRoom(fromRoomId) {
+  const candidates = (state.rooms || [])
+    .filter((room) => Number(room?.id) !== Number(fromRoomId) && room?.unlocked !== false && !room?.occupied && room?.occupiedBy == null)
+    .map((room) => ({
+      room,
+      score: 20 - Number(getVisibleChainPressureForRoom(state, room.id) || 0) - getRoomMemoryPressureBonus(room)
+    }))
+    .sort((a, b) => b.score - a.score);
+  return candidates[0]?.room || null;
+}
+
+function reassignRoomGuest(roomId) {
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const fromRoom = (state.rooms || []).find((room) => Number(room?.id) === Number(roomId));
+  if (!fromRoom?.occupiedBy) return;
+  const targetRoom = getBestVacantReassignmentRoom(roomId);
+  if (!targetRoom) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'No vacant room is available for reassignment.',
+      dedupeKey: `reassign-none-${roomId}`
+    });
+    renderAll();
+    return;
+  }
+  const cost = 5;
+  if (state.money < cost) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'Reassignment unavailable: insufficient cash to comp the move.',
+      dedupeKey: `reassign-funds-${roomId}`
+    });
+    renderAll();
+    return;
+  }
+  state.money = Math.max(0, state.money - cost);
+  const carriedService = getDefaultRoomServiceState(fromRoom?.serviceState);
+  const movedRequest = carriedService.pendingRequest;
+  updateRoomById(targetRoom.id, (room) => ({
+    ...room,
+    occupied: true,
+    occupiedBy: fromRoom.occupiedBy,
+    guestName: fromRoom.guestName,
+    stayNightsRemaining: fromRoom.stayNightsRemaining,
+    condition: fromRoom.condition === 'Critical' ? 'Watch' : fromRoom.condition,
+    riskLevel: fromRoom.riskLevel,
+    trait: fromRoom.trait,
+    deskFlagged: fromRoom.deskFlagged,
+    policyRecommendation: fromRoom.policyRecommendation,
+    policyOverride: fromRoom.policyOverride,
+    occupantArchetypeLabel: fromRoom.occupantArchetypeLabel,
+    occupantHiddenIntent: fromRoom.occupantHiddenIntent,
+    occupantChainBias: fromRoom.occupantChainBias,
+    serviceState: {
+      ...getDefaultRoomServiceState(carriedService),
+      pendingRequest: movedRequest && (movedRequest.kind === 'refund-change' || movedRequest.kind === 'watching-me' || movedRequest.kind === 'noise-complaint')
+        ? null
+        : movedRequest,
+      unresolvedIssues: Math.max(0, carriedService.unresolvedIssues - 1),
+      responseStatus: `Reassigned from ${fromRoom.label}`,
+      serviceHistory: [`Moved from ${fromRoom.label} to ${targetRoom.label}`, ...carriedService.serviceHistory].slice(0, 4),
+      requestCooldown: 2,
+      mood: 'tense'
+    }
+  }));
+  updateRoomById(fromRoom.id, (room) => ({
+    ...checkoutVacatedRoom(room),
+    serviceState: getDefaultRoomServiceState()
+  }));
+  calmRoomChain(targetRoom.id, 2);
+  calmRoomChain(fromRoom.id, 2);
+  markRoomMemory(targetRoom.id, {
+    note: `${fromRoom.occupiedBy} was reassigned into this room during a live service issue.`
+  });
+  state.reputation = clampReputation(state.reputation - 1);
+  state.logs.push(`${fromRoom.occupiedBy} was reassigned from ${fromRoom.label} to ${targetRoom.label}. The move bought space, but guests noticed the disruption.`);
+  state.shiftStats.roomReassignments = (state.shiftStats.roomReassignments || 0) + 1;
+  if (checkFailureState()) return;
+  if (progressShift('dispatch', { timeScale: 1.05, passiveDrainScale: 1 })) return;
+  renderAll();
 }
 
 function ensureCrisisEscalationState(targetState = state) {
@@ -1998,6 +2444,7 @@ function bootstrapState() {
   state.rooms = normalizeEscalationRooms(state.rooms);
   state.rooms = normalizeResponseRooms(state.rooms);
   state.rooms = normalizeTacticalRooms(state.rooms);
+  state = normalizeRoomServiceState(state);
   state.cameras = state.cameras?.length ? state.cameras : createDefaultCameras();
   state.guests = Array.isArray(state.guests) ? state.guests : [];
   state = normalizeRoomMemoryState(state);
@@ -2085,6 +2532,8 @@ function renderAll() {
   );
   renderRooms(
     renderState,
+    resolveRoomServiceAction,
+    reassignRoomGuest,
     lockDownRoom,
     callPoliceForRoom,
     cutPowerToRoom,
@@ -2166,6 +2615,7 @@ function startFreshCampaignRun() {
   state.rooms = normalizeEscalationRooms(createDefaultRooms({ unlockedCap: getUnlockedRoomCapForNight(1) }));
   state.rooms = normalizeResponseRooms(state.rooms);
   state.rooms = normalizeTacticalRooms(state.rooms);
+  state = normalizeRoomServiceState(state);
   state.cameras = createDefaultCameras();
   state.guests = [];
   state.logs = ['New campaign initialized. Motel systems back online for Night 1.'];
@@ -2337,6 +2787,7 @@ function startShift() {
   }
   syncFinaleStateForNight({ refreshBranch: true });
   state.rooms = applyRoomUnlockFlags(state.rooms || [], state.night);
+  state = normalizeRoomServiceState(state);
   refreshIntakeBudgetForNight(state);
   normalizeIntakeState(state);
   normalizeDeskInspectionState(state);
@@ -3196,6 +3647,7 @@ function checkInGuest(guestId, requestedRoomId = null) {
   room.memory = room?.memory && typeof room.memory === 'object'
     ? { ...room.memory }
     : { nightsOccupied: 0, incidentsSeen: 0, harshActions: 0, returningGuestVisits: 0, signatures: [], note: '' };
+  room.serviceState = getDefaultRoomServiceState(room?.serviceState);
   room.memory.nightsOccupied = Math.max(0, Number(room.memory.nightsOccupied || 0) + 1);
   if (guest.isReturningGuest) {
     room.memory.returningGuestVisits = Math.max(0, Number(room.memory.returningGuestVisits || 0) + 1);
@@ -3209,6 +3661,10 @@ function checkInGuest(guestId, requestedRoomId = null) {
   if (guest.heldForScreening) {
     room.memory.note = `${room.memory.note} This room received a screened guest under visible lobby tension.`.trim();
   }
+  room.serviceState.mood = guest.riskLevel === 'High' ? 'volatile' : guest.riskLevel === 'Medium' ? 'tense' : 'steady';
+  room.serviceState.responseStatus = 'Checked in and settled.';
+  room.serviceState.requestCooldown = guest.depositRequested || guest.secondaryVerified ? 1 : 0;
+  room.serviceState.serviceHistory = [];
 
   if (room.deskFlagged && room.condition === 'Stable') {
     room.condition = 'Watch';
@@ -4711,6 +5167,17 @@ function advanceEscalationState() {
   state.rooms = tickEscalationRooms(state.rooms);
   state.rooms = tickResponseCooldowns(state.rooms);
   state.rooms = tickTacticalRooms(state.rooms);
+  state.rooms = (state.rooms || []).map((room) => {
+    const serviceState = getDefaultRoomServiceState(room?.serviceState);
+    return {
+      ...room,
+      serviceState: {
+        ...serviceState,
+        requestCooldown: Math.max(0, Number(serviceState.requestCooldown || 0) - 1),
+        mood: buildRoomServiceMood({ ...room, serviceState })
+      }
+    };
+  });
 
   state.rooms = state.rooms.map((room) => {
     const memoryPressure = getRoomMemoryPressureBonus(room);
@@ -4727,6 +5194,8 @@ function advanceEscalationState() {
   if (state.autoIncidentCooldown > 0) {
     state.autoIncidentCooldown -= 1;
   }
+
+  maybeGenerateOccupiedRoomRequest('escalation');
 }
 
 function nextNight() {
@@ -4749,6 +5218,7 @@ function nextNight() {
   state.rooms = normalizeEscalationRooms(nextRooms);
   state.rooms = normalizeResponseRooms(state.rooms);
   state.rooms = normalizeTacticalRooms(state.rooms);
+  state = normalizeRoomServiceState(state);
   state.cameras = createDefaultCameras();
   state.logs = [`Night ${state.night} started. Carrying forward room ledger, unlocked capacity, and outstanding stays.`];
   previousRooms.forEach((room) => {
