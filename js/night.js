@@ -11,6 +11,9 @@ export function buildNightSummary(state) {
     shiftStats: state.shiftStats
   });
   const crisis = state?.crisisNight || {};
+  const blackoutLevel = String(state?.crisisEscalation?.blackoutLevel || 'none');
+  const hallwayThreat = Number(state?.crisisEscalation?.hallwayThreatLevel || 0);
+  const overlapPressure = Number(state?.crisisEscalation?.overlapPressureLevel || 0);
   const identity = [];
   const carriedRooms = (state?.rooms || []).filter((room) => room?.occupiedBy).length;
   const rememberedRooms = (state?.rooms || []).filter((room) => Number(room?.memory?.incidentsSeen || 0) >= 2).length;
@@ -20,8 +23,16 @@ export function buildNightSummary(state) {
   if (crisis.kind === 'partial-blackout' || crisis.kind === 'utility-fragility') {
     identity.push('Infrastructure fragility shaped the whole shift, with power confidence and room control repeatedly threatening to collapse together.');
   }
+  if (blackoutLevel === 'full') {
+    identity.push('Blackout pressure reached a full hostile state, dragging cameras, shared-space confidence, and occupied-room control down at the same time.');
+  } else if (blackoutLevel === 'partial') {
+    identity.push('Partial blackout pressure strained the motel throughout the night and made every active room feel less reliable.');
+  }
   if (Array.isArray(state?.incidents) && state.incidents.some((incident) => String(incident?.type || '').toLowerCase().includes('hallway') || String(incident?.type || '').toLowerCase().includes('breaker') || String(incident?.type || '').toLowerCase().includes('parking'))) {
     identity.push('At least one signature incident turned routine pressure into a memorable motel-wide rupture.');
+  }
+  if (hallwayThreat >= 2 || overlapPressure >= 2) {
+    identity.push('Threat started moving through shared spaces, making the motel feel connected and hostile instead of room-by-room isolated.');
   }
   if (carriedRooms > 0) {
     identity.push(`${carriedRooms} occupied room${carriedRooms === 1 ? '' : 's'} were carried forward, so the shift began with continuity pressure already active.`);

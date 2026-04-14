@@ -1080,14 +1080,17 @@ function ensureCrisisNightState(targetState = state) {
 function buildNightIdentitySummary(targetState = state) {
   const scenario = targetState?.activeScenario || {};
   const crisis = targetState?.crisisNight || {};
+  const blackout = getBlackoutPressureState(targetState);
   const tags = [];
   if (scenario.label) tags.push(`Scenario: ${scenario.label}`);
   if (crisis.active && crisis.title) tags.push(crisis.title);
   if (Number(targetState?.night || 1) <= 2) tags.push('Mood: quiet but wrong');
   if (crisis.kind === 'hostile-social-night') tags.push('Mood: socially hostile');
   if (crisis.kind === 'utility-fragility' || crisis.kind === 'partial-blackout') tags.push('Mood: infrastructure-fragile');
+  if (blackout.level === 'partial' || blackout.level === 'full') tags.push(`Mood: blackout-${blackout.level}`);
   if (crisis.kind === 'guest-surge' || (targetState?.guests || []).length >= 3) tags.push('Mood: crowded and unstable');
   if (crisis.kind === 'stacked-pressure') tags.push('Mood: systems slipping together');
+  if (Number(targetState?.crisisEscalation?.hallwayThreatLevel || 0) >= 2) tags.push('Mood: hostile shared spaces');
   if ((targetState?.rooms || []).some((room) => Number(room?.memory?.incidentsSeen || 0) >= 2)) {
     tags.push('Mood: remembered room pressure');
   }
@@ -1395,13 +1398,18 @@ function buildRoomServiceMood(room) {
 function normalizeRoomServiceState(targetState = state) {
   if (!targetState || typeof targetState !== 'object') return targetState;
   const crisis = targetState?.crisisNight || {};
+  const blackout = getBlackoutPressureState(targetState);
   targetState.rooms = (Array.isArray(targetState.rooms) ? targetState.rooms : []).map((room) => {
     const serviceState = getDefaultRoomServiceState(room?.serviceState);
     const occupied = Boolean(room?.occupiedBy);
     const nextService = occupied
       ? {
         ...withAdjustedServiceState(serviceState),
-        mood: buildRoomServiceMood({ ...room, serviceState })
+        mood: buildRoomServiceMood({ ...room, serviceState }),
+        urgency:
+          blackout.urgencyBonus > 0 && serviceState.pendingRequest && serviceState.urgency !== 'high'
+            ? 'high'
+            : serviceState.urgency
       }
       : {
         ...withAdjustedServiceState(getDefaultRoomServiceState()),
@@ -1529,8 +1537,10 @@ function maybeGenerateOccupiedRoomRequest(source = 'tick') {
   });
   if (!candidates.length) return false;
   const crisis = state?.crisisNight || {};
+  const blackout = getBlackoutPressureState(state);
   const averageAnxiety = candidates.reduce((sum, room) => sum + Number(room?.serviceState?.anxiety || 0), 0) / Math.max(1, candidates.length);
-  const baseChance = (crisis.active ? 0.2 : 0.1) + Math.min(0.08, averageAnxiety * 0.02);
+  const overlapBoost = Math.max(0, Number(state?.crisisEscalation?.overlapPressureLevel || 0)) * 0.03;
+  const baseChance = (crisis.active ? 0.2 : 0.1) + Math.min(0.08, averageAnxiety * 0.02) + overlapBoost + (blackout.active ? 0.06 : 0);
   const roll = Math.random();
   if (roll > baseChance) return false;
   const target = candidates.sort((a, b) => {
@@ -1555,7 +1565,7 @@ function maybeGenerateOccupiedRoomRequest(source = 'tick') {
       serviceState: {
         ...serviceState,
         pendingRequest: request,
-        urgency: request.urgency,
+        urgency: blackout.urgencyBonus > 0 && request.urgency !== 'high' ? 'high' : request.urgency,
         requestCount: serviceState.requestCount + 1,
         responseStatus: `Desk call active: ${request.title}`,
         hallwayChecked: false,
@@ -1577,6 +1587,7 @@ function maybeGenerateOccupiedRoomRequest(source = 'tick') {
 function getServiceActionSpec(room, actionType) {
   const service = getDefaultRoomServiceState(room?.serviceState);
   const request = service.pendingRequest;
+  const blackout = getBlackoutPressureState(state);
   const preferred = Array.isArray(request?.preferred) ? request.preferred : [];
   const preferredMatch = preferred.includes(actionType);
   const urgency = String(request?.urgency || 'low');
@@ -1597,7 +1608,8 @@ function getServiceActionSpec(room, actionType) {
   if (truthState === 'false-alarm' && actionType === 'security') successChance -= 0.16;
   if (truthState === 'real-threat' && actionType === 'desk') successChance -= 0.1;
   if (truthState === 'real-threat' && actionType === 'security') successChance += 0.08;
-  successChance = Math.max(0.22, Math.min(0.9, successChance));
+  successChance -= Number(blackout.servicePenalty || 0);
+  successChance = Math.max(0.18, Math.min(0.9, successChance));
   return {
     successChance,
     partialChance: Math.max(0.1, Math.min(0.35, 0.18 + (service.hallwayChecked ? 0.04 : 0) + (truthState === 'unclear' ? 0.06 : 0))),
@@ -2120,6 +2132,10 @@ function ensureCrisisEscalationState(targetState = state) {
     targetState.crisisEscalation = {
       night: Math.max(1, Number(targetState?.night || 1)),
       blackoutTriggered: Boolean(existing.blackoutTriggered),
+      blackoutLevel: existing?.blackoutLevel || 'none',
+      hallwayThreatLevel: Math.max(0, Number(existing?.hallwayThreatLevel || 0)),
+      cameraInterferenceLevel: Math.max(0, Number(existing?.cameraInterferenceLevel || 0)),
+      overlapPressureLevel: Math.max(0, Number(existing?.overlapPressureLevel || 0)),
       signatureIdsSeen: Array.isArray(existing.signatureIdsSeen) ? existing.signatureIdsSeen : [],
       panicMoments: Math.max(0, Number(existing.panicMoments || 0)),
       crisisKind: crisis.kind || null
@@ -2129,11 +2145,82 @@ function ensureCrisisEscalationState(targetState = state) {
   targetState.crisisEscalation = {
     night: Math.max(1, Number(targetState?.night || 1)),
     blackoutTriggered: false,
+    blackoutLevel: 'none',
+    hallwayThreatLevel: 0,
+    cameraInterferenceLevel: 0,
+    overlapPressureLevel: 0,
     signatureIdsSeen: [],
     panicMoments: 0,
     crisisKind: crisis.kind || null
   };
   return targetState;
+}
+
+function getBlackoutPressureState(targetState = state) {
+  const crisis = targetState?.crisisNight || {};
+  const escalation = targetState?.crisisEscalation || {};
+  const power = Number(targetState?.power || 100);
+  if (escalation.blackoutLevel === 'full') {
+    return {
+      active: true,
+      level: 'full',
+      powerDropScale: 1.35,
+      cameraInterference: 3,
+      servicePenalty: 0.12,
+      urgencyBonus: 1,
+      hallwayThreatBonus: 2
+    };
+  }
+  if (escalation.blackoutLevel === 'partial' || (crisis.blackoutRisk && power <= 32)) {
+    return {
+      active: true,
+      level: 'partial',
+      powerDropScale: 1.18,
+      cameraInterference: 2,
+      servicePenalty: 0.08,
+      urgencyBonus: 1,
+      hallwayThreatBonus: 1
+    };
+  }
+  if (crisis.blackoutRisk) {
+    return {
+      active: false,
+      level: 'risk',
+      powerDropScale: 1.05,
+      cameraInterference: 1,
+      servicePenalty: 0.03,
+      urgencyBonus: 0,
+      hallwayThreatBonus: 1
+    };
+  }
+  return {
+    active: false,
+    level: 'none',
+    powerDropScale: 1,
+    cameraInterference: 0,
+    servicePenalty: 0,
+    urgencyBonus: 0,
+    hallwayThreatBonus: 0
+  };
+}
+
+function buildHallwayThreatLine(targetState = state) {
+  const crisis = targetState?.crisisNight || {};
+  const blackout = getBlackoutPressureState(targetState);
+  const hallwayThreat = Number(targetState?.crisisEscalation?.hallwayThreatLevel || 0);
+  if (blackout.level === 'full') {
+    return 'Hallway feel: blackout movement is bleeding through the corridor and the lobby no longer feels secure.';
+  }
+  if (blackout.level === 'partial') {
+    return 'Hallway feel: corridor visibility is thinning out and pressure is moving through shared spaces.';
+  }
+  if (crisis.kind === 'hostile-social-night' || hallwayThreat >= 2) {
+    return 'Hallway feel: voices, movement, and rumor pressure are carrying from room to room.';
+  }
+  if (crisis.kind === 'guest-surge' || Number(targetState?.crisisEscalation?.overlapPressureLevel || 0) >= 2) {
+    return 'Hallway feel: too many active rooms are pulling against the same thin motel calm.';
+  }
+  return 'Hallway feel: the shared spaces still seem quiet, but not trustworthy.';
 }
 
 function buildSignatureIncidentCatalog() {
@@ -2173,6 +2260,28 @@ function buildSignatureIncidentCatalog() {
       }),
       chainSeverity: 2,
       powerDelta: -8
+    },
+    {
+      id: 'lobby-shadow-crossing',
+      title: 'Lobby Shadow Crossing',
+      log: () => 'Signature incident: a shape crossed the lobby sightline and suddenly every shared space felt less contained.',
+      alert: () => 'Shared-space threat is now visible in the lobby itself.',
+      apply: (room) => ({
+        ...room,
+        condition: 'Critical'
+      }),
+      chainSeverity: 3
+    },
+    {
+      id: 'hallway-surge',
+      title: 'Hallway Surge',
+      log: (room) => `Signature incident: pressure moved through the hallway wall to wall and broke the calm around ${room.label}.`,
+      alert: () => 'A hostile hallway surge is connecting multiple active rooms.',
+      apply: (room) => ({
+        ...room,
+        condition: room.condition === 'Stable' ? 'Watch' : 'Critical'
+      }),
+      chainSeverity: 3
     }
   ];
 }
@@ -2219,6 +2328,8 @@ function triggerSignatureIncident(trigger = 'pressure') {
     severity: 'high'
   }];
   state.shiftStats.severeIncidents = (state.shiftStats.severeIncidents || 0) + 1;
+  state.crisisEscalation.hallwayThreatLevel = Math.max(Number(state?.crisisEscalation?.hallwayThreatLevel || 0), 2);
+  state.crisisEscalation.overlapPressureLevel = Math.max(Number(state?.crisisEscalation?.overlapPressureLevel || 0), 2);
   state.crisisEscalation.signatureIdsSeen = [...usedIds, incident.id];
   return true;
 }
@@ -2227,33 +2338,77 @@ function maybeTriggerBlackoutPressure(source = 'general') {
   ensureCrisisNightState(state);
   ensureCrisisEscalationState(state);
   const crisis = state?.crisisNight || {};
-  if (!crisis.blackoutRisk || state?.crisisEscalation?.blackoutTriggered) return false;
+  if (!crisis.blackoutRisk) return false;
   const lowPower = Number(state?.power || 100) <= 35;
   const lateNight = Number(state?.shiftElapsedMinutes || 0) >= 180;
   const criticalRooms = getCriticalOccupiedRoomCount();
+  const alreadyPartial = state?.crisisEscalation?.blackoutLevel === 'partial';
   const chance = lowPower || lateNight || criticalRooms >= 2 ? 0.34 : 0.12;
   if (Math.random() > chance) return false;
   state.crisisEscalation.blackoutTriggered = true;
-  state.power = clampPower(state.power - (crisis.kind === 'partial-blackout' ? 12 : 8));
+  state.crisisEscalation.blackoutLevel =
+    alreadyPartial || (crisis.kind === 'partial-blackout' && (lowPower || criticalRooms >= 2))
+      ? 'full'
+      : 'partial';
+  state.crisisEscalation.cameraInterferenceLevel = state.crisisEscalation.blackoutLevel === 'full' ? 3 : 2;
+  state.crisisEscalation.hallwayThreatLevel = Math.max(
+    Number(state?.crisisEscalation?.hallwayThreatLevel || 0),
+    state.crisisEscalation.blackoutLevel === 'full' ? 3 : 2
+  );
+  state.crisisEscalation.overlapPressureLevel = Math.max(
+    Number(state?.crisisEscalation?.overlapPressureLevel || 0),
+    state.crisisEscalation.blackoutLevel === 'full' ? 3 : 2
+  );
+  state.power = clampPower(
+    state.power - (state.crisisEscalation.blackoutLevel === 'full' ? 18 : crisis.kind === 'partial-blackout' ? 12 : 8)
+  );
   const occupied = (state.rooms || []).filter((room) => room?.occupiedBy);
-  occupied.slice(0, Math.max(1, Math.min(2, occupied.length))).forEach((room) => {
+  occupied.slice(0, Math.max(1, Math.min(state.crisisEscalation.blackoutLevel === 'full' ? 3 : 2, occupied.length))).forEach((room) => {
     registerRoomChainSignal({
       roomId: room.id,
       guestName: room.occupiedBy,
       type: `blackout-${source}`,
-      severity: 2
+      severity: state.crisisEscalation.blackoutLevel === 'full' ? 3 : 2
+    });
+    updateRoomById(room.id, (currentRoom) => {
+      const currentService = getDefaultRoomServiceState(currentRoom?.serviceState);
+      const activeRequest = currentService.pendingRequest
+        ? {
+            ...currentService.pendingRequest,
+            urgency: 'high'
+          }
+        : currentService.pendingRequest;
+      return {
+        ...currentRoom,
+        serviceState: {
+          ...withAdjustedServiceState(currentService, {
+            anxiety: 1,
+            irritation: state.crisisEscalation.blackoutLevel === 'full' ? 1 : 0,
+            rumorPressure: 1
+          }),
+          pendingRequest: activeRequest,
+          urgency: activeRequest ? 'high' : currentService.urgency,
+          responseStatus: state.crisisEscalation.blackoutLevel === 'full'
+            ? 'Blackout instability inside occupied room.'
+            : 'Partial blackout strain on room control.'
+        }
+      };
     });
   });
   state.logs.push(
-    crisis.kind === 'partial-blackout'
-      ? 'Partial blackout: corridor lighting dropped, front desk visibility narrowed, and room pressure spiked under the outage.'
-      : 'Blackout scare: power sagged across part of the property and room control immediately worsened.'
+    state.crisisEscalation.blackoutLevel === 'full'
+      ? 'Full blackout pressure: cameras, corridor visibility, and occupied-room control all degraded at once.'
+      : crisis.kind === 'partial-blackout'
+        ? 'Partial blackout: corridor lighting dropped, front desk visibility narrowed, and room pressure spiked under the outage.'
+        : 'Blackout scare: power sagged across part of the property and room control immediately worsened.'
   );
   pushLiveAlert(state, {
     type: 'danger',
-    message: crisis.kind === 'partial-blackout'
-      ? 'Partial blackout: visibility and control just got worse across the motel.'
-      : 'Blackout pressure: the property is slipping toward operational failure.',
+    message: state.crisisEscalation.blackoutLevel === 'full'
+      ? 'Full blackout pressure: shared spaces and room control are breaking down together.'
+      : crisis.kind === 'partial-blackout'
+        ? 'Partial blackout: visibility and control just got worse across the motel.'
+        : 'Blackout pressure: the property is slipping toward operational failure.',
     dedupeKey: `blackout-${state.night}`
   });
   state.shiftStats.majorPowerIncidents = (state.shiftStats.majorPowerIncidents || 0) + 1;
@@ -2360,6 +2515,7 @@ function calmRoomChain(roomId, amount = 2) {
 function buildRenderState() {
   normalizeDeskInspectionState(state);
   const uiPressureLevel = deriveUiPressureLevel(state);
+  const blackoutState = getBlackoutPressureState(state);
   const identity = getIdentityContext();
   const branchContext = getBranchContext(true);
   const campaign = getCampaignContext();
@@ -2427,6 +2583,12 @@ function buildRenderState() {
     campaignPrepForecast: [...(campaign.prepForecast || []), ...buildFinaleForeshadowNotes(state)].slice(0, 5),
     campaignSummaryNotes: Array.isArray(state?.campaignSummaryNotes) ? state.campaignSummaryNotes : [],
     crisisNight: state?.crisisNight || null,
+    blackoutState,
+    hallwayThreatLine: buildHallwayThreatLine(state),
+    cameraInterferenceLevel: Math.max(
+      blackoutState.cameraInterference,
+      Number(state?.crisisEscalation?.cameraInterferenceLevel || 0)
+    ),
     nightIdentityLine: buildNightIdentitySummary(state),
     motelCapacityLine: `Rooms licensed tonight: ${getUnlockedRoomCapForNight(state.night)} / 6`,
     intakeStatusLine: `Arrivals left: ${Math.max(0, Number(state?.intake?.arrivalsRemaining ?? 0))} • Desk queue cap: ${Math.max(0, Number(state?.intake?.queueCap ?? 3))} (${(state.guests || []).length} waiting)`,
@@ -2737,6 +2899,7 @@ function evaluatePresentationState() {
   }
 
   const warningFlags = getTopbarWarningFlags(state);
+  const blackout = getBlackoutPressureState(state);
   if (warningFlags.lowPower && !state.uiFlags.lowPowerWarned) {
     pushLiveAlert(state, {
       type: 'warning',
@@ -2790,11 +2953,54 @@ function evaluatePresentationState() {
   }
   if (chainPressure < 5) state.uiFlags.chainPressureWarned = false;
 
+  if (blackout.level === 'partial' && !state.uiFlags.partialBlackoutWarned) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'Partial blackout: camera confidence is slipping and active rooms are getting louder and less reliable.',
+      dedupeKey: `partial-blackout-${state.night}`
+    });
+    state.uiFlags.partialBlackoutWarned = true;
+  }
+  if (blackout.level !== 'partial') state.uiFlags.partialBlackoutWarned = false;
+
+  if (blackout.level === 'full' && !state.uiFlags.fullBlackoutWarned) {
+    pushLiveAlert(state, {
+      type: 'danger',
+      message: 'Full blackout pressure: shared spaces, cameras, and occupied rooms are all breaking down together.',
+      dedupeKey: `full-blackout-${state.night}`
+    });
+    state.uiFlags.fullBlackoutWarned = true;
+    audioController.playAlert('dire');
+  }
+  if (blackout.level !== 'full') state.uiFlags.fullBlackoutWarned = false;
+
   ensureCrisisEscalationState(state);
+  if (Number(state?.crisisEscalation?.hallwayThreatLevel || 0) >= 2 && !state.uiFlags.hallwayThreatWarned) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'Hallway threat is rising. Shared spaces no longer feel separate from the rooms.',
+      dedupeKey: `hallway-threat-${state.night}`
+    });
+    state.uiFlags.hallwayThreatWarned = true;
+  }
+  if (Number(state?.crisisEscalation?.hallwayThreatLevel || 0) < 2) state.uiFlags.hallwayThreatWarned = false;
+
+  if (Number(state?.crisisEscalation?.overlapPressureLevel || 0) >= 2 && !state.uiFlags.overlapWarned) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'Multiple active rooms are overlapping now. This no longer feels like isolated motel trouble.',
+      dedupeKey: `overlap-pressure-${state.night}`
+    });
+    state.uiFlags.overlapWarned = true;
+  }
+  if (Number(state?.crisisEscalation?.overlapPressureLevel || 0) < 2) state.uiFlags.overlapWarned = false;
+
   if ((warningFlags.criticalPressure || warningFlags.lowPower || chainPressure >= 10) && !state.uiFlags.panicSlipWarned) {
     pushLiveAlert(state, {
       type: 'danger',
-      message: 'Panic warning: command is thinning out. One more bad sequence could break the night open.',
+      message: blackout.level === 'full'
+        ? 'Collapse warning: blackout pressure is stripping control out of the motel faster than the desk can restore it.'
+        : 'Panic warning: command is thinning out. One more bad sequence could break the night open.',
       dedupeKey: `panic-slip-${state.night}`
     });
     state.uiFlags.panicSlipWarned = true;
@@ -5595,9 +5801,11 @@ function applyEscalationResult(result) {
 
 function advanceEscalationState() {
   state.escalationTick += 1;
+  ensureCrisisEscalationState(state);
   state.rooms = tickEscalationRooms(state.rooms);
   state.rooms = tickResponseCooldowns(state.rooms);
   state.rooms = tickTacticalRooms(state.rooms);
+  const blackout = getBlackoutPressureState(state);
   state.rooms = (state.rooms || []).map((room) => {
     const serviceState = getDefaultRoomServiceState(room?.serviceState);
     return {
@@ -5605,7 +5813,11 @@ function advanceEscalationState() {
       serviceState: {
         ...serviceState,
         requestCooldown: Math.max(0, Number(serviceState.requestCooldown || 0) - 1),
-        mood: buildRoomServiceMood({ ...room, serviceState })
+        mood: buildRoomServiceMood({ ...room, serviceState }),
+        urgency:
+          blackout.urgencyBonus > 0 && serviceState.pendingRequest && serviceState.urgency !== 'high'
+            ? 'high'
+            : serviceState.urgency
       }
     };
   });
@@ -5627,6 +5839,24 @@ function advanceEscalationState() {
   }
 
   maybeGenerateOccupiedRoomRequest('escalation');
+  if (
+    (state?.crisisNight?.kind === 'guest-surge' || blackout.active || state?.crisisNight?.kind === 'hostile-social-night') &&
+    Math.random() < (blackout.level === 'full' ? 0.3 : 0.16)
+  ) {
+    state.crisisEscalation.overlapPressureLevel = Math.max(
+      Number(state?.crisisEscalation?.overlapPressureLevel || 0),
+      blackout.level === 'full' ? 3 : 2
+    );
+    state.crisisEscalation.hallwayThreatLevel = Math.max(
+      Number(state?.crisisEscalation?.hallwayThreatLevel || 0),
+      state?.crisisNight?.kind === 'hostile-social-night' || blackout.active ? 2 : 1
+    );
+    state.crisisEscalation.cameraInterferenceLevel = Math.max(
+      Number(state?.crisisEscalation?.cameraInterferenceLevel || 0),
+      blackout.level === 'full' ? 3 : blackout.level === 'partial' ? 2 : 1
+    );
+    maybeGenerateOccupiedRoomRequest('overlap');
+  }
 }
 
 function nextNight() {

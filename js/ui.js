@@ -223,12 +223,27 @@ export function renderTopbar(state) {
 
   const appShell = document.getElementById('app');
   if (appShell) {
-    appShell.classList.remove('pressure-calm', 'pressure-tense', 'pressure-dire');
+    appShell.classList.remove(
+      'pressure-calm',
+      'pressure-tense',
+      'pressure-dire',
+      'atmosphere-blackout-risk',
+      'atmosphere-blackout-partial',
+      'atmosphere-blackout-full',
+      'atmosphere-hostile-night',
+      'atmosphere-hallway-threat'
+    );
     appShell.classList.add(`pressure-${state?.uiPressureLevel || 'calm'}`);
     const finaleBand = String(state?.finaleUi?.pressureBand || '');
     const finaleActive = Boolean(state?.finaleUi?.active);
     appShell.classList.toggle('is-finale-night', finaleActive);
     appShell.classList.toggle('is-last-stand', finaleActive && (finaleBand === 'critical' || finaleBand === 'high'));
+    const blackoutLevel = state?.blackoutState?.level || 'none';
+    appShell.classList.toggle('atmosphere-blackout-risk', blackoutLevel === 'risk');
+    appShell.classList.toggle('atmosphere-blackout-partial', blackoutLevel === 'partial');
+    appShell.classList.toggle('atmosphere-blackout-full', blackoutLevel === 'full');
+    appShell.classList.toggle('atmosphere-hostile-night', state?.crisisNight?.kind === 'hostile-social-night');
+    appShell.classList.toggle('atmosphere-hallway-threat', Number(state?.crisisEscalation?.hallwayThreatLevel || 0) >= 2);
   }
 
   const warningFlags = state?.topbarWarningFlags || {};
@@ -338,7 +353,17 @@ export function renderTopbar(state) {
 
   const shiftBranchHint = document.getElementById('shift-branch-hint');
   if (shiftBranchHint) {
-    shiftBranchHint.textContent = state?.directorShiftHint || 'Outlook: Pressure is mixed tonight.';
+    const blackoutLine = state?.blackoutState?.level === 'full'
+      ? 'Outlook: full blackout pressure is distorting cameras, service confidence, and room urgency.'
+      : state?.blackoutState?.level === 'partial'
+        ? 'Outlook: partial blackout pressure is dragging shared-space confidence down.'
+        : state?.directorShiftHint || 'Outlook: Pressure is mixed tonight.';
+    shiftBranchHint.textContent = blackoutLine;
+  }
+
+  const hallwayThreatLine = document.getElementById('hallway-threat-line');
+  if (hallwayThreatLine) {
+    hallwayThreatLine.textContent = state?.hallwayThreatLine || 'Hallway feel: the shared spaces still seem quiet, but not trustworthy.';
   }
 
   const campaignShiftLine = document.getElementById('campaign-shift-line');
@@ -1080,6 +1105,11 @@ function getCameraStatusClass(status) {
 export function renderCameras(state) {
   const grid = document.getElementById('camera-grid');
   grid.innerHTML = '';
+  grid.classList.remove('camera-grid-glitch-light', 'camera-grid-glitch-heavy', 'camera-grid-scanline');
+  const cameraInterference = Number(state?.cameraInterferenceLevel || 0);
+  if (cameraInterference >= 1) grid.classList.add('camera-grid-scanline');
+  if (cameraInterference >= 2) grid.classList.add('camera-grid-glitch-light');
+  if (cameraInterference >= 3) grid.classList.add('camera-grid-glitch-heavy');
 
   state.cameras.forEach((camera) => {
     const activeEvent = (state.activeEvents || []).find(
@@ -1096,7 +1126,7 @@ export function renderCameras(state) {
       : 'none';
 
     const card = document.createElement('article');
-    card.className = `camera-card ${getCameraStatusClass(camera.status)} ${actionable ? 'is-actionable' : ''}`;
+    card.className = `camera-card ${getCameraStatusClass(camera.status)} ${actionable ? 'is-actionable' : ''} ${cameraInterference >= 2 ? 'camera-card-glitch' : ''} ${cameraInterference >= 3 ? 'camera-card-flicker' : ''}`.trim();
     const statusClass = camera.status === 'Clear' ? 'is-clear' : 'is-alert';
     card.innerHTML = `
       <div class="camera-preview"></div>
@@ -1146,7 +1176,7 @@ export function renderCameraSceneOverlay(state) {
 
   const actions = Array.isArray(scene.actions) ? scene.actions : [];
   overlay.innerHTML = `
-    <div class="camera-scene-panel camera-scene-tone-${String(scene.severity || 'low').toLowerCase()}" role="dialog" aria-modal="true" aria-label="Camera incident scene">
+    <div class="camera-scene-panel camera-scene-tone-${String(scene.severity || 'low').toLowerCase()} ${Number(state?.cameraInterferenceLevel || 0) >= 2 ? 'camera-scene-glitch' : ''} ${state?.blackoutState?.level === 'full' ? 'camera-scene-blackout' : ''}" role="dialog" aria-modal="true" aria-label="Camera incident scene">
       <div class="camera-scene-header">
         <div>
           <p class="section-tag">Location Incident</p>
