@@ -226,9 +226,18 @@
 .card-list,
 .log-list,
 .room-grid,
-.camera-grid {
+.camera-grid,
+.shared-space-grid {
   display: grid;
   gap: 14px;
+}
+
+.shared-space-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.shared-space-card {
+  min-height: 0;
 }
 
 .room-grid,

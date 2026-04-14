@@ -94,7 +94,8 @@ import {
   normalizeLocationState,
   createLocationState,
   resetLocationStateForNight,
-  tickLocationState
+  tickLocationState,
+  getLocationZoneState
 } from './locationState.js';
 import { buildNightSummary } from './night.js';
 import {
@@ -277,6 +278,7 @@ import {
   renderTopbar,
   renderGuests,
   renderRooms,
+  renderSharedSpaces,
   renderCameras,
   renderNightEventCard,
   renderNightEventOverlay,
@@ -1663,6 +1665,374 @@ function buildNightIdentitySummary(targetState = state) {
     tags.push('Mood: remembered room pressure');
   }
   return tags.slice(0, 3).join(' • ');
+}
+
+const SHARED_SPACE_DEFS = Object.freeze([
+  {
+    zoneId: 1,
+    zoneName: 'Lobby',
+    label: 'Lobby',
+    quickActionLabel: 'Check Lobby',
+    quickActionId: 'lobby-check-entrance',
+    controlActionId: 'lobby-lock-front',
+    delayLabel: 'Let It Sit'
+  },
+  {
+    zoneId: 3,
+    zoneName: 'Hallway',
+    label: 'Hallway',
+    quickActionLabel: 'Sweep Hallway',
+    quickActionId: 'hallway-dispatch',
+    controlActionId: 'hallway-lock',
+    delayLabel: 'Delay Sweep'
+  },
+  {
+    zoneId: 2,
+    zoneName: 'Parking Lot',
+    label: 'Parking Lot',
+    quickActionLabel: 'Inspect Vehicle',
+    quickActionId: 'parking-staff',
+    controlActionId: 'parking-floodlight',
+    delayLabel: 'Leave The Lot'
+  },
+  {
+    zoneId: 4,
+    zoneName: 'Laundry',
+    label: 'Utility / Breaker',
+    quickActionLabel: 'Stabilize Breaker',
+    quickActionId: 'laundry-inspect',
+    controlActionId: 'laundry-cut',
+    delayLabel: 'Ride The Load'
+  },
+  {
+    zoneId: 6,
+    zoneName: 'Rear Exit',
+    label: 'Rear Exit',
+    quickActionLabel: 'Secure Rear Exit',
+    quickActionId: 'rear-inspect',
+    controlActionId: 'rear-lock',
+    delayLabel: 'Leave Rear Access'
+  }
+]);
+
+function getSharedSpaceDef(zoneId) {
+  return SHARED_SPACE_DEFS.find((entry) => Number(entry.zoneId) === Number(zoneId)) || null;
+}
+
+function getZoneEventFor(zoneId) {
+  return (state?.activeEvents || []).find((event) => Number(event?.cameraId) === Number(zoneId)) || null;
+}
+
+function getSharedSpaceSeverityFromZone(zoneState) {
+  const issueStage = Math.max(0, Number(zoneState?.issueStage || 0));
+  const followup = Math.max(0, Number(zoneState?.followupPressure || 0));
+  const unresolved = Math.max(0, Number(zoneState?.unresolvedCount || 0));
+  if (issueStage >= 3 || followup >= 5 || unresolved >= 3) return 'high';
+  if (issueStage >= 2 || followup >= 2 || unresolved >= 1) return 'medium';
+  return 'low';
+}
+
+function getSharedSpaceStatusText(zoneState) {
+  if (!zoneState) return 'clear';
+  const status = String(zoneState.stabilityStatus || 'clear').replace(/-/g, ' ');
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function ensureSharedSpaceEvent(zoneId) {
+  const def = getSharedSpaceDef(zoneId);
+  if (!def) return null;
+  const existing = getZoneEventFor(zoneId);
+  if (existing) return existing;
+  const zoneState = getLocationZoneState(state, zoneId, def.zoneName);
+  if (!zoneState) return null;
+  const severity = getSharedSpaceSeverityFromZone(zoneState);
+  const status =
+    severity === 'high' ? 'Blocked'
+    : severity === 'medium' ? 'Movement Detected'
+    : 'Static';
+  if (!zoneState.pendingIssue) {
+    zoneState.issueStage = Math.max(1, Number(zoneState.issueStage || 1));
+    zoneState.pendingIssue = `${def.label} irregularity`;
+    zoneState.lastSeverity = severity;
+    zoneState.stabilityStatus = severity === 'high' ? 'escalating' : 'under-watch';
+    zoneState.lastStatusNote = `${def.label} needs direct attention before pressure spreads.`;
+  }
+  const event = {
+    cameraId: zoneId,
+    cameraName: def.zoneName,
+    status,
+    severity
+  };
+  state.activeEvents = Array.isArray(state.activeEvents) ? [...state.activeEvents, event] : [event];
+  state.cameras = (state.cameras || []).map((camera) =>
+    Number(camera?.id) === Number(zoneId)
+      ? { ...camera, status }
+      : camera
+  );
+  return event;
+}
+
+function registerSharedSpaceIncident(zoneId, {
+  type = 'Shared Space Pressure',
+  severity = 'medium',
+  logLine = '',
+  alertLine = '',
+  roomTargetId = null
+} = {}) {
+  const def = getSharedSpaceDef(zoneId);
+  const label = def?.label || `Zone ${zoneId}`;
+  const incident = {
+    type,
+    severity,
+    effect: severity === 'high' ? 'critical' : 'moderate',
+    location: label
+  };
+  state.incidents = Array.isArray(state.incidents) ? [...state.incidents, incident] : [incident];
+  if (logLine) state.logs.push(logLine);
+  if (alertLine) {
+    pushLiveAlert(state, {
+      type: severity === 'high' ? 'danger' : 'warning',
+      kind: 'actionable',
+      message: alertLine,
+      dedupeKey: `shared-space-incident-${zoneId}-${type}-${state.night}-${state.shiftElapsedMinutes}`
+    });
+  }
+  if (roomTargetId != null) {
+    const room = (state.rooms || []).find((entry) => Number(entry?.id) === Number(roomTargetId));
+    if (room?.occupiedBy) {
+      registerRoomChainSignal({
+        roomId: room.id,
+        guestName: room.occupiedBy,
+        type: `shared-space-${String(type).toLowerCase().replace(/\s+/g, '-')}`,
+        severity: severity === 'high' ? 3 : 2
+      });
+    }
+  }
+}
+
+function buildSharedSpaceSummary(def, zoneState, targetState = state) {
+  const scannerFeed = Array.isArray(targetState?.localScannerFeed) ? targetState.localScannerFeed : [];
+  const suspectBoard = targetState?.suspectBoard || {};
+  const severity = getSharedSpaceSeverityFromZone(zoneState);
+  const notes = [];
+  if (def.zoneId === 1 && Number(targetState?.factions?.guests || 0) <= -3) {
+    notes.push('Desk-facing guests look quicker to challenge or refuse to move on.');
+  }
+  if (def.zoneId === 3 && Number(targetState?.crisisEscalation?.hallwayThreatLevel || 0) >= 2) {
+    notes.push('Corridor confidence is weak; wrong-door movement spreads faster here.');
+  }
+  if (def.zoneId === 2) {
+    if (scannerFeed.some((entry) => String(entry?.text || '').toLowerCase().includes('vehicle'))) {
+      notes.push('Scanner vehicle chatter is lining up with activity in the lot.');
+    }
+    if (Array.isArray(suspectBoard?.vehiclesSeen) && suspectBoard.vehiclesSeen.length) {
+      notes.push(`Known vehicle pattern: ${suspectBoard.vehiclesSeen[suspectBoard.vehiclesSeen.length - 1]}.`);
+    }
+  }
+  if (def.zoneId === 4 && getBlackoutPressureState(targetState).active) {
+    notes.push('Breaker strain is feeding blackout pressure tonight.');
+  }
+  if (def.zoneId === 6) {
+    if (Array.isArray(suspectBoard?.factionLabels) && suspectBoard.factionLabels.some((label) => /watcher|service/i.test(String(label)))) {
+      notes.push('Rear access matches current watcher / service-ring pattern pressure.');
+    }
+    if (Number(targetState?.shiftStats?.outsideIssueCount || 0) > 0) {
+      notes.push('Outside pressure is already leaning toward slipout or side-entry behavior.');
+    }
+  }
+  if (severity === 'high' && notes.length === 0) {
+    notes.push(`${def.label} pressure is active enough to spill into rooms if ignored.`);
+  }
+  return notes[0] || (zoneState?.lastStatusNote || `${def.label} currently reads clear enough to leave alone.`);
+}
+
+function buildSharedSpacesModel(targetState = state) {
+  return SHARED_SPACE_DEFS.map((def) => {
+    const zoneState = getLocationZoneState(targetState, def.zoneId, def.zoneName);
+    const activeEvent = (targetState?.activeEvents || []).find((event) => Number(event?.cameraId) === Number(def.zoneId)) || null;
+    const severity = getSharedSpaceSeverityFromZone(zoneState);
+    const pressureScore = Math.max(
+      0,
+      Number(zoneState?.issueStage || 0) +
+      Number(zoneState?.followupPressure || 0) +
+      Number(zoneState?.unresolvedCount || 0) +
+      (activeEvent ? 2 : 0)
+    );
+    const modifiers = zoneState?.temporaryModifiers && typeof zoneState.temporaryModifiers === 'object'
+      ? Object.entries(zoneState.temporaryModifiers)
+          .filter(([, turns]) => Number(turns || 0) > 0)
+          .map(([key, turns]) => `${String(key).replace(/([A-Z])/g, ' $1').trim()} (${turns})`)
+      : [];
+    return {
+      ...def,
+      zoneId: def.zoneId,
+      activeEvent,
+      severity,
+      pressureScore,
+      issueStage: Math.max(0, Number(zoneState?.issueStage || 0)),
+      statusLine: getSharedSpaceStatusText(zoneState),
+      activeIssue: zoneState?.pendingIssue || (activeEvent ? `${def.label} pressure active` : 'No active issue'),
+      note: buildSharedSpaceSummary(def, zoneState, targetState),
+      followupPressure: Math.max(0, Number(zoneState?.followupPressure || 0)),
+      unresolvedCount: Math.max(0, Number(zoneState?.unresolvedCount || 0)),
+      modifiers: modifiers.slice(0, 2),
+      controlActionLabel:
+        def.zoneId === 2 ? 'Light Lot'
+        : def.zoneId === 4 ? 'Isolate Section'
+        : def.zoneId === 6 ? 'Bar Access'
+        : def.zoneId === 3 ? 'Lock Segment'
+        : 'Lock Front'
+    };
+  });
+}
+
+function maybeCreateSharedSpacePressure(trigger = 'tick') {
+  const candidates = buildSharedSpacesModel(state)
+    .map((entry) => ({ ...entry, zoneState: getLocationZoneState(state, entry.zoneId, entry.zoneName) }))
+    .filter((entry) => entry.zoneState);
+  if (!candidates.length) return false;
+
+  const profile = getSignatureNightProfile(state);
+  const blackout = getBlackoutPressureState(state);
+  const weighted = candidates.map((entry) => {
+    let weight = 1;
+    if (entry.zoneId === 1 && (state.guests || []).length >= 2) weight += 1.3;
+    if (entry.zoneId === 2 && ((state.guests || []).some((guest) => String(guest?.contextTag || '').toLowerCase().includes('vehicle')) || profile?.id === 'linked-arrival-surge')) weight += 1.6;
+    if (entry.zoneId === 3 && (profile?.id === 'wrong-hallway' || Number(state?.crisisEscalation?.hallwayThreatLevel || 0) >= 2)) weight += 1.9;
+    if (entry.zoneId === 4 && blackout.active) weight += 1.8;
+    if (entry.zoneId === 6 && (profile?.id === 'watcher-convergence' || Number(state?.shiftStats?.outsideIssueCount || 0) > 0)) weight += 1.5;
+    weight += Math.max(0, Number(entry.zoneState.followupPressure || 0) * 0.25);
+    return { entry, weight };
+  });
+  const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+  let roll = Math.random() * total;
+  let picked = weighted[0]?.entry || null;
+  for (let i = 0; i < weighted.length; i += 1) {
+    roll -= weighted[i].weight;
+    if (roll <= 0) {
+      picked = weighted[i].entry;
+      break;
+    }
+  }
+  if (!picked) return false;
+  const zoneState = getLocationZoneState(state, picked.zoneId, picked.zoneName);
+  if (!zoneState) return false;
+  zoneState.issueStage = Math.min(3, Math.max(1, Number(zoneState.issueStage || 0) + 1));
+  zoneState.followupPressure = Math.min(8, Math.max(0, Number(zoneState.followupPressure || 0)) + 1);
+  zoneState.unresolvedCount = Math.min(6, Math.max(0, Number(zoneState.unresolvedCount || 0)) + 1);
+  zoneState.stabilityStatus = zoneState.followupPressure >= 5 ? 'escalating' : 'under-watch';
+  zoneState.pendingIssue =
+    picked.zoneId === 1 ? 'Lobby unease at the desk edge'
+    : picked.zoneId === 2 ? 'Vehicle movement pressure'
+    : picked.zoneId === 3 ? 'Hallway spread pressure'
+    : picked.zoneId === 4 ? 'Breaker instability'
+    : 'Rear access tension';
+  zoneState.lastStatusNote =
+    picked.zoneId === 1 ? 'Someone is hanging near reception and refusing to fully clear the desk area.'
+    : picked.zoneId === 2 ? 'A waiting vehicle pattern is lingering longer than it should.'
+    : picked.zoneId === 3 ? 'Corridor movement is starting to connect multiple rooms.'
+    : picked.zoneId === 4 ? 'Utility strain is building into a breaker-side problem.'
+    : 'Back access is being tested after hours.';
+  ensureSharedSpaceEvent(picked.zoneId);
+  if (picked.zoneId === 2) {
+    addSuspectBoardEntry({
+      kind: 'parking',
+      label: 'Warm engine suspicion',
+      detail: 'A waiting car pattern formed in the lot after arrivals should have settled.',
+      heat: 2
+    });
+  }
+  if (picked.zoneId === 6) {
+    addSuspectBoardEntry({
+      kind: 'rear-access',
+      label: 'Rear access pressure',
+      detail: 'Rear-lane movement suggests slipout or side-entry testing.',
+      heat: 2
+    });
+  }
+  if (picked.zoneId === 4) {
+    registerSharedSpaceIncident(picked.zoneId, {
+      type: 'Breaker Fault Chain',
+      severity: zoneState.followupPressure >= 5 ? 'high' : 'medium',
+      logLine: 'Shared-space incident: breaker strain is now feeding back into motel-wide stability.',
+      alertLine: 'Utility / breaker pressure is climbing.',
+      roomTargetId: (state.rooms || []).find((room) => room?.occupiedBy)?.id ?? null
+    });
+  }
+  return true;
+}
+
+function openSharedSpaceZone(zoneId) {
+  const def = getSharedSpaceDef(zoneId);
+  if (!def) return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  ensureSharedSpaceEvent(zoneId);
+  investigateCameraZone(zoneId);
+}
+
+function executeSharedSpaceQuickAction(zoneId, actionId) {
+  const def = getSharedSpaceDef(zoneId);
+  if (!def || !actionId) return;
+  ensureSharedSpaceEvent(zoneId);
+  openCameraScene(state, zoneId);
+  handleCameraSceneAction(zoneId, actionId);
+}
+
+function delaySharedSpace(zoneId) {
+  const def = getSharedSpaceDef(zoneId);
+  if (!def) return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const zoneState = getLocationZoneState(state, zoneId, def.zoneName);
+  if (!zoneState) return;
+  zoneState.ignoreCount = Math.max(0, Number(zoneState.ignoreCount || 0) + 1);
+  zoneState.unresolvedCount = Math.max(0, Number(zoneState.unresolvedCount || 0) + 1);
+  zoneState.followupPressure = Math.min(8, Math.max(0, Number(zoneState.followupPressure || 0)) + 2);
+  zoneState.issueStage = Math.min(3, Math.max(1, Number(zoneState.issueStage || 1) + (zoneState.followupPressure >= 4 ? 1 : 0)));
+  zoneState.stabilityStatus = zoneState.followupPressure >= 5 ? 'escalating' : 'unresolved-pressure';
+  ensureSharedSpaceEvent(zoneId);
+  state.logs.push(`${def.label}: the desk delayed action, and shared-space pressure thickened instead of clearing.`);
+  if (zoneId === 1) {
+    registerSharedSpaceIncident(zoneId, {
+      type: 'Lobby Disturbance',
+      severity: zoneState.followupPressure >= 5 ? 'high' : 'medium',
+      logLine: 'Shared-space incident: lobby pressure pushed closer to the desk and started affecting guest confidence.',
+      alertLine: 'Lobby pressure is now active near reception.'
+    });
+    state.reputation = clampReputation(state.reputation - 1);
+  } else if (zoneId === 2) {
+    registerSharedSpaceIncident(zoneId, {
+      type: 'Parking Lot Pressure',
+      severity: zoneState.followupPressure >= 5 ? 'high' : 'medium',
+      logLine: 'Shared-space incident: outside vehicle pressure is no longer staying in the lot.',
+      alertLine: 'Parking-lot suspicion is feeding the interior now.'
+    });
+  } else if (zoneId === 3) {
+    registerSharedSpaceIncident(zoneId, {
+      type: 'Hallway Spread Event',
+      severity: zoneState.followupPressure >= 5 ? 'high' : 'medium',
+      logLine: 'Shared-space incident: hallway movement spread pressure across multiple room fronts.',
+      alertLine: 'Hallway pressure is spreading.'
+    });
+  } else if (zoneId === 4) {
+    registerSharedSpaceIncident(zoneId, {
+      type: 'Breaker Fault Chain',
+      severity: zoneState.followupPressure >= 5 ? 'high' : 'medium',
+      logLine: 'Shared-space incident: a breaker fault chain is now threatening partial service loss.',
+      alertLine: 'Utility / breaker strain is worsening.'
+    });
+  } else if (zoneId === 6) {
+    registerSharedSpaceIncident(zoneId, {
+      type: 'Rear Exit Slipout',
+      severity: zoneState.followupPressure >= 5 ? 'high' : 'medium',
+      logLine: 'Shared-space incident: rear-exit pressure suggests someone tested a slipout or side-entry route.',
+      alertLine: 'Rear exit pressure is escalating.'
+    });
+  }
+  if (checkFailureState()) return;
+  if (progressShift('review', { timeScale: 0.8, passiveDrainScale: 0.5 })) return;
+  renderAll();
 }
 
 function buildFactionProfileForGuest(guest, targetState = state) {
@@ -3288,6 +3658,7 @@ function buildRenderState() {
   const campaign = getCampaignContext();
   const ownerBrief = buildOwnerPressureBrief();
   const suspectBoard = buildSuspectBoardSnapshot();
+  const sharedSpaces = buildSharedSpacesModel(state);
   const metaSurface = getMetaSurfaceState();
   const onboardingUi = buildOnboardingUiModel(state, onboardingState, {
     activePanelId,
@@ -3315,6 +3686,9 @@ function buildRenderState() {
     onHandleSpecialEncounter: handleOpenSpecialEncounter,
     onCloseSpecialEncounter: handleCloseSpecialEncounter,
     onSpecialEncounterChoice: handleSpecialEncounterChoice,
+    onOpenSharedSpace: openSharedSpaceZone,
+    onSharedSpaceQuickAction: executeSharedSpaceQuickAction,
+    onSharedSpaceDelay: delaySharedSpace,
     onFinaleCommandChoice: handleFinaleCommandChoice,
     onToggleHelpOverlay: toggleHelpOverlay,
     onDismissTutorialHint: dismissTutorialHint,
@@ -3335,6 +3709,7 @@ function buildRenderState() {
     uiPressureLevel,
     topbarWarningFlags: getTopbarWarningFlags(state),
     rooms: roomsWithChainPressure,
+    sharedSpaces,
     guests: guestsWithDeskOptions,
     activeRunThreads: buildActiveRunThreadHighlights(state, 3),
     carryoverBriefingNotes: Array.isArray(state.carryoverBriefing) ? state.carryoverBriefing : [],
@@ -3942,6 +4317,7 @@ function renderAll() {
     cutPowerToRoom,
     evictRoomGuest
   );
+  renderSharedSpaces(renderState);
   renderCameras(renderState);
   renderNightEventOverlay(renderState);
   renderCameraSceneOverlay(renderState);
@@ -6666,6 +7042,9 @@ function advanceEscalationState() {
   }
 
   maybeGenerateOccupiedRoomRequest('escalation');
+  if (Math.random() < ((state?.crisisNight?.active ? 0.12 : 0.06) + (blackout.active ? 0.06 : 0))) {
+    maybeCreateSharedSpacePressure('escalation');
+  }
   if (
     (state?.crisisNight?.kind === 'guest-surge' || blackout.active || state?.crisisNight?.kind === 'hostile-social-night') &&
     Math.random() < (blackout.level === 'full' ? 0.3 : 0.16)

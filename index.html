@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dead End Motel v0.14</title>
+  <title>Dead End Motel v0.15</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -12,7 +12,7 @@
   <div id="app" class="app-shell screen-main-menu">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Dead End Motel v0.14</p>
+        <p class="eyebrow">Dead End Motel v0.15</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -115,6 +115,10 @@
             <span>Cameras</span>
             <span id="cameras-tab-badge" class="tab-attention-badge" hidden>0</span>
           </button>
+          <button class="tab-button" data-panel="spaces-panel">
+            <span>Shared Spaces</span>
+            <span id="spaces-tab-badge" class="tab-attention-badge" hidden>0</span>
+          </button>
           <button class="tab-button" data-panel="power-panel">Power</button>
           <button class="tab-button" data-panel="report-panel">
             <span>Report</span>
@@ -214,6 +218,17 @@
             </div>
             <p class="muted microcopy-line">Scan to detect anomalies, then Investigate to contain spillover pressure.</p>
             <div id="camera-grid" class="camera-grid"></div>
+          </section>
+
+          <section id="spaces-panel" class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="section-tag">Living Motel Spaces</p>
+                <h3>Shared Space Pressure</h3>
+              </div>
+            </div>
+            <p class="muted microcopy-line">Track tension in the lobby, hallway, parking lot, utility lane, and rear exit. These spaces can spill into rooms if ignored.</p>
+            <div id="shared-space-grid" class="shared-space-grid"></div>
           </section>
 
           <section id="power-panel" class="panel">

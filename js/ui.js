@@ -487,13 +487,18 @@ export function renderTopbar(state) {
 
   const actionableAlerts = (state?.liveAlerts || []).filter((alert) => alert?.kind === 'actionable').length;
   const reportAttention = actionableAlerts + (state?.activeNightEvent ? 1 : 0);
+  const sharedSpaceAttention = (Array.isArray(state?.sharedSpaces) ? state.sharedSpaces : []).filter(
+    (space) => (space?.pressureScore || 0) >= 3 || space?.severity === 'high'
+  ).length;
 
   setTabBadge('frontdesk-tab-badge', state?.guests?.length || 0);
   setTabBadge('cameras-tab-badge', unresolvedCameraCount);
+  setTabBadge('spaces-tab-badge', sharedSpaceAttention);
   setTabBadge('report-tab-badge', reportAttention);
 
   setPanelAttention('frontdesk-panel', (state?.guests?.length || 0) > 0);
   setPanelAttention('cameras-panel', unresolvedCameraCount > 0);
+  setPanelAttention('spaces-panel', sharedSpaceAttention > 0);
   setPanelAttention('report-panel', reportAttention > 0);
 
   if (appShell) {
@@ -1114,6 +1119,67 @@ export function renderRooms(
     }
 
     roomList.appendChild(card);
+  });
+}
+
+export function renderSharedSpaces(state) {
+  const grid = document.getElementById('shared-space-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const spaces = Array.isArray(state?.sharedSpaces) ? state.sharedSpaces : [];
+  spaces.forEach((space) => {
+    const card = document.createElement('article');
+    card.className = `room-card shared-space-card ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'}`;
+    card.innerHTML = `
+      <div class="room-card-header">
+        <h4>${space.label}</h4>
+        <span class="room-condition-pill">${space.statusLine || 'Clear'}</span>
+      </div>
+      <div class="room-pressure-row">
+        <span class="room-state-chip">Pressure: ${space.pressureScore || 0}</span>
+        <span class="room-state-chip">Stage: ${space.issueStage || 0}</span>
+        <span class="room-state-chip">Follow-up: ${space.followupPressure || 0}</span>
+        <span class="room-state-chip">Open: ${space.unresolvedCount || 0}</span>
+      </div>
+      <div class="guest-detail-block">
+        <p class="room-service-title">${space.activeIssue || 'No active issue'}</p>
+        <p class="room-service-note muted">${space.note || ''}</p>
+        ${space?.modifiers?.length ? `<p class="room-service-note muted">Modifiers: ${space.modifiers.join(' • ')}</p>` : ''}
+      </div>
+      <div class="room-service-row"></div>
+    `;
+
+    const actions = card.querySelector('.room-service-row');
+    const openButton = document.createElement('button');
+    openButton.className = 'button button-primary';
+    openButton.textContent = 'Open Feed';
+    openButton.title = 'Open the camera-style response overlay for this shared space.';
+    bindAtomicActionButton(openButton, () => state?.onOpenSharedSpace?.(space.zoneId), { groupRoot: actions });
+
+    const quickButton = document.createElement('button');
+    quickButton.className = 'button button-secondary';
+    quickButton.textContent = space.quickActionLabel || 'Act';
+    quickButton.title = 'Use the zone’s fast shared-space action.';
+    bindAtomicActionButton(quickButton, () => state?.onSharedSpaceQuickAction?.(space.zoneId, space.quickActionId), { groupRoot: actions });
+
+    const controlButton = document.createElement('button');
+    controlButton.className = 'button button-warning';
+    controlButton.textContent = space.controlActionLabel || 'Control';
+    controlButton.title = 'Apply a stronger containment action to this zone.';
+    bindAtomicActionButton(controlButton, () => state?.onSharedSpaceQuickAction?.(space.zoneId, space.controlActionId), { groupRoot: actions });
+
+    const delayButton = document.createElement('button');
+    delayButton.className = 'button button-danger';
+    delayButton.textContent = space.delayLabel || 'Delay';
+    delayButton.title = 'Leave the space alone for now. Faster, but often increases spread pressure.';
+    bindAtomicActionButton(delayButton, () => state?.onSharedSpaceDelay?.(space.zoneId), { groupRoot: actions });
+
+    actions.appendChild(openButton);
+    actions.appendChild(quickButton);
+    actions.appendChild(controlButton);
+    actions.appendChild(delayButton);
+    grid.appendChild(card);
   });
 }
 
