@@ -323,9 +323,19 @@ export function renderTopbar(state) {
   if (storyBeatCard) {
     const beat = state?.activeStoryBeat || null;
     const signature = state?.signatureNight || null;
+    const emergency = state?.emergencyNight || null;
     if (!beat) {
       storyBeatCard.classList.remove('is-active');
-      storyBeatCard.innerHTML = signature?.active
+      storyBeatCard.innerHTML = emergency?.active
+        ? `
+          <div class="active-event-header">
+            <p class="section-tag">Emergency Night</p>
+            <span class="active-event-severity severity-high">TIER ${Math.max(1, Number(emergency.commandTier || 1))}</span>
+          </div>
+          <h4>${emergency.label || 'Emergency Night'}</h4>
+          <p class="muted">${emergency.note || 'Command choices are now part of survival.'}</p>
+        `
+        : signature?.active
         ? `
           <div class="active-event-header">
             <p class="section-tag">Signature Night</p>
@@ -418,6 +428,8 @@ export function renderTopbar(state) {
   const finaleCommandRow = document.getElementById('finale-command-row');
   const finaleUi = state?.finaleUi || null;
   const finaleActive = Boolean(finaleUi?.active);
+  const emergencyCommands = state?.emergencyCommands || null;
+  const emergencyActive = Boolean(emergencyCommands?.active) && !finaleActive;
 
   if (finaleBanner) {
     finaleBanner.hidden = !finaleActive;
@@ -425,7 +437,7 @@ export function renderTopbar(state) {
   }
 
   if (finaleStateCard) {
-    finaleStateCard.hidden = !finaleActive;
+    finaleStateCard.hidden = !finaleActive && !emergencyActive;
     finaleStateCard.classList.remove('band-contained', 'band-elevated', 'band-high', 'band-critical');
     if (finaleActive) {
       finaleStateCard.classList.add(`band-${finaleUi?.pressureBand || 'contained'}`);
@@ -433,11 +445,15 @@ export function renderTopbar(state) {
   }
 
   if (finalePressureLabel) {
-    finalePressureLabel.textContent = finaleUi?.pressureLabel || 'Finale pressure: CONTAINED (0)';
+    finalePressureLabel.textContent = emergencyActive
+      ? `Emergency pressure: ${String(emergencyCommands?.type || 'active').replace(/-/g, ' ').toUpperCase()} (${emergencyCommands?.severity || 0})`
+      : finaleUi?.pressureLabel || 'Finale pressure: CONTAINED (0)';
   }
 
   if (finaleChainLabel) {
-    if (!finaleActive) {
+    if (emergencyActive) {
+      finaleChainLabel.textContent = emergencyCommands?.note || 'Emergency command choices are live.';
+    } else if (!finaleActive) {
       finaleChainLabel.textContent = '';
     } else {
       const spillovers = Number(finaleUi?.chainSpilloversTriggered || 0);
@@ -456,7 +472,21 @@ export function renderTopbar(state) {
 
   if (finaleCommandRow) {
     finaleCommandRow.innerHTML = '';
-    if (finaleActive) {
+    if (emergencyActive) {
+      (emergencyCommands?.commands || []).slice(0, 4).forEach((command) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'button button-warning';
+        button.textContent = command?.label || 'Emergency Command';
+        button.title = command?.note || '';
+        button.addEventListener('click', () => {
+          if (typeof state?.onEmergencyCommand === 'function' && command?.id) {
+            state.onEmergencyCommand(command.id);
+          }
+        });
+        finaleCommandRow.appendChild(button);
+      });
+    } else if (finaleActive) {
       const commands = Array.isArray(state?.finaleCommandOptions) ? state.finaleCommandOptions : [];
       commands.slice(0, 4).forEach((command) => {
         const button = document.createElement('button');
@@ -651,7 +681,8 @@ export function renderGuests(
   onDeposit,
   onSecondaryVerify,
   onHoldScreening,
-  onHandleSpecialEncounter
+  onHandleSpecialEncounter,
+  onQuestionGuest
 ) {
   const queue = document.getElementById('guest-queue');
   queue.innerHTML = '';
@@ -695,6 +726,7 @@ export function renderGuests(
         ${guest?.forgeryProfile?.isForged ? '<span class="guest-meta-chip guest-meta-chip-contradiction">Forgery Risk</span>' : ''}
         ${guest?.factionProfile?.label ? `<span class="guest-meta-chip guest-meta-chip-scanner">${guest.factionProfile.label}</span>` : ''}
         ${guest?.linkedArrival?.groupId ? '<span class="guest-meta-chip guest-meta-chip-verified">Linked Arrival</span>' : ''}
+        ${guest?.vehicleProfile ? '<span class="guest-meta-chip guest-meta-chip-scanner">Vehicle Read</span>' : ''}
         ${guest?.idInspected ? '<span class="guest-meta-chip guest-meta-chip-verified">ID Read</span>' : ''}
         ${guest?.uvInspected ? '<span class="guest-meta-chip guest-meta-chip-uv">UV Used</span>' : ''}
       </div>
@@ -714,6 +746,7 @@ export function renderGuests(
         ${(guest?.contextTag || guest?.visualHint)
           ? `<p class="guest-scan-line">${guest.contextTag ? `Context: ${guest.contextTag}. ` : ''}${guest.visualHint ? `Visual: ${guest.visualHint}.` : ''}</p>`
           : ''}
+        ${guest?.vehicleProfile?.summary ? `<p class="guest-scan-line guest-scan-line-warning">Vehicle: ${guest.vehicleProfile.summary}</p>` : ''}
         ${guest?.linkedArrival?.note ? `<p class="guest-scan-line guest-scan-line-warning">${guest.linkedArrival.note}</p>` : ''}
         ${guest?.scannerMatches?.length
           ? `<p class="guest-scan-line guest-scan-line-warning">${guest.scannerMatches.join(' ')}</p>`
@@ -736,6 +769,10 @@ export function renderGuests(
           <div class="guest-detail-block guest-uv-block">
             <p class="guest-id-line"><strong>Pattern:</strong> ${guest?.factionProfile?.label || 'No strong local-network sign yet'}</p>
             <p class="guest-id-line muted">${guest?.factionProfile?.clue || guest?.linkedArrival?.note || 'No linked traveler or faction pattern surfaced yet.'}</p>
+          </div>
+          <div class="guest-detail-block guest-uv-block">
+            <p class="guest-id-line"><strong>Vehicle:</strong> ${guest?.vehicleProfile?.type || 'No strong vehicle read yet'}</p>
+            <p class="guest-id-line muted">${guest?.vehicleProfile ? `${guest.vehicleProfile.parkedPosition}; ${guest.vehicleProfile.clues.join('; ')}` : 'Parking and pickup patterns can expose linked groups or watcher behavior.'}</p>
           </div>
         </div>
       </details>
@@ -827,6 +864,20 @@ export function renderGuests(
     secondaryActions.appendChild(depositButton);
     secondaryActions.appendChild(verifyButton);
     secondaryActions.appendChild(holdButton);
+
+    const questionButton = document.createElement('button');
+    questionButton.className = 'button button-utility';
+    questionButton.textContent = 'Ask Follow-Up';
+    questionButton.title = 'Push on vehicle, timing, relationship, or identity details for a sharper read.';
+    bindAtomicActionButton(questionButton, () => {
+      if (typeof onQuestionGuest === 'function') {
+        onQuestionGuest(
+          guest.id,
+          guest?.vehicleProfile ? 'vehicle' : guest?.linkedArrival ? 'relationship' : guest?.forgeryProfile?.isForged ? 'inconsistency' : 'late-timing'
+        );
+      }
+    }, { groupRoot: secondaryActions });
+    secondaryActions.appendChild(questionButton);
 
     if (guest?.specialEncounter && !guest.specialEncounter.resolved) {
       const specialButton = document.createElement('button');
@@ -1145,6 +1196,7 @@ export function renderSharedSpaces(state) {
       <div class="guest-detail-block">
         <p class="room-service-title">${space.activeIssue || 'No active issue'}</p>
         <p class="room-service-note muted">${space.note || ''}</p>
+        ${state?.emergencyNight?.active && Number(space?.pressureScore || 0) >= 4 ? '<p class="room-service-note">Emergency priority zone.</p>' : ''}
         ${space?.modifiers?.length ? `<p class="room-service-note muted">Modifiers: ${space.modifiers.join(' • ')}</p>` : ''}
       </div>
       <div class="room-service-row"></div>
@@ -1828,6 +1880,10 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
         : '<p class="muted">No durable suspect patterns on the board yet.</p>'}
       <p class="muted">Names: ${(board?.namesSeen || []).join(' • ') || 'none yet'}</p>
       <p class="muted">Marks: ${(board?.marksSeen || []).join(' • ') || 'none yet'}</p>
+      <p class="muted">Vehicles: ${(board?.vehiclesSeen || []).join(' • ') || 'none yet'}</p>
+      <p class="muted">Groups: ${(board?.groupLabels || []).join(' • ') || 'none yet'}</p>
+      <p class="muted">Documents: ${(board?.documentPatterns || []).join(' • ') || 'none yet'}</p>
+      <p class="muted">Cross-links: ${(board?.crossLinks || []).join(' • ') || 'none yet'}</p>
     `;
   }
 
