@@ -36,7 +36,7 @@ const UPGRADE_DEFS = Object.freeze([
   {
     id: 'desk-clue-lens',
     title: 'Front Desk Clue Lens',
-    category: 'Front Desk',
+    category: 'Desk Tools',
     cost: 60,
     description: 'Reveals stronger clue lines when evaluating guests.',
     oneTime: true,
@@ -47,7 +47,7 @@ const UPGRADE_DEFS = Object.freeze([
   {
     id: 'desk-policy-guardrails',
     title: 'Policy Guardrails',
-    category: 'Front Desk',
+    category: 'Desk Tools',
     cost: 85,
     description: 'Reduces policy-related reputation penalties from desk decisions.',
     oneTime: true,
@@ -58,7 +58,7 @@ const UPGRADE_DEFS = Object.freeze([
   {
     id: 'desk-forgery-lamp',
     title: 'Forgery Lamp Kit',
-    category: 'Front Desk',
+    category: 'Desk Tools',
     cost: 90,
     description: 'Improved lamp and laminate tools make forged IDs easier to read cleanly.',
     oneTime: true,
@@ -69,7 +69,7 @@ const UPGRADE_DEFS = Object.freeze([
   {
     id: 'desk-local-ledger',
     title: 'Local Pattern Ledger',
-    category: 'Front Desk',
+    category: 'Desk Tools',
     cost: 85,
     description: 'Desk notes and scanner sorting surface stronger local-network pattern matches.',
     oneTime: true,
@@ -80,7 +80,7 @@ const UPGRADE_DEFS = Object.freeze([
   {
     id: 'power-load-balancer',
     title: 'Load Balancer Retrofit',
-    category: 'Maintenance / Power',
+    category: 'Power / Utility',
     cost: 100,
     description: 'Passive power drain grows more slowly over actions.',
     oneTime: true,
@@ -91,7 +91,7 @@ const UPGRADE_DEFS = Object.freeze([
   {
     id: 'power-aux-generator',
     title: 'Aux Generator Reserve',
-    category: 'Maintenance / Power',
+    category: 'Power / Utility',
     cost: 80,
     description: 'Adds one extra emergency generator charge each night.',
     oneTime: true,
@@ -102,7 +102,7 @@ const UPGRADE_DEFS = Object.freeze([
   {
     id: 'power-fast-relays',
     title: 'Fast Relay Rebuild',
-    category: 'Maintenance / Power',
+    category: 'Power / Utility',
     cost: 75,
     description: 'Emergency restore is cheaper and returns faster.',
     oneTime: true,
@@ -114,7 +114,7 @@ const UPGRADE_DEFS = Object.freeze([
   {
     id: 'response-dispatch-drills',
     title: 'Dispatch Drills',
-    category: 'Response / Security',
+    category: 'Security',
     cost: 95,
     description: 'Improves staff dispatch success odds.',
     oneTime: true,
@@ -125,7 +125,7 @@ const UPGRADE_DEFS = Object.freeze([
   {
     id: 'response-service-pagers',
     title: 'Service Pager Net',
-    category: 'Response / Security',
+    category: 'Service',
     cost: 88,
     description: 'Runner and support responses land with better clarity when rooms start drifting.',
     oneTime: true,
@@ -136,7 +136,7 @@ const UPGRADE_DEFS = Object.freeze([
   {
     id: 'response-stabilization-team',
     title: 'Stabilization Team SOP',
-    category: 'Response / Security',
+    category: 'Security',
     cost: 90,
     description: 'Tactical actions are safer and more likely to calm pressure afterward.',
     oneTime: true,
@@ -149,7 +149,7 @@ const UPGRADE_DEFS = Object.freeze([
   {
     id: 'security-door-braces',
     title: 'Door Brace Retrofit',
-    category: 'Response / Security',
+    category: 'Rooms',
     cost: 92,
     description: 'Reinforced locks and door braces make risky rooms less likely to destabilize immediately.',
     oneTime: true,
@@ -160,7 +160,7 @@ const UPGRADE_DEFS = Object.freeze([
   {
     id: 'power-battery-buffer',
     title: 'Battery Buffer Rack',
-    category: 'Maintenance / Power',
+    category: 'Power / Utility',
     cost: 96,
     description: 'Backup storage softens blackout escalation and keeps the grid steadier under pressure.',
     oneTime: true,

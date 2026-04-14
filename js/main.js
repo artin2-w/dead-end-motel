@@ -650,6 +650,7 @@ function normalizeRunMemoryState() {
   state = normalizeCarryoverState(state);
   state = normalizeContentDirectorState(state);
   normalizeCampaignDepthState();
+  normalizeStaffManagementState();
   state.carryoverBriefing = buildIncomingNightNotes(state, Number(state?.night || 1));
 }
 
@@ -773,6 +774,75 @@ const DAY_SHIFT_PLAN_CATALOG = Object.freeze([
   }
 ]);
 
+const STAFF_ROSTER_CATALOG = Object.freeze([
+  {
+    id: 'security-dawes',
+    name: 'Dawes',
+    role: 'Security',
+    specialty: 'hallway control',
+    reliability: 0.74,
+    temperament: 'firm',
+    cost: 18,
+    fatigueBias: 0.16,
+    mistakeTendency: 0.12
+  },
+  {
+    id: 'maintenance-ibarra',
+    name: 'Ibarra',
+    role: 'Maintenance',
+    specialty: 'breaker / utility',
+    reliability: 0.78,
+    temperament: 'steady',
+    cost: 17,
+    fatigueBias: 0.14,
+    mistakeTendency: 0.1
+  },
+  {
+    id: 'runner-ellis',
+    name: 'Ellis',
+    role: 'Runner',
+    specialty: 'complaint calming',
+    reliability: 0.71,
+    temperament: 'warm',
+    cost: 14,
+    fatigueBias: 0.18,
+    mistakeTendency: 0.13
+  },
+  {
+    id: 'cleaner-mara',
+    name: 'Mara',
+    role: 'Cleaner',
+    specialty: 'room reset / rumor softening',
+    reliability: 0.69,
+    temperament: 'quiet',
+    cost: 12,
+    fatigueBias: 0.12,
+    mistakeTendency: 0.09
+  },
+  {
+    id: 'desk-ivy',
+    name: 'Ivy',
+    role: 'Desk Assistant',
+    specialty: 'front desk flow',
+    reliability: 0.73,
+    temperament: 'watchful',
+    cost: 16,
+    fatigueBias: 0.17,
+    mistakeTendency: 0.11
+  },
+  {
+    id: 'backup-keller',
+    name: 'Keller',
+    role: 'On-Call Backup',
+    specialty: 'late surge support',
+    reliability: 0.64,
+    temperament: 'nervy',
+    cost: 10,
+    fatigueBias: 0.08,
+    mistakeTendency: 0.18
+  }
+]);
+
 const LOCAL_FACTION_CATALOG = Object.freeze([
   {
     id: 'watcher-circle',
@@ -820,6 +890,10 @@ function clampCampaignDepthValue(value, min = 0, max = 10) {
   return Math.max(min, Math.min(max, Number.isFinite(Number(value)) ? Number(value) : min));
 }
 
+function clampStaffGauge(value, min = 0, max = 1) {
+  return Math.max(min, Math.min(max, Number.isFinite(Number(value)) ? Number(value) : min));
+}
+
 function limitRecentStrings(value, limit = 12) {
   if (!Array.isArray(value)) return [];
   const next = [];
@@ -829,6 +903,244 @@ function limitRecentStrings(value, limit = 12) {
     next.push(cleaned);
   });
   return next.slice(-limit);
+}
+
+function getStaffCatalogEntry(staffId) {
+  return STAFF_ROSTER_CATALOG.find((entry) => entry.id === staffId) || null;
+}
+
+function createStaffState(base) {
+  return {
+    id: base.id,
+    active: ['Security', 'Maintenance', 'Desk Assistant'].includes(base.role),
+    onCall: base.role === 'On-Call Backup',
+    fatigue: 0,
+    morale: 0.56,
+    recentNote: ''
+  };
+}
+
+function getDefaultBudgetLedger() {
+  return {
+    payroll: 0,
+    repairs: 0,
+    refunds: 0,
+    emergencies: 0,
+    utilities: 0,
+    ownerDeductions: 0,
+    intakeIncome: 0,
+    occupancyIncome: 0,
+    depositsHeld: 0,
+    compensationPaid: 0,
+    net: 0,
+    lines: []
+  };
+}
+
+function getDefaultManagementState() {
+  return {
+    focus: 'balanced',
+    ownerDemand: 'margin-watch',
+    selectedUpgradeCategory: 'All'
+  };
+}
+
+function normalizeStaffManagementState() {
+  normalizeCampaignDepthState();
+  state.dayShift.staff = state?.dayShift?.staff && typeof state.dayShift.staff === 'object' ? state.dayShift.staff : {};
+  state.dayShift.staff.focus = ['balanced', 'security-heavy', 'service-heavy', 'cost-saving'].includes(state.dayShift.staff.focus)
+    ? state.dayShift.staff.focus
+    : 'balanced';
+  state.dayShift.staff.roster = Array.isArray(state.dayShift.staff.roster) && state.dayShift.staff.roster.length
+    ? state.dayShift.staff.roster
+        .map((entry) => {
+          const base = getStaffCatalogEntry(entry?.id);
+          if (!base) return null;
+          return {
+            ...createStaffState(base),
+            ...entry,
+            id: base.id,
+            active: Boolean(entry?.active),
+            onCall: Boolean(entry?.onCall),
+            fatigue: clampStaffGauge(entry?.fatigue),
+            morale: clampStaffGauge(entry?.morale, 0.15, 1),
+            recentNote: String(entry?.recentNote || '')
+          };
+        })
+        .filter(Boolean)
+    : STAFF_ROSTER_CATALOG.map((entry) => createStaffState(entry));
+  STAFF_ROSTER_CATALOG.forEach((entry) => {
+    if (!state.dayShift.staff.roster.some((member) => member.id === entry.id)) {
+      state.dayShift.staff.roster.push(createStaffState(entry));
+    }
+  });
+  state.dayShift.budget = state?.dayShift?.budget && typeof state.dayShift.budget === 'object'
+    ? { ...getDefaultBudgetLedger(), ...state.dayShift.budget }
+    : getDefaultBudgetLedger();
+  state.dayShift.management = state?.dayShift?.management && typeof state.dayShift.management === 'object'
+    ? { ...getDefaultManagementState(), ...state.dayShift.management }
+    : getDefaultManagementState();
+}
+
+function getDoctrineManagementTrack(doctrineState = {}) {
+  const profile = getDoctrineDisplay(doctrineState);
+  const id = String(profile?.id || '');
+  if (id === 'hardline-controller' || id === 'strict-enforcer') {
+    return {
+      id: 'hard-control',
+      title: 'Hard Control',
+      ownerBias: 1,
+      guestBias: -1,
+      staffMoraleBias: -0.04,
+      stressBias: 1,
+      notes: ['Visible force reads as competent to ownership, but morale and guest patience run thinner.']
+    };
+  }
+  if (id === 'guest-first-host' || id === 'stability-manager') {
+    return {
+      id: 'hospitality-first',
+      title: 'Hospitality First',
+      ownerBias: 0,
+      guestBias: 1,
+      staffMoraleBias: 0.03,
+      stressBias: -1,
+      notes: ['Calmer handling improves guest tone and service recoveries, but harsh owner scrutiny may linger.']
+    };
+  }
+  if (id === 'shadow-operator' || id === 'quiet-fixer') {
+    return {
+      id: 'quiet-survival',
+      title: 'Quiet Survival',
+      ownerBias: 0,
+      guestBias: 0,
+      staffMoraleBias: 0.02,
+      stressBias: -1,
+      notes: ['Discreet handling lowers visible heat and helps shared spaces settle before they go public.']
+    };
+  }
+  return {
+    id: 'pattern-hunter',
+    title: 'Pattern Hunter',
+    ownerBias: -1,
+    guestBias: -1,
+    staffMoraleBias: -0.01,
+    stressBias: 0,
+    notes: ['Investigation clarity improves, but nights can feel harsher and more expensive under constant scrutiny.']
+  };
+}
+
+function getNightStaffProfile(targetState = state) {
+  normalizeStaffManagementState();
+  const roster = Array.isArray(targetState?.dayShift?.staff?.roster) ? targetState.dayShift.staff.roster : [];
+  const focus = String(targetState?.dayShift?.staff?.focus || 'balanced');
+  const active = roster.filter((member) => member.active);
+  const onCall = roster.filter((member) => member.onCall && !member.active);
+  const doctrineTrack = getDoctrineManagementTrack(targetState?.doctrine || {});
+  const activeRoles = new Set(active.map((member) => getStaffCatalogEntry(member.id)?.role).filter(Boolean));
+  const reliability = active.reduce((sum, member) => {
+    const base = getStaffCatalogEntry(member.id);
+    return sum + clampStaffGauge((base?.reliability || 0.65) - Number(member.fatigue || 0) * (base?.fatigueBias || 0.15) + (Number(member.morale || 0.55) - 0.5) * 0.18, 0.2, 0.95);
+  }, 0);
+  const rosterStrength = active.length ? reliability / active.length : 0.45;
+  return {
+    focus,
+    active,
+    onCall,
+    doctrineTrack,
+    rosterStrength,
+    hasSecurity: activeRoles.has('Security'),
+    hasMaintenance: activeRoles.has('Maintenance'),
+    hasRunner: activeRoles.has('Runner'),
+    hasDeskAssistant: activeRoles.has('Desk Assistant'),
+    activePayroll: active.reduce((sum, member) => sum + Number(getStaffCatalogEntry(member.id)?.cost || 0), 0),
+    onCallPayroll: onCall.reduce((sum, member) => sum + Math.round(Number(getStaffCatalogEntry(member.id)?.cost || 0) * 0.45), 0)
+  };
+}
+
+function addBudgetCost(kind, amount, line = '') {
+  normalizeStaffManagementState();
+  const safeKind = String(kind || '').trim();
+  const safeAmount = Math.max(0, Math.round(Number(amount || 0)));
+  if (!safeKind || safeAmount <= 0) return;
+  state.dayShift.budget[safeKind] = Math.max(0, Number(state.dayShift.budget[safeKind] || 0) + safeAmount);
+  if (line) {
+    state.dayShift.budget.lines = Array.isArray(state.dayShift.budget.lines) ? state.dayShift.budget.lines : [];
+    state.dayShift.budget.lines.push(line);
+    state.dayShift.budget.lines = state.dayShift.budget.lines.slice(-8);
+  }
+}
+
+function addBudgetIncome(kind, amount, line = '') {
+  normalizeStaffManagementState();
+  const safeKind = String(kind || '').trim();
+  const safeAmount = Math.max(0, Math.round(Number(amount || 0)));
+  if (!safeKind || safeAmount <= 0) return;
+  state.dayShift.budget[safeKind] = Math.max(0, Number(state.dayShift.budget[safeKind] || 0) + safeAmount);
+  if (line) {
+    state.dayShift.budget.lines = Array.isArray(state.dayShift.budget.lines) ? state.dayShift.budget.lines : [];
+    state.dayShift.budget.lines.push(line);
+    state.dayShift.budget.lines = state.dayShift.budget.lines.slice(-8);
+  }
+}
+
+function noteStaffOutcome(role, note, deltas = {}) {
+  normalizeStaffManagementState();
+  const roster = Array.isArray(state?.dayShift?.staff?.roster) ? state.dayShift.staff.roster : [];
+  const target = roster.find((member) => String(getStaffCatalogEntry(member.id)?.role || '').toLowerCase() === String(role || '').toLowerCase() && member.active);
+  if (!target) return;
+  target.fatigue = clampStaffGauge(Number(target.fatigue || 0) + Number(deltas.fatigue || 0), 0, 1);
+  target.morale = clampStaffGauge(Number(target.morale || 0.56) + Number(deltas.morale || 0), 0.15, 1);
+  target.recentNote = String(note || '').trim();
+}
+
+function buildStaffRosterModel(targetState = state) {
+  const profile = getNightStaffProfile(targetState);
+  return (Array.isArray(targetState?.dayShift?.staff?.roster) ? targetState.dayShift.staff.roster : []).map((member) => {
+    const base = getStaffCatalogEntry(member.id);
+    const effectiveReliability = clampStaffGauge(
+      Number(base?.reliability || 0.65) -
+      Number(member?.fatigue || 0) * Number(base?.fatigueBias || 0.15) +
+      (Number(member?.morale || 0.56) - 0.5) * 0.18,
+      0.2,
+      0.95
+    );
+    return {
+      ...base,
+      active: Boolean(member.active),
+      onCall: Boolean(member.onCall && !member.active),
+      fatigue: Math.round(Number(member.fatigue || 0) * 100),
+      morale: Math.round(Number(member.morale || 0.56) * 100),
+      effectiveReliability: Math.round(effectiveReliability * 100),
+      recentNote: String(member.recentNote || ''),
+      nightlyCost: member.active
+        ? Number(base?.cost || 0)
+        : member.onCall
+          ? Math.round(Number(base?.cost || 0) * 0.45)
+          : 0,
+      focusTag: profile.focus
+    };
+  });
+}
+
+function buildBudgetSummary(targetState = state) {
+  normalizeStaffManagementState();
+  const budget = targetState?.dayShift?.budget || getDefaultBudgetLedger();
+  const income = Number(budget.intakeIncome || 0) + Number(budget.occupancyIncome || 0) + Number(budget.depositsHeld || 0);
+  const costs =
+    Number(budget.payroll || 0) +
+    Number(budget.repairs || 0) +
+    Number(budget.refunds || 0) +
+    Number(budget.emergencies || 0) +
+    Number(budget.utilities || 0) +
+    Number(budget.ownerDeductions || 0) +
+    Number(budget.compensationPaid || 0);
+  return {
+    ...budget,
+    income,
+    costs,
+    net: income - costs,
+    lines: Array.isArray(budget.lines) ? budget.lines.slice(-6) : []
+  };
 }
 
 function normalizeCampaignDepthState() {
@@ -960,8 +1272,12 @@ function recordSuspectEvidence(guest, source = 'desk') {
 
 function buildOwnerPressureBrief() {
   normalizeCampaignDepthState();
+  normalizeStaffManagementState();
   const pressure = Number(state?.dayShift?.ownerPressure || 0);
   const plan = getCurrentDayShiftPlan();
+  const budget = buildBudgetSummary(state);
+  const staffProfile = getNightStaffProfile(state);
+  const doctrineTrack = getDoctrineManagementTrack(state?.doctrine || {});
   const mood = pressure >= 6
     ? 'Severe'
     : pressure >= 3
@@ -973,11 +1289,18 @@ function buildOwnerPressureBrief() {
     pressure,
     mood,
     memo: state?.dayShift?.ownerMemo || 'Ownership is watching the books and the complaint line.',
-    lines: Array.isArray(state?.dayShift?.memoLines) ? state.dayShift.memoLines.slice(0, 4) : [],
+    lines: [
+      ...(Array.isArray(state?.dayShift?.memoLines) ? state.dayShift.memoLines.slice(0, 3) : []),
+      `Owner demand: ${String(state?.dayShift?.management?.ownerDemand || 'margin-watch').replaceAll('-', ' ')}.`
+    ].slice(0, 4),
     settlement: Number(state?.dayShift?.lastSettlement || 0),
     selectedPlanId: plan.id,
     selectedPlanTitle: plan.title,
-    plans: DAY_SHIFT_PLAN_CATALOG
+    plans: DAY_SHIFT_PLAN_CATALOG,
+    budgetNet: budget.net,
+    staffingCost: staffProfile.activePayroll + staffProfile.onCallPayroll,
+    doctrineTrack: doctrineTrack.title,
+    ownerDemand: String(state?.dayShift?.management?.ownerDemand || 'margin-watch')
   };
 }
 
@@ -997,9 +1320,13 @@ function buildSuspectBoardSnapshot() {
 
 function settleBetweenNightDayShift(summary = null) {
   normalizeCampaignDepthState();
+  normalizeStaffManagementState();
+  const currentOwnerPressure = Number(state?.dayShift?.ownerPressure || 0);
   const unlockedRooms = Math.max(1, (state.rooms || []).filter((room) => room?.unlocked !== false).length);
   const occupiedRooms = (state.rooms || []).filter((room) => room?.occupiedBy).length;
   const occupancyRate = occupiedRooms / unlockedRooms;
+  const staffProfile = getNightStaffProfile(state);
+  const doctrineTrack = getDoctrineManagementTrack(state?.doctrine || {});
   const troubleLoad =
     Number(state?.shiftStats?.incidentsResolved || 0) * 0.4 +
     Number(state?.shiftStats?.roomCallsMissed || 0) * 1.2 +
@@ -1010,20 +1337,65 @@ function settleBetweenNightDayShift(summary = null) {
     Number(state?.shiftStats?.checkedIn || 0) -
     Number(state?.shiftStats?.rejected || 0) -
     Number(state?.shiftStats?.harshDeskActions || 0);
-  const incomeCredit = Math.round(occupiedRooms * 4 + Number(state?.shiftStats?.checkedIn || 0) * 3);
-  const repairCosts = Math.round(
+  const baseIncomeCredit = Math.round(occupiedRooms * 4 + Number(state?.shiftStats?.checkedIn || 0) * 3);
+  const baseRepairCosts = Math.round(
     Number(state?.shiftStats?.nightEventsMissed || 0) * 3 +
     Number(state?.shiftStats?.roomCallsMissed || 0) * 2 +
     Number(state?.shiftStats?.realThreatsMissed || 0) * 2
   );
+  const payroll = Math.round(staffProfile.activePayroll + staffProfile.onCallPayroll);
+  const repairs = Math.max(0, baseRepairCosts + Math.round(Number(state?.shiftStats?.majorPowerIncidents || 0) * 2));
+  const refunds = Math.max(
+    0,
+    Number(state?.dayShift?.budget?.refunds || 0) +
+    Number(state?.dayShift?.budget?.compensationPaid || 0)
+  );
+  const emergencies = Math.max(
+    0,
+    Number(state?.dayShift?.budget?.emergencies || 0) +
+    Math.round(Number(state?.shiftStats?.severeIncidents || 0) * 0.6)
+  );
+  const utilities = Math.max(
+    0,
+    Number(state?.dayShift?.budget?.utilities || 0) +
+    Math.round(Math.max(0, 100 - Number(state?.power || 100)) / 10)
+  );
+  const ownerPenalty = Math.max(
+    0,
+    currentOwnerPressure >= 6 ? 6 : currentOwnerPressure >= 3 ? 3 : 0
+  );
+  const incomeCredit = baseIncomeCredit + Math.max(0, Number(state?.dayShift?.budget?.intakeIncome || 0)) + Math.max(0, Number(state?.dayShift?.budget?.occupancyIncome || 0));
   const ownerGrace = Math.max(0, Number(state?.progressionModifiers?.ownerGrace || 0));
-  const settlement = incomeCredit - Math.max(0, repairCosts - ownerGrace);
+  const settlement = incomeCredit - Math.max(0, payroll + repairs + refunds + emergencies + utilities + ownerPenalty - ownerGrace);
   state.money = Math.max(0, Number(state.money || 0) + settlement);
+  state.dayShift.budget = {
+    ...getDefaultBudgetLedger(),
+    payroll,
+    repairs,
+    refunds,
+    emergencies,
+    utilities,
+    ownerDeductions: ownerPenalty,
+    intakeIncome: Math.max(0, Number(state?.dayShift?.budget?.intakeIncome || 0)),
+    occupancyIncome: Math.max(0, Number(state?.dayShift?.budget?.occupancyIncome || 0)),
+    depositsHeld: Math.max(0, Number(state?.dayShift?.budget?.depositsHeld || 0)),
+    compensationPaid: Math.max(0, Number(state?.dayShift?.budget?.compensationPaid || 0)),
+    net: settlement,
+    lines: [
+      `Payroll hit the books for ${formatMoney(payroll)} across active and on-call staff.`,
+      `Repairs / recovery cost ${formatMoney(repairs + emergencies + utilities)} after service strain and infrastructure wear.`,
+      refunds > 0 ? `Refunds and comps burned ${formatMoney(refunds)} out of the morning ledger.` : `Refund pressure stayed contained enough to avoid a visible settlement bleed.`,
+      ownerPenalty > 0 ? `Owner deduction: ${formatMoney(ownerPenalty)} for heat, softness, or unstable books.` : 'No direct owner deduction landed this morning.'
+    ]
+  };
 
   const pressureDelta =
     (occupancyRate < 0.45 ? 2 : occupancyRate >= 0.75 ? -1 : 0) +
     (troubleLoad >= 5 ? 2 : troubleLoad <= 2 ? -1 : 0) +
-    (hospitalityBias <= -2 ? 1 : hospitalityBias >= 3 ? 0 : 0);
+    (hospitalityBias <= -2 ? 1 : hospitalityBias >= 3 ? 0 : 0) +
+    (payroll >= 60 ? 1 : 0) +
+    (refunds >= 8 ? 1 : 0) +
+    Number(doctrineTrack.ownerBias || 0);
   state.dayShift.ownerPressure = clampCampaignDepthValue(Number(state.dayShift.ownerPressure || 0) + pressureDelta, -8, 12);
   state.dayShift.lastSettlement = settlement;
   state.dayShift.lastOccupancyRate = occupancyRate;
@@ -1036,23 +1408,35 @@ function settleBetweenNightDayShift(summary = null) {
     : 'Watchful';
   state.dayShift.ownerMemo =
     state.dayShift.ownerPressure >= 6
-      ? 'Ownership wants cleaner books, fewer public scenes, and no more desk improvisation.'
+      ? 'Ownership wants cleaner books, fewer public scenes, and visible control over staff, refunds, and damage.'
       : state.dayShift.ownerPressure >= 3
-        ? 'Ownership is questioning whether the motel is growing in the right direction.'
+        ? 'Ownership is questioning whether staffing, guest handling, and repair spending are drifting too loose.'
         : occupancyRate >= 0.75 && troubleLoad <= 2
-          ? 'Ownership sees momentum: the motel is making money without slipping too hard.'
+          ? 'Ownership sees momentum: the motel is making money without slipping too hard, and staffing looks justified.'
           : 'Ownership is waiting for the next night before deciding whether to tighten control.';
+  state.dayShift.management.ownerDemand =
+    state.dayShift.ownerPressure >= 6
+      ? 'damage-control'
+      : refunds >= 8
+        ? 'refund-freeze'
+        : payroll >= 60
+          ? 'cost-cutting'
+          : hospitalityBias <= -2
+            ? 'softer-hands'
+            : occupancyRate < 0.45
+              ? 'fill-rooms'
+              : 'margin-watch';
   state.dayShift.memoLines = [
-    `Day shift ledger: ${settlement >= 0 ? '+' : '-'}$${Math.abs(settlement)} after occupancy and repair balancing.`,
+    `Day shift ledger: ${settlement >= 0 ? '+' : '-'}$${Math.abs(settlement)} after payroll, repairs, and guest-facing costs.`,
     `Owner read: ${Math.round(occupancyRate * 100)}% of licensed rooms carried business value into morning.`,
     troubleLoad >= 5
-      ? 'Complaint and incident spillover made management more suspicious this morning.'
+      ? 'Complaint, damage, and repair spillover made management more suspicious this morning.'
       : 'Morning briefing stayed readable enough to avoid a full ownership escalation.',
     hospitalityBias <= -2
-      ? 'Harsh control was noticed; ownership likes compliance more than visible hostility.'
+      ? 'Harsh control was noticed; ownership wants compliance without visible hostility.'
       : hospitalityBias >= 3
-        ? 'Soft handling improved guest-facing tone, but ownership will keep watching the numbers.'
-        : `Next plan selected: ${getCurrentDayShiftPlan().title}.`
+        ? 'Soft handling improved guest-facing tone, but ownership is checking whether the margins can support it.'
+        : `Doctrine track: ${doctrineTrack.title}.`
   ].slice(0, 4);
   state.dayShift.planHistory = limitRecentStrings(
     [...(state.dayShift.planHistory || []), getCurrentDayShiftPlan().id],
@@ -1090,10 +1474,55 @@ function setDayShiftPlan(planId) {
   renderAll();
 }
 
+function setStaffFocus(focusId) {
+  normalizeStaffManagementState();
+  if (!['balanced', 'security-heavy', 'service-heavy', 'cost-saving'].includes(String(focusId))) return;
+  state.dayShift.staff.focus = String(focusId);
+  state.logs.push(`Staffing focus set: ${String(focusId).replaceAll('-', ' ')}.`);
+  renderNightPrepScreen();
+  renderAll();
+}
+
+function cycleStaffAssignment(staffId) {
+  normalizeStaffManagementState();
+  const roster = Array.isArray(state?.dayShift?.staff?.roster) ? state.dayShift.staff.roster : [];
+  const member = roster.find((entry) => entry.id === staffId);
+  const base = getStaffCatalogEntry(staffId);
+  if (!member || !base) return;
+  if (member.active) {
+    member.active = false;
+    member.onCall = true;
+  } else if (member.onCall) {
+    member.active = false;
+    member.onCall = false;
+  } else {
+    member.active = true;
+    member.onCall = false;
+  }
+  member.recentNote = member.active
+    ? 'Booked for tonight.'
+    : member.onCall
+      ? 'Standing by on call.'
+      : 'Held off tonight to save budget.';
+  state.logs.push(`${base.name} set to ${member.active ? 'active duty' : member.onCall ? 'on-call reserve' : 'off tonight'}.`);
+  renderNightPrepScreen();
+  renderAll();
+}
+
+function setUpgradeCategory(category) {
+  normalizeStaffManagementState();
+  state.dayShift.management.selectedUpgradeCategory = String(category || 'All');
+  renderNightPrepScreen();
+  renderAll();
+}
+
 function applyDayShiftPlanForNightStart() {
   normalizeCampaignDepthState();
+  normalizeStaffManagementState();
   const plan = getCurrentDayShiftPlan();
+  const staffProfile = getNightStaffProfile(state);
   state.dayShift.activeNightPlan = plan.id;
+  state.dayShift.budget = getDefaultBudgetLedger();
   if (plan.id === 'occupancy-push') {
     state.intake.arrivalsRemaining = Math.max(0, Number(state.intake.arrivalsRemaining || 0) + 1);
     state.logs.push('Day shift squeezed in one extra arrival slot for tonight.');
@@ -1104,6 +1533,12 @@ function applyDayShiftPlanForNightStart() {
   } else {
     state.logs.push('Day shift held a balanced operating stance going into tonight.');
   }
+  state.logs.push(`Night staffing: ${staffProfile.active.length} active, ${staffProfile.onCall.length} on-call, focus ${staffProfile.focus.replaceAll('-', ' ')}.`);
+  state.dayShift.staff.roster = (state.dayShift.staff.roster || []).map((member) => ({
+    ...member,
+    fatigue: clampStaffGauge(Number(member.fatigue || 0) + (member.active ? 0.08 : member.onCall ? 0.03 : -0.05), 0, 1),
+    morale: clampStaffGauge(Number(member.morale || 0.56) + (member.active ? 0 : 0.01), 0.15, 1)
+  }));
 }
 
 const SIGNATURE_NIGHT_CATALOG = Object.freeze([
@@ -2721,6 +3156,7 @@ function getServiceActionSpec(room, actionType) {
   const request = service.pendingRequest;
   const blackout = getBlackoutPressureState(state);
   const activePlan = String(state?.dayShift?.activeNightPlan || state?.dayShift?.selectedPlan || 'balanced');
+  const staffProfile = getNightStaffProfile(state);
   const preferred = Array.isArray(request?.preferred) ? request.preferred : [];
   const preferredMatch = preferred.includes(actionType);
   const urgency = String(request?.urgency || 'low');
@@ -2742,6 +3178,14 @@ function getServiceActionSpec(room, actionType) {
   if (truthState === 'real-threat' && actionType === 'desk') successChance -= 0.1;
   if (truthState === 'real-threat' && actionType === 'security') successChance += 0.08;
   successChance += Number(state?.progressionModifiers?.serviceResponseClarity || 0);
+  if (actionType === 'security') successChance += staffProfile.hasSecurity ? 0.08 : -0.08;
+  if (actionType === 'maintenance') successChance += staffProfile.hasMaintenance ? 0.1 : -0.1;
+  if (actionType === 'runner') successChance += staffProfile.hasRunner ? 0.08 : -0.06;
+  if (actionType === 'desk') successChance += staffProfile.hasDeskAssistant ? 0.06 : -0.05;
+  successChance += (Number(staffProfile.rosterStrength || 0.5) - 0.5) * 0.22;
+  if (staffProfile.focus === 'security-heavy' && actionType === 'security') successChance += 0.06;
+  if (staffProfile.focus === 'service-heavy' && (actionType === 'runner' || actionType === 'desk')) successChance += 0.06;
+  if (staffProfile.focus === 'cost-saving' && actionType !== 'desk') successChance -= 0.04;
   if (activePlan === 'service-calm' && (actionType === 'desk' || actionType === 'runner')) successChance += 0.05;
   successChance -= Number(blackout.servicePenalty || 0);
   successChance = Math.max(0.18, Math.min(0.9, successChance));
@@ -2755,7 +3199,7 @@ function getServiceActionSpec(room, actionType) {
           ? 0.2
           : actionType === 'runner' && truthState === 'real-threat'
             ? 0.08
-            : 0,
+            : Math.max(0, 0.14 - Number(staffProfile.rosterStrength || 0.5) * 0.12),
     moneyCost:
       actionType === 'security' ? 5
       : actionType === 'maintenance' ? 4
@@ -2992,7 +3436,17 @@ function resolveRoomServiceAction(roomId, actionType) {
     return;
   }
   state.money = Math.max(0, state.money - spec.moneyCost);
+  if (spec.moneyCost > 0) {
+    addBudgetCost(
+      actionType === 'maintenance' ? 'repairs' : actionType === 'desk' ? 'refunds' : 'emergencies',
+      spec.moneyCost,
+      `${room.label}: ${actionType} response cost ${formatMoney(spec.moneyCost)}.`
+    );
+  }
   state.power = clampPower(state.power - spec.powerCost);
+  if (spec.powerCost > 0) {
+    addBudgetCost('utilities', spec.powerCost, `${room.label}: response load burned extra utility margin.`);
+  }
   const roll = Math.random();
   const overreaction = roll < Number(spec.overreactionRisk || 0);
   const success = !overreaction && roll <= spec.successChance;
@@ -3055,6 +3509,10 @@ function resolveRoomServiceAction(roomId, actionType) {
     };
   });
   if (overreaction) {
+    noteStaffOutcome(actionType === 'desk' ? 'Desk Assistant' : actionType.charAt(0).toUpperCase() + actionType.slice(1), `Overreacted at ${room.label}.`, {
+      fatigue: 0.08,
+      morale: -0.04
+    });
     registerOvermanagementPenalty(roomId, {
       reason: `${actionType}-false-alarm`,
       logLine: `${actionType} hit ${room.label} too hard for what turned out to be more false alarm than threat.`,
@@ -3078,6 +3536,10 @@ function resolveRoomServiceAction(roomId, actionType) {
     });
     state.logs.push(`${room.label}: ${request.title} was closer to a false alarm, and ${actionType} turned it into a social problem instead of a safety solution.`);
   } else if (success) {
+    noteStaffOutcome(actionType === 'desk' ? 'Desk Assistant' : actionType.charAt(0).toUpperCase() + actionType.slice(1), `Clean resolution in ${room.label}.`, {
+      fatigue: 0.06,
+      morale: 0.03
+    });
     calmRoomChain(roomId, actionType === 'security' ? 3 : 2);
     state.reputation = clampReputation(state.reputation + 1);
     state.logs.push(
@@ -3097,6 +3559,10 @@ function resolveRoomServiceAction(roomId, actionType) {
       note: `${request.title} was handled cleanly here during the night.`
     });
   } else if (partial) {
+    noteStaffOutcome(actionType === 'desk' ? 'Desk Assistant' : actionType.charAt(0).toUpperCase() + actionType.slice(1), `Partial response in ${room.label}.`, {
+      fatigue: 0.07,
+      morale: -0.01
+    });
     state.logs.push(
       `${room.label}: ${actionType} only partly settled ${request.title}. ${
         truthState === 'real-threat'
@@ -3114,6 +3580,10 @@ function resolveRoomServiceAction(roomId, actionType) {
       });
     }
   } else {
+    noteStaffOutcome(actionType === 'desk' ? 'Desk Assistant' : actionType.charAt(0).toUpperCase() + actionType.slice(1), `Failed response in ${room.label}.`, {
+      fatigue: 0.09,
+      morale: -0.05
+    });
     registerRoomChainSignal({
       roomId,
       guestName: room.occupiedBy,
@@ -3197,6 +3667,7 @@ function reassignRoomGuest(roomId) {
     return;
   }
   state.money = Math.max(0, state.money - cost);
+  addBudgetCost('refunds', cost, `${fromRoom.label}: comped reassignment into ${targetRoom.label}.`);
   const carriedService = getDefaultRoomServiceState(fromRoom?.serviceState);
   const unnecessaryMove =
     !carriedService.pendingRequest &&
@@ -3245,12 +3716,15 @@ function reassignRoomGuest(roomId) {
   state.logs.push(`${fromRoom.occupiedBy} was reassigned from ${fromRoom.label} to ${targetRoom.label}. The move bought space, but guests noticed the disruption.`);
   state.shiftStats.roomReassignments = (state.shiftStats.roomReassignments || 0) + 1;
   if (unnecessaryMove) {
+    noteStaffOutcome('Runner', `Needless move upset ${fromRoom.label}.`, { fatigue: 0.06, morale: -0.03 });
     registerOvermanagementPenalty(targetRoom.id, {
       reason: 'needless reassignment',
       logLine: `${fromRoom.occupiedBy} did not need a move, and the reassignment itself started irritation and rumor spread.`,
       reputationLoss: 1,
       falloutSeverity: 1
     });
+  } else {
+    noteStaffOutcome('Runner', `Reassigned ${fromRoom.label} into ${targetRoom.label}.`, { fatigue: 0.08, morale: 0.02 });
   }
   if (checkFailureState()) return;
   if (progressShift('dispatch', { timeScale: 1.05, passiveDrainScale: 1 })) return;
@@ -3651,6 +4125,7 @@ function calmRoomChain(roomId, amount = 2) {
 
 function buildRenderState() {
   normalizeDeskInspectionState(state);
+  normalizeStaffManagementState();
   const uiPressureLevel = deriveUiPressureLevel(state);
   const blackoutState = getBlackoutPressureState(state);
   const identity = getIdentityContext();
@@ -3659,6 +4134,10 @@ function buildRenderState() {
   const ownerBrief = buildOwnerPressureBrief();
   const suspectBoard = buildSuspectBoardSnapshot();
   const sharedSpaces = buildSharedSpacesModel(state);
+  const budgetSummary = buildBudgetSummary(state);
+  const staffRoster = buildStaffRosterModel(state);
+  const staffProfile = getNightStaffProfile(state);
+  const doctrineTrack = getDoctrineManagementTrack(state?.doctrine || {});
   const metaSurface = getMetaSurfaceState();
   const onboardingUi = buildOnboardingUiModel(state, onboardingState, {
     activePanelId,
@@ -3699,12 +4178,20 @@ function buildRenderState() {
     onToggleSettingsOverlay: toggleSettingsOverlay,
     onUpdateSetting: updateSetting,
     onSetDayShiftPlan: setDayShiftPlan,
+    onSetStaffFocus: setStaffFocus,
+    onCycleStaffAssignment: cycleStaffAssignment,
+    onSetUpgradeCategory: setUpgradeCategory,
     audioMuted: audioController.isMuted(),
     settings: settingsState,
     settingsOverlayOpen,
     settingsStorageHealthy: Boolean(settingsState?.__storageLoaded),
     activeUpgradeSummary: buildActiveUpgradeSummary(state),
     ownerPressureBrief: ownerBrief,
+    budgetSummary,
+    staffRoster,
+    staffFocus: staffProfile.focus,
+    staffProfile,
+    doctrineTrack,
     suspectBoard,
     uiPressureLevel,
     topbarWarningFlags: getTopbarWarningFlags(state),
@@ -3950,7 +4437,12 @@ function queueDeskConsequenceForAction(action, guest, room = null, policyResult 
 
 function renderNightPrepScreen() {
   const upgrades = getUpgradeCatalog(state);
-  renderNightPrep(buildRenderState(), upgrades, purchasePrepUpgrade);
+  const renderState = buildRenderState();
+  const selectedCategory = String(renderState?.dayShift?.management?.selectedUpgradeCategory || 'All');
+  const filtered = selectedCategory === 'All'
+    ? upgrades
+    : upgrades.filter((upgrade) => String(upgrade?.category || '').toLowerCase().includes(selectedCategory.toLowerCase()));
+  renderNightPrep(renderState, filtered, purchasePrepUpgrade);
 }
 
 function purchasePrepUpgrade(upgradeId) {
@@ -4427,7 +4919,13 @@ function startFreshCampaignRun() {
     ownerMood: 'Watchful',
     ownerMemo: 'Ownership is waiting to see whether the motel grows or slips.',
     lastSettlement: 0,
-    memoLines: []
+    memoLines: [],
+    staff: {
+      focus: 'balanced',
+      roster: STAFF_ROSTER_CATALOG.map((entry) => createStaffState(entry))
+    },
+    budget: getDefaultBudgetLedger(),
+    management: getDefaultManagementState()
   };
   state.suspectBoard = {
     entries: [],
@@ -5302,6 +5800,7 @@ function requestGuestDeposit(guestId) {
         ].filter(Boolean).join(' ')
       }));
       state.money += depositAmount;
+      addBudgetIncome('depositsHeld', depositAmount, `${updatedGuest.name} paid a caution deposit.`);
       state.reputation = clampReputation(state.reputation - 1);
       state.logs.push(`${updatedGuest.name} put down a ${depositAmount}$ deposit. The desk bought caution at the cost of goodwill.`);
       pushLiveAlert(state, {
@@ -5541,7 +6040,10 @@ function checkInGuest(guestId, requestedRoomId = null) {
   queueDeskConsequenceForAction('checkin', guest, room, policyResult);
 
   const incomeMult = Math.max(0.7, Number(state?.runModifiers?.moneyIncomeMult || 1));
-  state.money += Math.max(1, Math.round(20 * incomeMult));
+  const roomIncome = Math.max(1, Math.round(20 * incomeMult));
+  state.money += roomIncome;
+  addBudgetIncome('occupancyIncome', roomIncome, `${guest.name} check-in posted room revenue.`);
+  noteStaffOutcome('Desk Assistant', `Checked in ${guest.name} to ${room.label}.`, { fatigue: 0.04, morale: 0.02 });
   const identityMods = getIdentityContext();
   state.reputation += 1 + Number(identityMods.doctrineMods.guestCalmBonus || 0) + Number(identityMods.factionMods.guestDeskCalm || 0);
   if (Number(identityMods.doctrineMods.guestPenalty || 0) < 0) {
@@ -6179,9 +6681,11 @@ function handleCameraSceneAction(zoneId, actionId) {
 
   if (adjustedMoneyCost > 0) {
     state.money = Math.max(0, state.money - adjustedMoneyCost);
+    addBudgetCost('emergencies', adjustedMoneyCost, `${sceneZone || 'Shared space'} response cost ${formatMoney(adjustedMoneyCost)}.`);
   }
   if (adjustedPowerCost > 0) {
     state.power = clampPower(state.power - adjustedPowerCost);
+    addBudgetCost('utilities', adjustedPowerCost, `${sceneZone || 'Shared space'} action strained the utility margin.`);
     state.shiftStats.investigationPowerSpent =
       (state.shiftStats.investigationPowerSpent || 0) + adjustedPowerCost;
     state.logs.push(`Scene response consumed ${adjustedPowerCost}% power.`);
@@ -6640,7 +7144,9 @@ function dispatchStaff() {
   audioController.playUiClick();
   audioController.playDispatch();
   normalizeAdminSpamState(state);
+  normalizeStaffManagementState();
   const identity = getIdentityContext();
+  const staffProfile = getNightStaffProfile(state);
   const previewTarget = peekDispatchStaffTargetRoom(state.rooms);
   if (!previewTarget) {
     state.shiftStats.reportActionsUsed = (state.shiftStats.reportActionsUsed || 0) + 1;
@@ -6671,7 +7177,10 @@ function dispatchStaff() {
     dispatchSuccessBonus:
       Number(state?.progressionModifiers?.dispatchSuccessBonus || 0) +
       Number(identity.doctrineMods.dispatchBonus || 0) +
-      Number(identity.factionMods.staffDispatchBonus || 0)
+      Number(identity.factionMods.staffDispatchBonus || 0) +
+      (Number(staffProfile.rosterStrength || 0.5) - 0.5) * 0.24 +
+      (staffProfile.focus === 'security-heavy' ? 0.06 : 0) +
+      (staffProfile.hasSecurity ? 0.04 : -0.06)
   });
 
   state.rooms = result.rooms;
@@ -6688,6 +7197,7 @@ function dispatchStaff() {
     return;
   }
   state.money = Math.max(0, state.money - dispatchFee);
+  addBudgetCost('emergencies', dispatchFee, `Dispatch mobilization cost ${formatMoney(dispatchFee)}.`);
   state.shiftStats.reportActionsUsed = (state.shiftStats.reportActionsUsed || 0) + 1;
   state.shiftStats.reportActionCosts = (state.shiftStats.reportActionCosts || 0) + dispatchFee;
   state.adminSpam.dispatchEmptyStreak = 0;
@@ -6717,6 +7227,7 @@ function dispatchStaff() {
   }
 
   if (result.responded && result.success) {
+    noteStaffOutcome('Security', 'Dispatch landed cleanly.', { fatigue: 0.07, morale: 0.03 });
     registerFinaleContainment(state, 1);
     applyIdentityImpact({
       doctrine: { stability: 1, compassion: 1 },
@@ -6727,6 +7238,7 @@ function dispatchStaff() {
   }
 
   if (result.responded && result.success === false) {
+    noteStaffOutcome('Security', 'Dispatch missed the room pressure.', { fatigue: 0.09, morale: -0.04 });
     pushLiveAlert(state, {
       type: 'warning',
       message: 'Staff response failed to stabilize the target room.',

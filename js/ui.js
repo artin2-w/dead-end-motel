@@ -1647,8 +1647,12 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
   const carryover = document.getElementById('night-prep-carryover');
   const threads = document.getElementById('night-prep-threads');
   const owner = document.getElementById('night-prep-owner');
+  const staff = document.getElementById('night-prep-staff');
+  const budget = document.getElementById('night-prep-budget');
   const suspectBoard = document.getElementById('night-prep-suspect-board');
   const plans = document.getElementById('night-prep-plan-grid');
+  const staffFocusGrid = document.getElementById('night-prep-staff-focus-grid');
+  const upgradeCategories = document.getElementById('night-prep-upgrade-categories');
   const grid = document.getElementById('night-prep-upgrade-grid');
 
   if (title) title.textContent = 'Night Prep';
@@ -1689,13 +1693,59 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
     const doctrineTitle = state?.doctrineDisplay?.title || 'Stability Manager';
     const doctrineSummary = state?.doctrineDisplay?.summary || 'Low-chaos continuity is prioritized over dramatic responses.';
     const doctrineHints = Array.isArray(state?.doctrineDisplay?.hints) ? state.doctrineDisplay.hints.slice(0, 2) : [];
+    const doctrineTrack = state?.doctrineTrack?.title || 'Pattern Hunter';
+    const doctrineTrackNotes = Array.isArray(state?.doctrineTrack?.notes) ? state.doctrineTrack.notes.slice(0, 1) : [];
     doctrine.innerHTML = `
       <p class="section-tag">Run Identity</p>
       <p><strong>${doctrineTitle}</strong></p>
       <p class="muted">${doctrineSummary}</p>
+      <p class="muted"><strong>Management track:</strong> ${doctrineTrack}</p>
       ${doctrineHints.length
         ? `<ul class="prep-notes-list">${doctrineHints.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
         : ''}
+      ${doctrineTrackNotes.length ? `<p class="muted">${doctrineTrackNotes[0]}</p>` : ''}
+    `;
+  }
+
+  if (staff) {
+    const roster = Array.isArray(state?.staffRoster) ? state.staffRoster : [];
+    const profile = state?.staffProfile || {};
+    staff.innerHTML = `
+      <p class="section-tag">Staff Roster</p>
+      <p><strong>${(profile?.focus || 'balanced').replaceAll('-', ' ')}</strong> staffing • Active payroll: ${formatMoney(Number(profile?.activePayroll || 0))}</p>
+      <div class="prep-staff-grid">
+        ${roster.map((member) => `
+          <button class="prep-staff-card ${member.active ? 'is-active' : member.onCall ? 'is-oncall' : ''}" data-staff-id="${member.id}">
+            <div class="prep-staff-header">
+              <strong>${member.name}</strong>
+              <span class="prep-staff-role">${member.role}</span>
+            </div>
+            <p class="muted">${member.specialty} • ${member.active ? 'Active' : member.onCall ? 'On-call' : 'Off'}</p>
+            <p class="muted">Reliability ${member.effectiveReliability}% • Fatigue ${member.fatigue}% • Cost ${formatMoney(member.nightlyCost)}</p>
+            ${member.recentNote ? `<p class="muted">${member.recentNote}</p>` : ''}
+          </button>
+        `).join('')}
+      </div>
+    `;
+    if (typeof state?.onCycleStaffAssignment === 'function') {
+      staff.querySelectorAll('[data-staff-id]').forEach((button) => {
+        button.addEventListener('click', () => state.onCycleStaffAssignment(button.dataset.staffId));
+      });
+    }
+  }
+
+  if (budget) {
+    const summary = state?.budgetSummary || {};
+    const lines = Array.isArray(summary?.lines) ? summary.lines.slice(0, 4) : [];
+    budget.innerHTML = `
+      <p class="section-tag">Budget / Settlement</p>
+      <p><strong>Projected net:</strong> ${formatMoney(Number(summary?.net || 0))}</p>
+      <p class="muted">Income ${formatMoney(Number(summary?.income || 0))} • Costs ${formatMoney(Number(summary?.costs || 0))}</p>
+      <p class="muted">Payroll ${formatMoney(Number(summary?.payroll || 0))} • Repairs ${formatMoney(Number(summary?.repairs || 0))} • Refunds ${formatMoney(Number(summary?.refunds || 0) + Number(summary?.compensationPaid || 0))}</p>
+      <p class="muted">Emergency ${formatMoney(Number(summary?.emergencies || 0))} • Utility ${formatMoney(Number(summary?.utilities || 0))} • Owner ${formatMoney(Number(summary?.ownerDeductions || 0))}</p>
+      ${lines.length
+        ? `<ul class="prep-notes-list">${lines.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
+        : '<p class="muted">No budget notes yet.</p>'}
     `;
   }
 
@@ -1759,6 +1809,7 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
       <p class="section-tag">Owner Pressure</p>
       <p><strong>${brief?.mood || 'Watchful'}</strong> oversight • Last settlement: ${formatMoney(Number(brief?.settlement || 0))}</p>
       <p class="muted">${brief?.memo || 'Ownership has not issued a new morning memo.'}</p>
+      <p class="muted">Demand: ${(brief?.ownerDemand || 'margin-watch').replaceAll('-', ' ')} • Doctrine read: ${brief?.doctrineTrack || 'Stability Manager'} • Staffing cost: ${formatMoney(Number(brief?.staffingCost || 0))}</p>
       ${lines.length
         ? `<ul class="prep-notes-list">${lines.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
         : '<p class="muted">No additional owner notes.</p>'}
@@ -1793,6 +1844,40 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
         button.addEventListener('click', () => state.onSetDayShiftPlan(plan.id));
       }
       plans.appendChild(button);
+    });
+  }
+
+  if (staffFocusGrid) {
+    const focusOptions = [
+      { id: 'balanced', title: 'Balanced Shift' },
+      { id: 'security-heavy', title: 'Security Heavy' },
+      { id: 'service-heavy', title: 'Service Heavy' },
+      { id: 'cost-saving', title: 'Cost Saving' }
+    ];
+    staffFocusGrid.innerHTML = '';
+    focusOptions.forEach((focus) => {
+      const button = document.createElement('button');
+      button.className = `button button-secondary prep-plan-btn ${state?.staffFocus === focus.id ? 'is-active' : ''}`.trim();
+      button.textContent = focus.title;
+      if (typeof state?.onSetStaffFocus === 'function') {
+        button.addEventListener('click', () => state.onSetStaffFocus(focus.id));
+      }
+      staffFocusGrid.appendChild(button);
+    });
+  }
+
+  if (upgradeCategories) {
+    const categories = ['All', 'Desk', 'Security', 'Power', 'Rooms', 'Service', 'Surveillance', 'Operations'];
+    const selected = String(state?.dayShift?.management?.selectedUpgradeCategory || 'All');
+    upgradeCategories.innerHTML = '';
+    categories.forEach((category) => {
+      const button = document.createElement('button');
+      button.className = `button button-secondary prep-plan-btn ${selected === category ? 'is-active' : ''}`.trim();
+      button.textContent = category;
+      if (typeof state?.onSetUpgradeCategory === 'function') {
+        button.addEventListener('click', () => state.onSetUpgradeCategory(category));
+      }
+      upgradeCategories.appendChild(button);
     });
   }
 
