@@ -322,9 +322,19 @@ export function renderTopbar(state) {
   const storyBeatCard = document.getElementById('active-story-beat-card');
   if (storyBeatCard) {
     const beat = state?.activeStoryBeat || null;
+    const signature = state?.signatureNight || null;
     if (!beat) {
       storyBeatCard.classList.remove('is-active');
-      storyBeatCard.innerHTML = '<p class="muted">No recurring story beat active tonight.</p>';
+      storyBeatCard.innerHTML = signature?.active
+        ? `
+          <div class="active-event-header">
+            <p class="section-tag">Signature Night</p>
+            <span class="active-event-severity severity-high">STAGE ${Math.max(1, Number(signature.stage || 1))}</span>
+          </div>
+          <h4>${signature.title || 'Signature Night'}</h4>
+          <p class="muted">${signature.note || 'A distinctive night structure is active.'}</p>
+        `
+        : '<p class="muted">No recurring story beat active tonight.</p>';
     } else {
       storyBeatCard.classList.add('is-active');
       storyBeatCard.innerHTML = `
@@ -334,6 +344,7 @@ export function renderTopbar(state) {
         </div>
         <h4>${beat.title || 'Recurring Thread'}</h4>
         <p class="muted">${beat.note || 'A prior night consequence may surface during this shift.'}</p>
+        ${signature?.active ? `<p class="muted">${signature.title} is also active at stage ${Math.max(1, Number(signature.stage || 1))}.</p>` : ''}
       `;
     }
   }
@@ -1432,7 +1443,9 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
   const runSetupLabel = document.getElementById('summary-run-setup');
   const runBonusLabel = document.getElementById('summary-run-reward-bonus');
   if (scenarioLabel) {
-    const label = outcomeFlavor?.scenarioLabel || state?.activeScenario?.label || 'Unknown Shift';
+    const label = state?.signatureNight?.active
+      ? `${state.signatureNight.title}`
+      : outcomeFlavor?.scenarioLabel || state?.activeScenario?.label || 'Unknown Shift';
     scenarioLabel.textContent = `Scenario: ${label}`;
   }
   if (campaignProgressLabel) {
@@ -1537,7 +1550,12 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
 
   if (branchFlavor) {
     branchFlavor.innerHTML = '';
-    const lines = Array.isArray(state?.summaryBranchNotes) ? state.summaryBranchNotes : [];
+    const lines = [
+      ...(state?.signatureNight?.active && state?.signatureNight?.namedThread
+        ? [`Named thread: ${state.signatureNight.namedThread}${state?.signatureNight?.branchOutcome ? ` • ${state.signatureNight.branchOutcome}` : ''}`]
+        : []),
+      ...(Array.isArray(state?.summaryBranchNotes) ? state.summaryBranchNotes : [])
+    ];
     lines.slice(0, 3).forEach((line) => {
       const item = document.createElement('li');
       item.textContent = line;

@@ -862,6 +862,19 @@ function normalizeCampaignDepthState() {
   state.linkedArrivalState.recentGroups = Array.isArray(state.linkedArrivalState.recentGroups)
     ? state.linkedArrivalState.recentGroups.slice(-8)
     : [];
+
+  state.signatureNight = state?.signatureNight && typeof state.signatureNight === 'object' ? state.signatureNight : {};
+  state.signatureNight.night = Math.max(0, Number(state.signatureNight.night || 0));
+  state.signatureNight.active = Boolean(state.signatureNight.active);
+  state.signatureNight.id = String(state.signatureNight.id || '');
+  state.signatureNight.title = String(state.signatureNight.title || '');
+  state.signatureNight.note = String(state.signatureNight.note || '');
+  state.signatureNight.stage = Math.max(0, Number(state.signatureNight.stage || 0));
+  state.signatureNight.maxStage = Math.max(3, Number(state.signatureNight.maxStage || 3));
+  state.signatureNight.stepKeysSeen = limitRecentStrings(state.signatureNight.stepKeysSeen, 12);
+  state.signatureNight.namedThread = String(state.signatureNight.namedThread || '');
+  state.signatureNight.branchOutcome = String(state.signatureNight.branchOutcome || '');
+  state.signatureNight.themeTags = limitRecentStrings(state.signatureNight.themeTags, 6);
 }
 
 function getCurrentDayShiftPlan() {
@@ -1089,6 +1102,201 @@ function applyDayShiftPlanForNightStart() {
   } else {
     state.logs.push('Day shift held a balanced operating stance going into tonight.');
   }
+}
+
+const SIGNATURE_NIGHT_CATALOG = Object.freeze([
+  {
+    id: 'wrong-hallway',
+    title: 'Signature Night: Wrong Hallway',
+    note: 'Door knocks and hallway movement stop making spatial sense; confidence drains from shared spaces first.',
+    namedThread: 'The Wrong Hall',
+    maxStage: 4,
+    themeTags: ['hallway', 'knock-pattern', 'shared-space']
+  },
+  {
+    id: 'linked-arrival-surge',
+    title: 'Signature Night: Linked Arrival Surge',
+    note: 'Arrivals feel coordinated tonight. Scanner chatter, desk stories, and room trouble may all point to the same chain.',
+    namedThread: 'The Double Check-In',
+    maxStage: 4,
+    themeTags: ['linked-arrivals', 'scanner', 'pairs']
+  },
+  {
+    id: 'false-family-pressure',
+    title: 'Signature Night: False Family Pressure',
+    note: 'Soft family stories keep reaching the desk, but they may be assembled covers rather than frightened travelers.',
+    namedThread: 'The Family Route',
+    maxStage: 4,
+    themeTags: ['false-family', 'social', 'moral']
+  },
+  {
+    id: 'blackout-hostile',
+    title: 'Signature Night: Blackout Hostility',
+    note: 'Power fragility and shared-space hostility keep feeding one another; control can vanish in ugly steps.',
+    namedThread: 'The Slipout',
+    maxStage: 4,
+    themeTags: ['blackout', 'hostile', 'collapse']
+  },
+  {
+    id: 'watcher-convergence',
+    title: 'Signature Night: Watcher Convergence',
+    note: 'Watcher signs are no longer background texture; they are shaping who arrives, who watches, and who calls from inside.',
+    namedThread: 'The Watch List',
+    maxStage: 4,
+    themeTags: ['watchers', 'faction', 'surveillance']
+  }
+]);
+
+function selectSignatureNight(targetState = state) {
+  normalizeCampaignDepthState();
+  const night = Math.max(1, Number(targetState?.night || 1));
+  if (targetState?.signatureNight?.night === night && targetState?.signatureNight?.id) return targetState.signatureNight;
+  const suspect = buildSuspectBoardSnapshot();
+  const chance = night >= 3 ? Math.min(0.48, 0.1 + (night - 2) * 0.06) : 0;
+  if (Math.random() > chance) {
+    targetState.signatureNight = {
+      night,
+      active: false,
+      id: '',
+      title: '',
+      note: '',
+      stage: 0,
+      maxStage: 3,
+      stepKeysSeen: [],
+      namedThread: '',
+      branchOutcome: '',
+      themeTags: []
+    };
+    return targetState.signatureNight;
+  }
+
+  const weighted = SIGNATURE_NIGHT_CATALOG.map((entry) => {
+    let weight = 1;
+    if (entry.id === 'watcher-convergence' && suspect.factionLabels.some((label) => String(label).toLowerCase().includes('watcher'))) weight += 2.2;
+    if (entry.id === 'linked-arrival-surge' && suspect.entries.some((row) => String(row?.kind || '').includes('linked'))) weight += 2;
+    if (entry.id === 'false-family-pressure' && suspect.factionLabels.some((label) => String(label).toLowerCase().includes('false'))) weight += 1.8;
+    if (entry.id === 'blackout-hostile' && (targetState?.crisisNight?.blackoutRisk || Number(targetState?.dayShift?.ownerPressure || 0) >= 4)) weight += 1.8;
+    if (entry.id === 'wrong-hallway' && Number(targetState?.crisisEscalation?.hallwayThreatLevel || 0) >= 1) weight += 1.4;
+    return { entry, weight };
+  });
+  const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+  let roll = Math.random() * total;
+  let picked = weighted[0]?.entry || SIGNATURE_NIGHT_CATALOG[0];
+  for (let i = 0; i < weighted.length; i += 1) {
+    roll -= weighted[i].weight;
+    if (roll <= 0) {
+      picked = weighted[i].entry;
+      break;
+    }
+  }
+
+  targetState.signatureNight = {
+    night,
+    active: true,
+    id: picked.id,
+    title: picked.title,
+    note: picked.note,
+    stage: 1,
+    maxStage: picked.maxStage,
+    stepKeysSeen: ['opening'],
+    namedThread: picked.namedThread,
+    branchOutcome: '',
+    themeTags: picked.themeTags
+  };
+  addSuspectBoardEntry({
+    kind: 'signature-night',
+    label: picked.title,
+    detail: picked.note,
+    heat: 2,
+    night
+  });
+  return targetState.signatureNight;
+}
+
+function getSignatureNightProfile(targetState = state) {
+  const profile = targetState?.signatureNight && typeof targetState.signatureNight === 'object' ? targetState.signatureNight : null;
+  return profile?.active ? profile : null;
+}
+
+function advanceSignatureNightStage(stepKey, context = {}) {
+  const profile = getSignatureNightProfile(state);
+  if (!profile || !stepKey) return false;
+  const safeKey = String(stepKey);
+  if (profile.stepKeysSeen.includes(safeKey)) return false;
+  profile.stepKeysSeen = [...profile.stepKeysSeen, safeKey].slice(-12);
+  profile.stage = Math.min(Number(profile.maxStage || 4), Math.max(1, Number(profile.stage || 1) + 1));
+  const line = context?.logLine || `${profile.title} intensified and the whole motel feels less stable now.`;
+  state.logs.push(line);
+  pushLiveAlert(state, {
+    type: profile.stage >= Number(profile.maxStage || 4) ? 'danger' : 'warning',
+    message: context?.alertLine || `${profile.title} advanced to stage ${profile.stage}.`,
+    dedupeKey: `signature-stage-${profile.id}-${safeKey}-${state.night}`
+  });
+  state.shiftStats.signatureNightTurns = (state.shiftStats.signatureNightTurns || 0) + 1;
+  state.crisisEscalation.hallwayThreatLevel = Math.max(Number(state?.crisisEscalation?.hallwayThreatLevel || 0), profile.id === 'wrong-hallway' ? 3 : 2);
+  state.crisisEscalation.overlapPressureLevel = Math.max(Number(state?.crisisEscalation?.overlapPressureLevel || 0), profile.stage >= 3 ? 3 : 2);
+  if (profile.id === 'blackout-hostile') {
+    state.crisisEscalation.cameraInterferenceLevel = Math.max(Number(state?.crisisEscalation?.cameraInterferenceLevel || 0), profile.stage >= 3 ? 3 : 2);
+  }
+  if (context?.outcomeTag) {
+    profile.branchOutcome = context.outcomeTag;
+  }
+  return true;
+}
+
+function maybeAdvanceSignatureNightFlow(trigger = 'tick', context = {}) {
+  const profile = getSignatureNightProfile(state);
+  if (!profile) return false;
+  const occupiedRooms = (state.rooms || []).filter((room) => room?.occupiedBy).length;
+  const activeGuests = (state.guests || []).length;
+  const linkedWaiting = (state.guests || []).filter((guest) => guest?.linkedArrival?.groupId).length;
+  const scannerHot = (state?.localScannerFeed || []).some((entry) => String(entry?.text || '').toLowerCase().includes('paired') || String(entry?.text || '').toLowerCase().includes('watcher'));
+  const falseFamilySeen = (state.guests || []).some((guest) => String(guest?.linkedArrival?.kind || '').toLowerCase().includes('family') || String(guest?.factionProfile?.id || '').includes('false-family'));
+  const stage = Number(profile.stage || 1);
+
+  if (profile.id === 'linked-arrival-surge' && trigger === 'arrival' && linkedWaiting >= 2) {
+    return advanceSignatureNightStage('linked-wave', {
+      logLine: 'Signature chain: multiple linked arrivals are now crowding the desk and reading like one coordinated move.',
+      alertLine: 'Linked-arrival surge: separate desk reads are starting to converge.',
+      outcomeTag: 'paired-pressure'
+    });
+  }
+  if (profile.id === 'wrong-hallway' && trigger === 'room-call' && context?.requestTag === 'suspicion') {
+    return advanceSignatureNightStage('hall-knock', {
+      logLine: 'Signature chain: hallway knocks are now landing in the wrong places, and rooms are no longer trusting what they hear outside.',
+      alertLine: 'Wrong hallway pressure: corridor confidence just broke further.',
+      outcomeTag: 'hallway-slip'
+    });
+  }
+  if (profile.id === 'false-family-pressure' && trigger === 'arrival' && falseFamilySeen) {
+    return advanceSignatureNightStage('family-cover', {
+      logLine: 'Signature chain: a soft family cover is starting to read like a staged route rather than a tired check-in.',
+      alertLine: 'False family pressure is taking shape at the desk.',
+      outcomeTag: 'cover-story'
+    });
+  }
+  if (profile.id === 'watcher-convergence' && ((trigger === 'arrival' && scannerHot) || trigger === 'scanner')) {
+    return advanceSignatureNightStage('watcher-tighten', {
+      logLine: 'Signature chain: watcher signs, scanner chatter, and guest behavior are lining up too closely to ignore.',
+      alertLine: 'Watcher convergence: pattern recognition just became actionable.',
+      outcomeTag: 'watcher-payoff'
+    });
+  }
+  if (profile.id === 'blackout-hostile' && trigger === 'blackout') {
+    return advanceSignatureNightStage('blackout-turn', {
+      logLine: 'Signature chain: the blackout just turned hostile. Shared-space trust and room control are slipping together.',
+      alertLine: 'Blackout-hostile turn: control is thinning across the motel.',
+      outcomeTag: 'blackout-turn'
+    });
+  }
+  if (stage < 3 && trigger === 'progress' && occupiedRooms >= 2 && activeGuests >= 1 && Math.random() < 0.16) {
+    return advanceSignatureNightStage(`ambient-${trigger}-${stage}`, {
+      logLine: `${profile.namedThread}: the night is tightening in layers rather than spikes.`,
+      alertLine: `${profile.title} is building toward a payoff.`,
+      outcomeTag: profile.branchOutcome || 'building'
+    });
+  }
+  return false;
 }
 
 function showRunEndingScreen() {
@@ -1376,6 +1584,7 @@ function getRoomMemoryPressureBonus(room) {
 
 function ensureCrisisNightState(targetState = state) {
   if (!targetState || typeof targetState !== 'object') return targetState;
+  normalizeCampaignDepthState();
   const night = Math.max(1, Number(targetState?.night || 1));
   const existing = targetState.crisisNight && typeof targetState.crisisNight === 'object' ? targetState.crisisNight : {};
   if (existing.night === night && existing.kind) return targetState;
@@ -1383,40 +1592,52 @@ function ensureCrisisNightState(targetState = state) {
   const chance = night >= 4 ? Math.min(0.35, 0.08 + (night - 3) * 0.045) : 0;
   const active = Math.random() < chance;
   const kind = active ? options[(night + Math.floor(Math.random() * options.length)) % options.length] : null;
+  const signature = selectSignatureNight(targetState);
+  const signatureKind =
+    signature?.id === 'wrong-hallway' ? 'hostile-social-night'
+    : signature?.id === 'linked-arrival-surge' ? 'guest-surge'
+    : signature?.id === 'false-family-pressure' ? 'hostile-social-night'
+    : signature?.id === 'blackout-hostile' ? 'partial-blackout'
+    : signature?.id === 'watcher-convergence' ? 'stacked-pressure'
+    : null;
+  const finalActive = active || Boolean(signature?.active);
+  const finalKind = signatureKind || kind;
   const title =
-    kind === 'stacked-pressure'
+    finalKind === 'stacked-pressure'
       ? 'Crisis Night: Pressure Stack'
-      : kind === 'guest-surge'
+      : finalKind === 'guest-surge'
         ? 'Crisis Night: Guest Surge'
-        : kind === 'utility-fragility'
+        : finalKind === 'utility-fragility'
           ? 'Crisis Night: Utility Fragility'
-          : kind === 'hostile-social-night'
+          : finalKind === 'hostile-social-night'
             ? 'Crisis Night: Hostile Social Atmosphere'
-            : kind === 'partial-blackout'
+            : finalKind === 'partial-blackout'
               ? 'Crisis Night: Partial Blackout Risk'
             : '';
   const note =
-    kind === 'stacked-pressure'
+    signature?.active
+      ? signature.note
+      : finalKind === 'stacked-pressure'
       ? 'Multiple systems are likely to overlap tonight; mistakes will stack instead of staying local.'
-      : kind === 'guest-surge'
+      : finalKind === 'guest-surge'
         ? 'Desk pressure and room stress are likely to spike together.'
-        : kind === 'utility-fragility'
+        : finalKind === 'utility-fragility'
           ? 'Small faults are more likely to spread across rooms and power decisions.'
-          : kind === 'hostile-social-night'
+          : finalKind === 'hostile-social-night'
             ? 'Guests are more reactive, rumors travel faster, and containment will read harsher.'
-            : kind === 'partial-blackout'
+            : finalKind === 'partial-blackout'
               ? 'Lighting and power stability feel fragile. A local outage could change room control fast.'
             : '';
   targetState.crisisNight = {
-    active,
+    active: finalActive,
     night,
-    kind,
-    title,
+    kind: finalKind,
+    title: signature?.active ? signature.title : title,
     note,
-    blackoutRisk: active && (kind === 'utility-fragility' || kind === 'partial-blackout'),
+    blackoutRisk: finalActive && (finalKind === 'utility-fragility' || finalKind === 'partial-blackout'),
     panicScale:
-      active && kind === 'stacked-pressure' ? 2
-      : active && (kind === 'partial-blackout' || kind === 'guest-surge') ? 1
+      finalActive && finalKind === 'stacked-pressure' ? 2
+      : finalActive && (finalKind === 'partial-blackout' || finalKind === 'guest-surge') ? 1
       : 0
   };
   return targetState;
@@ -1426,9 +1647,11 @@ function buildNightIdentitySummary(targetState = state) {
   const scenario = targetState?.activeScenario || {};
   const crisis = targetState?.crisisNight || {};
   const blackout = getBlackoutPressureState(targetState);
+  const signature = getSignatureNightProfile(targetState);
   const tags = [];
   if (scenario.label) tags.push(`Scenario: ${scenario.label}`);
   if (crisis.active && crisis.title) tags.push(crisis.title);
+  if (signature?.namedThread) tags.push(`Thread: ${signature.namedThread}`);
   if (Number(targetState?.night || 1) <= 2) tags.push('Mood: quiet but wrong');
   if (crisis.kind === 'hostile-social-night') tags.push('Mood: socially hostile');
   if (crisis.kind === 'utility-fragility' || crisis.kind === 'partial-blackout') tags.push('Mood: infrastructure-fragile');
@@ -2096,6 +2319,7 @@ function maybeGenerateOccupiedRoomRequest(source = 'tick') {
   })[0];
   if (!target) return false;
   const request = buildRoomCallFor(target, state);
+  maybeAdvanceSignatureNightFlow('room-call', { requestTag: request?.serviceTag, roomId: target.id });
   updateRoomById(target.id, (room) => {
     const serviceState = getDefaultRoomServiceState(room?.serviceState);
     return {
@@ -2954,6 +3178,7 @@ function maybeTriggerBlackoutPressure(source = 'general') {
     dedupeKey: `blackout-${state.night}`
   });
   state.shiftStats.majorPowerIncidents = (state.shiftStats.majorPowerIncidents || 0) + 1;
+  maybeAdvanceSignatureNightFlow('blackout', { source });
   return true;
 }
 
@@ -3130,6 +3355,7 @@ function buildRenderState() {
     campaignPrepForecast: [...(campaign.prepForecast || []), ...buildFinaleForeshadowNotes(state)].slice(0, 5),
     campaignSummaryNotes: Array.isArray(state?.campaignSummaryNotes) ? state.campaignSummaryNotes : [],
     crisisNight: state?.crisisNight || null,
+    signatureNight: state?.signatureNight || null,
     blackoutState,
     hallwayThreatLine: buildHallwayThreatLine(state),
     cameraInterferenceLevel: Math.max(
@@ -4058,6 +4284,7 @@ function progressShift(actionKey, options = {}) {
     timeScale: options.timeScale,
     minutesOverride: options.minutesOverride
   });
+  maybeAdvanceSignatureNightFlow('progress', { actionKey });
 
   const branchContext = getBranchContext(true);
   const eventTick = tickNightEvents(state, branchContext);
@@ -4253,6 +4480,7 @@ function callNextArrival() {
   }
 
   state.guests.push(preparedDeskGuest);
+  maybeAdvanceSignatureNightFlow('arrival', { guest: preparedDeskGuest });
   registerContentExposure(state, {
     kind: 'guest',
     archetype: preparedDeskGuest?.archetypeKey,

@@ -270,6 +270,19 @@ function buildReturningGuestVariant(baseGuest, history, activeStoryBeat) {
     variant.threadMemoryLine = `Thread clue: ${activeStoryBeat.title} remains unresolved.`;
   }
 
+  if (Array.isArray(history.storyFlags) && history.storyFlags.includes('turned-away')) {
+    variant.returningGuestNote = `${variant.returningGuestNote} Prior rejection still colors this return.`;
+  }
+  if (Array.isArray(history.storyFlags) && history.storyFlags.includes('was-housed')) {
+    variant.returningGuestNote = `${variant.returningGuestNote} Prior housing bought familiarity, which may be real trust or practiced manipulation.`;
+  }
+  if (Array.isArray(history.storyFlags) && history.storyFlags.includes('desk-watch')) {
+    variant.returningGuestNote = `${variant.returningGuestNote} The guest remembers being watched and may now over-correct their behavior.`;
+  }
+  if (history.lastRoomId) {
+    variant.extraEncounterNote = `${variant.extraEncounterNote} Prior room trouble is still attached to their file.`;
+  }
+
   variant.threadMemoryLine = [
     variant.threadMemoryLine,
     variant.factionMemoryLine,
@@ -349,6 +362,9 @@ export function markThreadOutcome(state, payload = {}) {
       record.wasHandledCleanly = false;
       record.returnModifier = 'hostile-return';
       if (!record.storyFlags.includes('forced-out')) record.storyFlags.push('forced-out');
+    }
+    if (payload?.roomId || payload?.guest?.assignedRoomId) {
+      if (!record.storyFlags.includes('room-trouble')) record.storyFlags.push('room-trouble');
     }
     record.storyFlags = record.storyFlags.slice(-6);
   }

@@ -14,11 +14,15 @@ export function buildNightSummary(state) {
   const blackoutLevel = String(state?.crisisEscalation?.blackoutLevel || 'none');
   const hallwayThreat = Number(state?.crisisEscalation?.hallwayThreatLevel || 0);
   const overlapPressure = Number(state?.crisisEscalation?.overlapPressureLevel || 0);
+  const signature = state?.signatureNight || {};
   const identity = [];
   const carriedRooms = (state?.rooms || []).filter((room) => room?.occupiedBy).length;
   const rememberedRooms = (state?.rooms || []).filter((room) => Number(room?.memory?.incidentsSeen || 0) >= 2).length;
   if (crisis.active && crisis.title) {
     identity.push(`The night developed under ${crisis.title.toLowerCase()}, which made small errors spread faster than usual.`);
+  }
+  if (signature?.active && signature?.title) {
+    identity.push(`${signature.title} gave the shift a boss-like structure, with pressure advancing in readable turns instead of one isolated spike.`);
   }
   if (crisis.kind === 'partial-blackout' || crisis.kind === 'utility-fragility') {
     identity.push('Infrastructure fragility shaped the whole shift, with power confidence and room control repeatedly threatening to collapse together.');
@@ -68,6 +72,19 @@ export function buildNightSummary(state) {
     identity.push('Social fallout spread beyond one room, proving the motel reacts to judgment mistakes as a shared environment.');
   }
 
+  let branchOutcome = 'Contained, but ordinary.';
+  if (Number(state?.shiftStats?.policyBroken || 0) >= 2 && Number(state?.money || 0) >= 150) {
+    branchOutcome = 'Profitable, but socially poisoned.';
+  } else if (Number(state?.shiftStats?.harshDeskActions || 0) >= 2 && Number(state?.shiftStats?.policyFollowed || 0) >= 1) {
+    branchOutcome = 'Calm, but harsh.';
+  } else if (Number(state?.shiftStats?.realThreatsMissed || 0) >= 1) {
+    branchOutcome = 'Wrong guest contained too late.';
+  } else if (blackoutLevel === 'full' || overlapPressure >= 3) {
+    branchOutcome = 'Unstable, but survived.';
+  } else if (Number(state?.shiftStats?.smartRestraintMoments || 0) >= 2 && Number(state?.shiftStats?.overManagementPenalties || 0) === 0) {
+    branchOutcome = 'Barely contained, but disciplined.';
+  }
+
   return {
     ...base,
     text: [
@@ -76,7 +93,9 @@ export function buildNightSummary(state) {
     ].filter(Boolean).join(' '),
     breakdown: [
       ...(Array.isArray(base.breakdown) ? base.breakdown : []),
-      ...identity.slice(0, 2)
-    ]
+      ...identity.slice(0, 2),
+      `Night outcome: ${branchOutcome}`
+    ],
+    branchOutcome
   };
 }
