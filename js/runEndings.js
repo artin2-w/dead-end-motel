@@ -88,15 +88,34 @@ function evaluateCategory(snapshot) {
   const policyBreaks = snapshot.policyBreaks;
   const force = snapshot.forceHeavy;
   const trustDelta = snapshot.guestTrust - snapshot.localHostility;
+  const localHostility = snapshot.localHostility;
 
   if (rep >= 62 && t.control >= 6 && force >= 2) {
     return { key: 'order-through-control', title: 'Order Through Control', subtitle: 'Cold Stability Secured' };
+  }
+  if (rep >= 58 && t.control >= 5 && t.compassion >= 4 && unresolved <= 3) {
+    return { key: 'controlled-manager', title: 'Controlled Manager', subtitle: 'Pressure Contained Without Losing the Floor' };
   }
   if (rep >= 60 && t.compassion >= 6 && trustDelta >= 3) {
     return { key: 'trusted-shelter', title: 'Trusted Shelter', subtitle: 'A Reputation for Safe Harbor' };
   }
   if (snapshot.money >= 220 && t.secrecy >= 6 && policyBreaks >= 1) {
     return { key: 'silent-profit', title: 'Silent Profit', subtitle: 'Quiet Revenue, Quiet Records' };
+  }
+  if (snapshot.money >= 200 && policyBreaks >= 1 && rep >= 42) {
+    return { key: 'profitable-but-compromised', title: 'Profitable But Compromised', subtitle: 'Strong Ledger, Dirty Atmosphere' };
+  }
+  if (localHostility >= 5 && snapshot.guestTrust <= 0) {
+    return { key: 'socially-poisoned-motel', title: 'Socially Poisoned Motel', subtitle: 'The Building Stays Open, The Mood Does Not' };
+  }
+  if (t.control >= 6 && t.compassion <= 1 && force >= 2) {
+    return { key: 'harsh-survivor', title: 'Harsh Survivor', subtitle: 'Safety Held Through Hard Edges' };
+  }
+  if (snapshot.unresolved <= 4 && t.control >= 4 && t.compassion >= 3) {
+    return { key: 'unstable-but-disciplined', title: 'Unstable But Disciplined', subtitle: 'The Motel Bent, Then Held' };
+  }
+  if (t.control >= 5 && t.compassion <= 1 && snapshot.guestTrust <= 0) {
+    return { key: 'calm-but-morally-ugly', title: 'Calm But Morally Ugly', subtitle: 'The Floors Stayed Quiet for the Wrong Reasons' };
   }
   if (unresolved >= 6 && snapshot.finalePressurePeak >= 6) {
     return { key: 'contained-chaos', title: 'Contained Chaos', subtitle: 'Barely Held Behind Closed Doors' };
@@ -118,10 +137,13 @@ function evaluateCategory(snapshot) {
 
 function resolveEndingFamilyFromKey(key = '') {
   const value = String(key || '').toLowerCase();
+  if (value.includes('controlled-manager')) return 'controlled';
   if (value.includes('trusted') || value.includes('shelter')) return 'stable';
   if (value.includes('fragile') || value.includes('unsteady')) return 'fragile';
   if (value.includes('cold') || value.includes('quiet') || value.includes('silent')) return 'cold';
   if (value.includes('cracking') || value.includes('chaos')) return 'collapse';
+  if (value.includes('socially-poisoned')) return 'hostile';
+  if (value.includes('harsh-survivor')) return 'controlled';
   if (value.includes('control') || value.includes('order')) return 'controlled';
   if (value.includes('hostile')) return 'hostile';
   return 'stable';
@@ -215,7 +237,8 @@ export function buildRunEndingPackage(state) {
     finalePressurePeak: n(state?.finalePressurePeak, 0),
     finalePerformanceKey: String(state?.finalePerformance?.key || ''),
     finalePerformanceLabel: String(state?.finalePerformance?.label || ''),
-    finalePerformanceLine: String(state?.finalePerformance?.line || '')
+    finalePerformanceLine: String(state?.finalePerformance?.line || ''),
+    endingMood: Array.isArray(state?.summaryIdentityLines) ? String(state.summaryIdentityLines[0] || '') : ''
   };
 
   const ending = evaluateCategory(snapshot);
@@ -247,6 +270,7 @@ export function buildRunEndingPackage(state) {
     : 'Finale integration: pressure peaked without a distinct finale profile.';
 
   const notes = [
+    snapshot.endingMood ? `Late-run identity: ${snapshot.endingMood}` : '',
     snapshot.finalePerformanceLabel ? `Finale assessment: ${snapshot.finalePerformanceLabel}` : '',
     `Milestone nights survived: ${n(campaign?.milestoneNightsSurvived, 0)}`,
     `Policy overrides recorded: ${snapshot.policyBreaks}`,

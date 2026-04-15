@@ -77,6 +77,39 @@ export function createAudioController() {
     }
   }
 
+  function playPattern(pattern = []) {
+    const audioCtx = canPlay();
+    if (!audioCtx || !Array.isArray(pattern) || !pattern.length) return;
+    const baseTime = safeNow(audioCtx);
+
+    try {
+      pattern.forEach((tone, index) => {
+        const offset = Number(tone?.offset ?? index * 0.05);
+        const start = baseTime + Math.max(0, offset);
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        const peak = Math.max(0.0002, Number(tone?.gain ?? 0.08));
+        const attack = Math.max(0.001, Number(tone?.attack ?? 0.004));
+        const decay = Math.max(0.02, Number(tone?.decay ?? 0.08));
+        const duration = Math.max(0.03, Number(tone?.duration ?? 0.12));
+
+        gainNode.gain.setValueAtTime(0.0001, start);
+        gainNode.gain.exponentialRampToValueAtTime(peak, start + attack);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, start + attack + decay);
+
+        osc.type = tone?.type || 'sine';
+        osc.frequency.setValueAtTime(Number(tone?.frequency || 440), start);
+        osc.detune.setValueAtTime(Number(tone?.detune || 0), start);
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        osc.start(start);
+        osc.stop(start + duration);
+      });
+    } catch (_err) {
+      // Fail silently.
+    }
+  }
+
   function playDoubleTone(first, second, gap = 0.045) {
     const audioCtx = canPlay();
     if (!audioCtx) return;
@@ -179,6 +212,80 @@ export function createAudioController() {
     playTone({ type: 'triangle', frequency: 620, duration: 0.12, gain: 0.065, decay: 0.1 });
   }
 
+  function playRedPhone() {
+    playPattern([
+      { type: 'square', frequency: 720, duration: 0.09, gain: 0.05, offset: 0 },
+      { type: 'square', frequency: 540, duration: 0.09, gain: 0.05, offset: 0.06 },
+      { type: 'square', frequency: 720, duration: 0.1, gain: 0.055, offset: 0.18 },
+      { type: 'square', frequency: 540, duration: 0.1, gain: 0.055, offset: 0.24 }
+    ]);
+  }
+
+  function playKnock() {
+    playPattern([
+      { type: 'triangle', frequency: 180, duration: 0.05, gain: 0.055, decay: 0.045, offset: 0 },
+      { type: 'triangle', frequency: 140, duration: 0.05, gain: 0.05, decay: 0.05, offset: 0.06 },
+      { type: 'triangle', frequency: 170, duration: 0.05, gain: 0.048, decay: 0.05, offset: 0.16 }
+    ]);
+  }
+
+  function playFootsteps() {
+    playPattern([
+      { type: 'sine', frequency: 150, duration: 0.045, gain: 0.032, decay: 0.04, offset: 0 },
+      { type: 'sine', frequency: 132, duration: 0.045, gain: 0.03, decay: 0.04, offset: 0.09 },
+      { type: 'sine', frequency: 146, duration: 0.045, gain: 0.028, decay: 0.04, offset: 0.18 }
+    ]);
+  }
+
+  function playBreakerSnap() {
+    playPattern([
+      { type: 'square', frequency: 240, duration: 0.04, gain: 0.05, decay: 0.03, offset: 0 },
+      { type: 'sawtooth', frequency: 96, duration: 0.12, gain: 0.042, decay: 0.1, offset: 0.03 }
+    ]);
+  }
+
+  function playStaticBurst(intensity = 'light') {
+    const heavy = intensity === 'heavy' || intensity === 'dire';
+    playPattern([
+      { type: 'sawtooth', frequency: heavy ? 1180 : 980, detune: -12, duration: 0.035, gain: 0.03, decay: 0.028, offset: 0 },
+      { type: 'square', frequency: heavy ? 860 : 720, detune: 8, duration: 0.03, gain: 0.024, decay: 0.025, offset: 0.02 },
+      { type: 'triangle', frequency: heavy ? 1340 : 1080, detune: -18, duration: 0.038, gain: 0.026, decay: 0.03, offset: 0.05 },
+      ...(heavy ? [{ type: 'sawtooth', frequency: 640, detune: 20, duration: 0.05, gain: 0.03, decay: 0.04, offset: 0.09 }] : [])
+    ]);
+  }
+
+  function playEmergencyPulse(level = 'high') {
+    const dire = level === 'dire' || level === 'critical';
+    playPattern([
+      { type: 'square', frequency: dire ? 210 : 250, duration: 0.08, gain: 0.055, decay: 0.07, offset: 0 },
+      { type: 'square', frequency: dire ? 330 : 390, duration: 0.08, gain: 0.05, decay: 0.07, offset: 0.08 },
+      { type: 'square', frequency: dire ? 210 : 250, duration: 0.08, gain: 0.055, decay: 0.07, offset: 0.18 }
+    ]);
+  }
+
+  function playIntroSting(kind = 'standard') {
+    if (kind === 'emergency') {
+      playPattern([
+        { type: 'triangle', frequency: 230, duration: 0.11, gain: 0.05, offset: 0 },
+        { type: 'triangle', frequency: 320, duration: 0.11, gain: 0.052, offset: 0.08 },
+        { type: 'square', frequency: 210, duration: 0.12, gain: 0.05, offset: 0.2 }
+      ]);
+      return;
+    }
+    if (kind === 'blackout') {
+      playPattern([
+        { type: 'sine', frequency: 300, duration: 0.08, gain: 0.04, offset: 0 },
+        { type: 'sawtooth', frequency: 180, duration: 0.12, gain: 0.038, offset: 0.08 }
+      ]);
+      return;
+    }
+    playPattern([
+      { type: 'triangle', frequency: 360, duration: 0.08, gain: 0.04, offset: 0 },
+      { type: 'triangle', frequency: 440, duration: 0.1, gain: 0.04, offset: 0.07 },
+      { type: 'sine', frequency: 520, duration: 0.12, gain: 0.042, offset: 0.16 }
+    ]);
+  }
+
   function playPolice() {
     playDoubleTone(
       { type: 'square', frequency: 700, duration: 0.08, gain: 0.05 },
@@ -194,6 +301,10 @@ export function createAudioController() {
   function playPowerAction(type) {
     if (type === 'restore') {
       playTone({ type: 'sine', frequency: 460, duration: 0.1, gain: 0.06, decay: 0.1 });
+      return;
+    }
+    if (type === 'breaker' || type === 'cut-room') {
+      playBreakerSnap();
       return;
     }
     playTone({ type: 'triangle', frequency: 290, duration: 0.1, gain: 0.06, decay: 0.1 });
@@ -237,9 +348,9 @@ export function createAudioController() {
       ensureHum(audioCtx);
       const now = safeNow(audioCtx);
       const targetGain =
-        humLevel === 'dire' ? 0.018 : humLevel === 'tense' ? 0.01 : 0.002;
+        humLevel === 'emergency' ? 0.024 : humLevel === 'dire' ? 0.018 : humLevel === 'tense' ? 0.01 : 0.002;
       const targetFreq =
-        humLevel === 'dire' ? 72 : humLevel === 'tense' ? 64 : 56;
+        humLevel === 'emergency' ? 84 : humLevel === 'dire' ? 72 : humLevel === 'tense' ? 64 : 56;
 
       humOsc.frequency.setTargetAtTime(targetFreq, now, 0.2);
       humGain.gain.setTargetAtTime(clamp(targetGain, 0.0001, 0.03), now, 0.25);
@@ -258,6 +369,13 @@ export function createAudioController() {
     playSuccess,
     playFailure,
     playDispatch,
+    playRedPhone,
+    playKnock,
+    playFootsteps,
+    playBreakerSnap,
+    playStaticBurst,
+    playEmergencyPulse,
+    playIntroSting,
     playPolice,
     playEvict,
     playPowerAction,
@@ -278,11 +396,15 @@ export function getPressureAudioLevel(state) {
     : 0;
 
   const severeSignals =
+    Boolean(state?.emergencyNight?.active) ||
     (state?.power ?? 100) <= 22 ||
     (state?.reputation ?? 50) <= 28 ||
     criticalOccupiedRooms >= 2 ||
     chainPressure >= 9;
 
+  if (Boolean(state?.emergencyNight?.active) || String(state?.blackoutState?.level || '') === 'full') {
+    return 'emergency';
+  }
   if (severeSignals) return 'dire';
 
   const tenseSignals =

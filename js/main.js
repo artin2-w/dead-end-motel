@@ -1217,9 +1217,11 @@ function getEmergencyNightProfile(targetState = state) {
     hallway +
     (signature?.stage || 0) +
     Math.floor(sharedPressure / 6);
+  const night = Math.max(1, Number(targetState?.night || 1));
+  const earlyNightLimiter = night <= 2 ? 1 : 0;
   const active = Boolean(
-    severity >= 6 ||
-    (crisis.active && (crisis.kind === 'partial-blackout' || crisis.kind === 'stacked-pressure') && severity >= 4)
+    severity >= (6 + earlyNightLimiter) ||
+    (crisis.active && (crisis.kind === 'partial-blackout' || crisis.kind === 'stacked-pressure') && severity >= (4 + earlyNightLimiter))
   );
   const type =
     blackout.level === 'full' ? 'full-blackout-emergency' :
@@ -1293,6 +1295,7 @@ function executeEmergencyCommand(commandId) {
   if (!emergency.active) return;
   onMeaningfulAction();
   audioController.playUiClick();
+  audioController.playEmergencyPulse(emergency.severity >= 8 ? 'dire' : 'high');
   const safeId = String(commandId || '');
   const cost = safeId === 'call-backup' ? 12 : safeId === 'hard-security' ? 6 : safeId === 'force-power' ? 4 : 0;
   if (cost > 0 && state.money < cost) {
@@ -2177,6 +2180,8 @@ function restoreNightStartSnapshot(options = {}) {
   state = normalizeSpecialEncounterState(state);
   state = normalizeNightEventState(state);
   state = normalizeDeskConsequenceState(state);
+  normalizeCampaignDepthState();
+  normalizeStaffManagementState();
   ensureCrisisNightState(state);
   ensureCrisisEscalationState(state);
   normalizeIdentitySystems();
@@ -2186,6 +2191,7 @@ function restoreNightStartSnapshot(options = {}) {
   normalizeIntakeState(state);
   normalizeAdminSpamState(state);
   state.deferredShiftCosts = Array.isArray(state.deferredShiftCosts) ? state.deferredShiftCosts : [];
+  state.localScannerFeed = Array.isArray(state.localScannerFeed) ? state.localScannerFeed : [];
   runtimeBranchContext = null;
   syncFinaleStateForNight({ refreshBranch: true });
   cleanupTransientUiState('restart-night');
@@ -2204,18 +2210,33 @@ function restoreNightStartSnapshot(options = {}) {
 function pushOpeningTensionBeat(context = 'opening') {
   const night = Math.max(1, Number(state?.night || 1));
   const occupiedCarryovers = (state?.rooms || []).filter((room) => room?.occupiedBy).length;
+  const emergency = getEmergencyNightProfile(state);
+  const signature = getSignatureNightProfile(state);
+  const ownerBrief = buildOwnerPressureBrief();
   let alertMessage = '';
   let logLine = '';
+  let audioCue = 'standard';
 
-  if (occupiedCarryovers > 0) {
+  if (emergency.active) {
+    alertMessage = `${emergency.label || 'Emergency Night'} is already close to command-state pressure. Zone priority matters immediately.`;
+    logLine = `Opening tension: ${ownerBrief.mood.toLowerCase()} ownership framing meets a live emergency posture; the property is starting this shift on edge.`;
+    audioCue = 'emergency';
+  } else if (occupiedCarryovers > 0) {
     alertMessage = `${occupiedCarryovers} occupied room${occupiedCarryovers === 1 ? '' : 's'} carried over into tonight. Continuity pressure starts immediately.`;
     logLine = 'Opening tension: last night did not fully leave the property. Occupied rooms are carrying weight into this shift.';
+    audioCue = 'standard';
   } else if (night <= 2) {
     alertMessage = 'Opening tension: the property feels wrong before the first arrival even reaches the desk.';
     logLine = 'Opening tension: the lobby hum sits a little too low and empty hallways already feel watched.';
+    audioCue = 'standard';
+  } else if (String(state?.blackoutState?.level || '') === 'partial' || state?.crisisNight?.kind === 'partial-blackout') {
+    alertMessage = 'Opening tension: utility strain is in the walls before desk traffic even builds.';
+    logLine = 'Opening tension: breaker-side instability is already present; a bad draw could tilt the whole shift.';
+    audioCue = 'blackout';
   } else {
-    alertMessage = 'Opening tension: early shift drift is already visible. Small mistakes are likely to echo farther tonight.';
-    logLine = 'Opening tension: the motel opens under a thin layer of strain; early reads and first decisions will matter more than usual.';
+    alertMessage = `${signature?.active ? `${signature.title} is shaping the shift early.` : 'Opening tension: early shift drift is already visible.'} Small mistakes are likely to echo farther tonight.`;
+    logLine = `Opening tension: ${ownerBrief.memo || 'Ownership is watching the property.'} Early reads and first decisions will matter more than usual.`;
+    audioCue = signature?.active ? 'emergency' : 'standard';
   }
 
   state.logs.push(logLine);
@@ -2224,6 +2245,7 @@ function pushOpeningTensionBeat(context = 'opening') {
     message: alertMessage,
     dedupeKey: `opening-tension-${state.night}-${context}`
   });
+  audioController.playIntroSting(audioCue);
 }
 
 function normalizeRoomMemoryState(targetState = state) {
@@ -2592,6 +2614,10 @@ function maybeCreateSharedSpacePressure(trigger = 'tick') {
 
   const profile = getSignatureNightProfile(state);
   const blackout = getBlackoutPressureState(state);
+  const night = Math.max(1, Number(state?.night || 1));
+  if (night <= 2 && trigger === 'tick' && Number(state?.shiftElapsedMinutes || 0) < 90 && Math.random() < 0.55) {
+    return false;
+  }
   const weighted = candidates.map((entry) => {
     let weight = 1;
     if (entry.zoneId === 1 && (state.guests || []).length >= 2) weight += 1.3;
@@ -2632,6 +2658,11 @@ function maybeCreateSharedSpacePressure(trigger = 'tick') {
     : picked.zoneId === 4 ? 'Utility strain is building into a breaker-side problem.'
     : 'Back access is being tested after hours.';
   ensureSharedSpaceEvent(picked.zoneId);
+  if (picked.zoneId === 3 || picked.zoneId === 6) {
+    audioController.playFootsteps();
+  } else if (picked.zoneId === 4) {
+    audioController.playBreakerSnap();
+  }
   if (picked.zoneId === 2) {
     addSuspectBoardEntry({
       kind: 'parking',
@@ -2662,8 +2693,9 @@ function maybeCreateSharedSpacePressure(trigger = 'tick') {
       roomTargetId: (state.rooms || []).find((room) => room?.occupiedBy)?.id ?? null
     });
   }
+  const spreadSeverity = Number(zoneState.followupPressure || 0) >= 5 ? 2 : 1;
   if (picked.zoneId === 2 || picked.zoneId === 1 || picked.zoneId === 3) {
-    maybeSpreadMovingThreat(picked.zoneId, trigger, severity === 'high' ? 2 : 1);
+    maybeSpreadMovingThreat(picked.zoneId, trigger, spreadSeverity);
   }
   return true;
 }
@@ -2673,7 +2705,9 @@ function openSharedSpaceZone(zoneId) {
   if (!def) return;
   onMeaningfulAction();
   audioController.playUiClick();
+  audioController.playFootsteps();
   ensureSharedSpaceEvent(zoneId);
+  updateOnboarding((current) => markTutorialEvent(current, 'shared-space-action'));
   investigateCameraZone(zoneId);
 }
 
@@ -2681,6 +2715,7 @@ function executeSharedSpaceQuickAction(zoneId, actionId) {
   const def = getSharedSpaceDef(zoneId);
   if (!def || !actionId) return;
   ensureSharedSpaceEvent(zoneId);
+  updateOnboarding((current) => markTutorialEvent(current, 'shared-space-action'));
   openCameraScene(state, zoneId);
   handleCameraSceneAction(zoneId, actionId);
 }
@@ -2690,6 +2725,7 @@ function delaySharedSpace(zoneId) {
   if (!def) return;
   onMeaningfulAction();
   audioController.playUiClick();
+  updateOnboarding((current) => markTutorialEvent(current, 'shared-space-action'));
   const zoneState = getLocationZoneState(state, zoneId, def.zoneName);
   if (!zoneState) return;
   zoneState.ignoreCount = Math.max(0, Number(zoneState.ignoreCount || 0) + 1);
@@ -3387,9 +3423,14 @@ function maybeGenerateOccupiedRoomRequest(source = 'tick') {
   if (!candidates.length) return false;
   const crisis = state?.crisisNight || {};
   const blackout = getBlackoutPressureState(state);
+  const night = Math.max(1, Number(state?.night || 1));
   const averageAnxiety = candidates.reduce((sum, room) => sum + Number(room?.serviceState?.anxiety || 0), 0) / Math.max(1, candidates.length);
   const overlapBoost = Math.max(0, Number(state?.crisisEscalation?.overlapPressureLevel || 0)) * 0.03;
-  const baseChance = (crisis.active ? 0.2 : 0.1) + Math.min(0.08, averageAnxiety * 0.02) + overlapBoost + (blackout.active ? 0.06 : 0);
+  const earlyNightDampener = night <= 2 && Number(state?.shiftElapsedMinutes || 0) < 120 ? 0.03 : 0;
+  const baseChance = Math.max(
+    0.04,
+    (crisis.active ? 0.18 : 0.09) + Math.min(0.08, averageAnxiety * 0.02) + overlapBoost + (blackout.active ? 0.05 : 0) - earlyNightDampener
+  );
   const roll = Math.random();
   if (roll > baseChance) return false;
   const target = candidates.sort((a, b) => {
@@ -3424,6 +3465,10 @@ function maybeGenerateOccupiedRoomRequest(source = 'tick') {
     };
   });
   state.logs.push(`Red phone: ${target.label} called the desk. ${request.detail}`);
+  audioController.playRedPhone();
+  if (request?.serviceTag === 'suspicion' || request?.serviceTag === 'disturbance') {
+    audioController.playKnock();
+  }
   pushLiveAlert(state, {
     type: request.urgency === 'high' ? 'warning' : 'info',
     kind: 'actionable',
@@ -4428,6 +4473,7 @@ function buildRenderState() {
     activePanelId,
     activeScreenId
   });
+  const pressureSnapshot = buildShiftPressureSnapshot(state?.lastSummary || null);
 
   const roomsWithChainPressure = (state.rooms || []).map((room) => ({
     ...room,
@@ -4507,6 +4553,7 @@ function buildRenderState() {
     signatureNight: state?.signatureNight || null,
     emergencyNight,
     emergencyCommands,
+    pressureSnapshot,
     blackoutState,
     hallwayThreatLine: buildHallwayThreatLine(state),
     cameraInterferenceLevel: Math.max(
@@ -4514,6 +4561,7 @@ function buildRenderState() {
       Number(state?.crisisEscalation?.cameraInterferenceLevel || 0)
     ),
     nightIdentityLine: buildNightIdentitySummary(state),
+    nightMoodLine: buildNightMoodLine(state, ownerBrief, emergencyNight),
     motelCapacityLine: `Rooms licensed tonight: ${getUnlockedRoomCapForNight(state.night)} / 6`,
     intakeStatusLine: `Arrivals left: ${Math.max(0, Number(state?.intake?.arrivalsRemaining ?? 0))} • Desk queue cap: ${Math.max(0, Number(state?.intake?.queueCap ?? 3))} (${(state.guests || []).length} waiting)`,
     localScannerFeed: Array.isArray(state?.localScannerFeed) ? state.localScannerFeed : [],
@@ -4545,6 +4593,19 @@ function registerPanicSpend() {
   state.shiftStats.panicSpendingMoments = (state.shiftStats.panicSpendingMoments || 0) + 1;
 }
 
+function buildNightMoodLine(targetState = state, ownerBrief = null, emergency = null) {
+  const brief = ownerBrief || buildOwnerPressureBrief();
+  const emergencyState = emergency || getEmergencyNightProfile(targetState);
+  const signature = getSignatureNightProfile(targetState);
+  const pressure = deriveUiPressureLevel(targetState);
+  const parts = [];
+  if (brief?.mood) parts.push(`Owner tone: ${brief.mood}`);
+  if (signature?.active && signature?.title) parts.push(`Signature frame: ${signature.title}`);
+  if (emergencyState?.active && emergencyState?.label) parts.push(`Emergency state: ${emergencyState.label}`);
+  parts.push(`Shift pressure: ${String(pressure || 'calm')}`);
+  return parts.slice(0, 3).join(' • ');
+}
+
 function buildShiftPressureSnapshot(summary = null) {
   const stats = state?.shiftStats || {};
   const positives = [];
@@ -4555,12 +4616,15 @@ function buildShiftPressureSnapshot(summary = null) {
   if (Number(stats.nightEventsResolved || 0) >= 1) positives.push('Active event responses landed cleanly');
   if (Number(stats.threadsAdvancedCleanly || 0) >= 1) positives.push('Recurring thread pressure was stabilized');
   if (Number(state?.power || 0) >= 55) positives.push('Power economy stayed workable');
+  if (Number(stats.roomCallsHandled || 0) >= 2) positives.push('Occupied-room service stayed readable under strain');
+  if (Number(stats.smartRestraintMoments || 0) >= 1) positives.push('Restraint prevented over-management fallout');
 
   if (Number(stats.unresolvedLocationScenes || 0) >= 2) negatives.push('Too many unresolved location problems persisted');
   if (Number(stats.nightEventsMissed || 0) >= 2) negatives.push('Event misses created avoidable chain strain');
   if (Number(stats.policyBroken || 0) >= 2) negatives.push('Policy overrides drove costly instability');
   if (Number(state?.power || 0) <= 30) negatives.push('Power floor collapsed into danger range');
   if (Number(stats.panicSpendingMoments || 0) >= 2) negatives.push('Panic spending reduced late-shift options');
+  if (Number(stats.overManagementPenalties || 0) >= 1) negatives.push('Over-management created unnecessary social fallout');
 
   const pressureScores = [
     {
@@ -5379,6 +5443,8 @@ function startShift() {
   ensureCrisisNightState(state);
   ensureCrisisEscalationState(state);
   state.deferredShiftCosts = [];
+  normalizeCampaignDepthState();
+  normalizeStaffManagementState();
   pushLiveAlert(state, {
     type: 'info',
     message: `Shift started — Scenario: ${state?.activeScenario?.label || 'Standard Shift'}.`,
@@ -6168,6 +6234,7 @@ function questionGuestFurther(guestId, questionId = 'inconsistency') {
   try {
     onMeaningfulAction();
     audioController.playUiClick();
+    audioController.playStaticBurst('light');
     const guest = state.guests.find((entry) => entry.id === guestId);
     if (!guest) return;
     const catalog = buildDeskQuestionCatalog(guest);
@@ -6212,6 +6279,7 @@ function questionGuestFurther(guestId, questionId = 'inconsistency') {
       });
     }
     recordSuspectEvidence(updatedGuest, `question-${questionId}`);
+    updateOnboarding((current) => markTutorialEvent(current, 'suspect-board-used'));
     pushLiveAlert(state, {
       type: updatedGuest.flagged ? 'warning' : 'info',
       message: updatedGuest.flagged
@@ -6521,6 +6589,9 @@ function scanCameraSystem() {
   onMeaningfulAction();
   audioController.playUiClick();
   audioController.playScan();
+  if (Number(state?.cameraInterferenceLevel || 0) >= 2 || String(state?.blackoutState?.level || '') === 'full') {
+    audioController.playStaticBurst('heavy');
+  }
   const branchContext = getBranchContext(true);
   const beforeCriticalRooms = getCriticalOccupiedRoomCount();
   const unresolvedCarry = registerUnresolvedCameraEvents(state);
@@ -6729,7 +6800,7 @@ function drainPower() {
     message: 'Emergency reroute triggered: short power gain, higher instability risk.',
     dedupeKey: `reroute-${state.night}-${state.shiftStats.majorPowerIncidents}`
   });
-  audioController.playPowerAction('drain');
+  audioController.playPowerAction('breaker');
   if (checkFailureState()) return;
   if (progressShift('drainPower')) return;
   updateOnboarding((current) => markTutorialEvent(current, 'power-action'));
@@ -6837,6 +6908,7 @@ function handleSpecialEncounterChoice(guestId, optionId) {
 function handleRespondNightEvent() {
   onMeaningfulAction();
   audioController.playUiClick();
+  audioController.playAlert('high');
   openNightEventOverlay(state);
   renderAll();
 }
@@ -6945,6 +7017,7 @@ function handleNightEventChoice(optionId) {
 function investigateCameraZone(cameraId) {
   onMeaningfulAction();
   audioController.playUiClick();
+  audioController.playStaticBurst('light');
   const scene = openCameraScene(state, cameraId);
   if (!scene) {
     state.logs.push('No actionable anomaly in that camera zone.');
@@ -7339,6 +7412,8 @@ function endNight(options = {}) {
     ...branchLines
   ].slice(0, 4);
   state.summaryIdentityLines = [...doctrineNotes, ...factionLines].slice(0, 4);
+  state.summaryIdentityLines.unshift(buildNightMoodLine(state, buildOwnerPressureBrief(), getEmergencyNightProfile(state)));
+  state.summaryIdentityLines = state.summaryIdentityLines.filter(Boolean).slice(0, 5);
   if ((state.shiftStats.nightEventsMissed || 0) === 0 && (state.shiftStats.unresolvedLocationScenes || 0) === 0) {
     applyIdentityImpact({
       doctrine: { stability: 1, compassion: 1 },
@@ -7939,6 +8014,7 @@ function nextNight() {
   onMeaningfulAction();
   audioController.playUiClick();
   cleanupTransientUiState('next-night');
+  updateOnboarding((current) => markTutorialEvent(current, 'prep-opened'));
   state.night += 1;
   state.failedState = null;
   state.pendingRunCompletion = false;
@@ -7994,6 +8070,8 @@ function nextNight() {
   state = normalizeSpecialEncounterState(state);
   state = normalizeNightEventState(state);
   state = normalizeDeskConsequenceState(state);
+  normalizeCampaignDepthState();
+  normalizeStaffManagementState();
   normalizeIdentitySystems();
   normalizeCampaignSystems();
   syncFinaleStateForNight({ refreshBranch: true });

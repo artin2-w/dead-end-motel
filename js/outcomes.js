@@ -30,6 +30,10 @@ export function buildOutcomeFlavor(state, summary) {
   const flagged = state?.shiftStats?.flagged ?? 0;
   const rejected = state?.shiftStats?.rejected ?? 0;
   const reputation = Number(state?.reputation ?? 50);
+  const roomCallsHandled = state?.shiftStats?.roomCallsHandled ?? 0;
+  const socialFallout = state?.shiftStats?.socialFalloutEvents ?? 0;
+  const overManaged = state?.shiftStats?.overManagementPenalties ?? 0;
+  const emergencyCommands = Array.isArray(state?.emergencyState?.commandHistory) ? state.emergencyState.commandHistory.length : 0;
   const threadLines = [];
 
   let title = 'Uneasy Survival';
@@ -78,6 +82,22 @@ export function buildOutcomeFlavor(state, summary) {
     note += ' Crisis management leaned heavily on high-draw power responses.';
   }
 
+  if (roomCallsHandled >= 2) {
+    note += ' Occupied-room service was a defining part of the shift rather than background noise.';
+  }
+
+  if (socialFallout >= 2) {
+    note += ' The building ended the night socially poisoned, with bad calls spreading beyond one room.';
+  }
+
+  if (overManaged >= 2) {
+    note += ' Too much intervention created its own visible damage.';
+  }
+
+  if (emergencyCommands >= 1) {
+    note += ' The shift crossed into emergency command territory before dawn.';
+  }
+
   if (deskQueued > 0) {
     note += ` Desk decisions created ${deskQueued} delayed thread${deskQueued === 1 ? '' : 's'} that had to be managed later.`;
   }
@@ -100,6 +120,10 @@ export function buildOutcomeFlavor(state, summary) {
     note += ' Operator pattern: cautious and observant, often containing risk before it spread.';
   } else if (rejected >= 3 && reputation < 50) {
     note += ' Operator pattern: hardline and defensive, safer in spots but costly to public confidence.';
+  } else if (socialFallout >= 2 && reputation >= 45) {
+    note += ' Operator pattern: profitable on paper, but the motel atmosphere turned sour.';
+  } else if (overManaged === 0 && roomCallsHandled >= 2) {
+    note += ' Operator pattern: controlled without becoming needlessly invasive.';
   }
 
   if (specialHandled > 0) {

@@ -57,6 +57,7 @@ function renderTutorialSurfaces(state) {
       hintCard.innerHTML = `
         <div class="tutorial-hint-head">
           <p class="section-tag">${hint.stepLabel || 'Shift Tip'}</p>
+          ${hint?.modeLabel ? `<span class="tutorial-mode-badge">${hint.modeLabel}</span>` : ''}
           <div class="tutorial-hint-actions">
             <button id="tutorial-dismiss-btn" class="button button-secondary" type="button">Dismiss</button>
             ${onboardingUi?.tutorialEnabled
@@ -227,6 +228,7 @@ export function renderTopbar(state) {
       'pressure-calm',
       'pressure-tense',
       'pressure-dire',
+      'pressure-emergency',
       'atmosphere-blackout-risk',
       'atmosphere-blackout-partial',
       'atmosphere-blackout-full',
@@ -288,7 +290,8 @@ export function renderTopbar(state) {
       const item = document.createElement('div');
       const type = alert?.type || 'info';
       const isActionable = alert?.kind === 'actionable';
-      item.className = `live-alert live-alert-${type} ${isActionable ? 'live-alert-actionable' : ''}`;
+      const emphasis = Number(alert?.message?.length || 0) >= 96 || type === 'danger';
+      item.className = `live-alert live-alert-${type} ${isActionable ? 'live-alert-actionable' : ''} ${emphasis ? 'is-emphasis' : ''}`;
       item.innerHTML = `
         <strong class="live-alert-label">${isActionable ? 'Action' : type.toUpperCase()}</strong>
         <span>${alert?.message || ''}</span>
@@ -366,6 +369,7 @@ export function renderTopbar(state) {
     runIdentityStrip.innerHTML = `
       <p>Operating Doctrine: <strong>${doctrineTitle}</strong></p>
       <p class="muted">${signal}</p>
+      ${state?.nightMoodLine ? `<p class="night-mood-line">${state.nightMoodLine}</p>` : ''}
       ${state?.nightIdentityLine ? `<p class="muted">${state.nightIdentityLine}</p>` : ''}
       ${state?.crisisNight?.active && state?.crisisNight?.note ? `<p class="muted">${state.crisisNight.note}</p>` : ''}
     `;
@@ -1181,7 +1185,8 @@ export function renderSharedSpaces(state) {
   const spaces = Array.isArray(state?.sharedSpaces) ? state.sharedSpaces : [];
   spaces.forEach((space) => {
     const card = document.createElement('article');
-    card.className = `room-card shared-space-card ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'}`;
+    const emergencyPriority = Boolean(state?.emergencyNight?.active) && Number(space?.pressureScore || 0) >= 4;
+    card.className = `room-card shared-space-card ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'} ${emergencyPriority ? 'is-emergency-priority' : ''}`;
     card.innerHTML = `
       <div class="room-card-header">
         <h4>${space.label}</h4>
@@ -1196,7 +1201,7 @@ export function renderSharedSpaces(state) {
       <div class="guest-detail-block">
         <p class="room-service-title">${space.activeIssue || 'No active issue'}</p>
         <p class="room-service-note muted">${space.note || ''}</p>
-        ${state?.emergencyNight?.active && Number(space?.pressureScore || 0) >= 4 ? '<p class="room-service-note">Emergency priority zone.</p>' : ''}
+        ${emergencyPriority ? '<p class="room-service-note room-service-note-priority">Emergency priority zone.</p>' : ''}
         ${space?.modifiers?.length ? `<p class="room-service-note muted">Modifiers: ${space.modifiers.join(' • ')}</p>` : ''}
       </div>
       <div class="room-service-row"></div>
@@ -1567,7 +1572,8 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
     scenarioLabel.textContent = `Scenario: ${label}`;
   }
   if (campaignProgressLabel) {
-    campaignProgressLabel.textContent = state?.campaignProgress?.completedLabel || '';
+    const moodLine = Array.isArray(state?.summaryIdentityLines) ? state.summaryIdentityLines[0] : '';
+    campaignProgressLabel.textContent = [state?.campaignProgress?.completedLabel || '', moodLine].filter(Boolean).join(' • ');
   }
   if (runSetupLabel) {
     runSetupLabel.textContent = state?.runSetupSummary?.setupLine || 'Difficulty: Standard • Contracts: None';
@@ -1629,6 +1635,11 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
       if (snapshot?.dominantPressureTag) {
         const item = document.createElement('li');
         item.textContent = `Dominant pressure: ${snapshot.dominantPressureTag}`;
+        breakdown.appendChild(item);
+      }
+      if (state?.lastSummary?.branchOutcome) {
+        const item = document.createElement('li');
+        item.textContent = `Dawn read: ${state.lastSummary.branchOutcome}`;
         breakdown.appendChild(item);
       }
     }
@@ -1716,7 +1727,7 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
       : nextMilestone?.isMilestone
         ? ` • ${nextMilestone.label}`
         : '';
-    meta.textContent = `Prepare for Night ${nextNight}${milestoneText}`;
+    meta.textContent = `Prepare for Night ${nextNight}${milestoneText}${state?.nightMoodLine ? ` • ${state.nightMoodLine}` : ''}`;
   }
   if (campaign) {
     campaign.textContent = state?.campaignProgress?.completedLabel || 'Campaign progress: 0 / 5 nights completed';
@@ -1823,6 +1834,7 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
     const shiftHint = state?.directorShiftHint || '';
     director.innerHTML = `
       <p class="section-tag">Tonight’s Outlook</p>
+      ${state?.nightMoodLine ? `<p><strong>${state.nightMoodLine}</strong></p>` : ''}
       ${shiftHint ? `<p class="muted">${shiftHint}</p>` : ''}
       ${notes.length
         ? `<ul class="prep-notes-list">${notes.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
@@ -1861,6 +1873,7 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
       <p class="section-tag">Owner Pressure</p>
       <p><strong>${brief?.mood || 'Watchful'}</strong> oversight • Last settlement: ${formatMoney(Number(brief?.settlement || 0))}</p>
       <p class="muted">${brief?.memo || 'Ownership has not issued a new morning memo.'}</p>
+      ${state?.nightMoodLine ? `<p class="muted">${state.nightMoodLine}</p>` : ''}
       <p class="muted">Demand: ${(brief?.ownerDemand || 'margin-watch').replaceAll('-', ' ')} • Doctrine read: ${brief?.doctrineTrack || 'Stability Manager'} • Staffing cost: ${formatMoney(Number(brief?.staffingCost || 0))}</p>
       ${lines.length
         ? `<ul class="prep-notes-list">${lines.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
@@ -2029,6 +2042,9 @@ export function renderRunEnding(ending = {}) {
   }
   if (summary) summary.textContent = ending?.summary || '';
   if (dramaticSummary) dramaticSummary.textContent = ending?.dramaticSummary || '';
+  if (toneBadge) {
+    toneBadge.title = ending?.family ? `Ending family: ${formatFamilyLabel(ending.family)}` : '';
+  }
   if (finaleContext) {
     const line = ending?.finaleContextLine || '';
     finaleContext.textContent = line;
@@ -2281,6 +2297,7 @@ export function renderMainMenuMetaSurface(state, handlers = {}) {
           <ul class="main-menu-onboarding-list">
             ${(Array.isArray(menu.tips) ? menu.tips.slice(0, 4) : []).map((tip) => `<li>${tip}</li>`).join('')}
           </ul>
+          <p class="muted">${tutorialActiveStartFlow ? 'Guided mode keeps first-night teaching progressive and light.' : 'Standard mode keeps hints lighter while preserving the full system depth.'}</p>
           <div class="hero-actions">
             <button id="menu-open-help-btn" class="button button-secondary" type="button">Open Quick Guide</button>
             ${menu.tutorialEnabled

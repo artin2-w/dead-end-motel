@@ -71,12 +71,26 @@ export function buildNightSummary(state) {
   if (Number(state?.shiftStats?.socialFalloutEvents || 0) > 0) {
     identity.push('Social fallout spread beyond one room, proving the motel reacts to judgment mistakes as a shared environment.');
   }
+  if (Number(state?.shiftStats?.roomCallsHandled || 0) > 0) {
+    identity.push('Occupied-room calls became part of the night rhythm instead of staying as background pressure.');
+  }
+  if (state?.emergencyNight?.active || Number(state?.emergencyState?.commandHistory?.length || 0) > 0) {
+    identity.push('The shift crossed into command-state management, where containment choices mattered as much as basic desk reads.');
+  }
 
   let branchOutcome = 'Contained, but ordinary.';
   if (Number(state?.shiftStats?.policyBroken || 0) >= 2 && Number(state?.money || 0) >= 150) {
     branchOutcome = 'Profitable, but socially poisoned.';
+  } else if (Number(state?.factions?.ownership || 0) >= 4 && Number(state?.shiftStats?.harshDeskActions || 0) >= 2) {
+    branchOutcome = 'Calm, but morally ugly.';
+  } else if (Number(state?.shiftStats?.policyBroken || 0) >= 1 && Number(state?.money || 0) >= 210) {
+    branchOutcome = 'Profitable, but compromised.';
   } else if (Number(state?.shiftStats?.harshDeskActions || 0) >= 2 && Number(state?.shiftStats?.policyFollowed || 0) >= 1) {
     branchOutcome = 'Calm, but harsh.';
+  } else if (Number(state?.factions?.locals || 0) <= -4 || Number(state?.shiftStats?.socialFalloutEvents || 0) >= 2) {
+    branchOutcome = 'Socially poisoned motel.';
+  } else if (Number(state?.shiftStats?.smartRestraintMoments || 0) >= 2 && Number(state?.shiftStats?.strongContainmentActions || 0) >= 1) {
+    branchOutcome = 'Unstable, but disciplined.';
   } else if (Number(state?.shiftStats?.realThreatsMissed || 0) >= 1) {
     branchOutcome = 'Wrong guest contained too late.';
   } else if (blackoutLevel === 'full' || overlapPressure >= 3) {

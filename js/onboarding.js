@@ -17,9 +17,13 @@ const PANEL_INTRO_COPY = {
     title: 'Report',
     body: 'Review incidents, dispatch staff, and close the shift once dawn arrives.'
   },
+  'spaces-panel': {
+    title: 'Shared Spaces',
+    body: 'Watch the lobby, hallway, parking lot, utility lane, and rear exit before pressure reaches the rooms.'
+  },
   'night-prep-screen': {
     title: 'Prep',
-    body: 'Spend run money between nights on upgrades that shape future shifts.'
+    body: 'Use the morning pause to review owner pressure, staff focus, suspect patterns, and upgrades before the next shift.'
   }
 };
 
@@ -33,6 +37,10 @@ const GLOSSARY_TERMS = [
   { term: 'Power', meaning: 'Shared reserve consumed by scans, investigations, and emergency actions.' },
   { term: 'Special Guests', meaning: 'Guests with encounter choices and long-tail consequences.' },
   { term: 'Night Events', meaning: 'Shift-wide incidents requiring a response choice.' },
+  { term: 'Shared Spaces', meaning: 'Pressure can move through the lobby, parking lot, hallway, utility lane, and rear exit.' },
+  { term: 'Emergency Command', meaning: 'A late-night control layer used only when the motel starts slipping into real emergency pressure.' },
+  { term: 'Suspect Board', meaning: 'Your compact memory for vehicles, forged-document signs, linked groups, and repeating local patterns.' },
+  { term: 'Staff Focus', meaning: 'The night shift lean chosen in prep: balanced, security-heavy, service-heavy, or cost-saving.' },
   { term: 'Doctrine', meaning: 'Your evolving management identity; it changes pressure flavor and response texture.' },
   { term: 'Faction Climate', meaning: 'How guests, staff, locals, authorities, and ownership currently view your motel.' },
   { term: 'Story Thread', meaning: 'Recurring run tension that can escalate, stabilize, or carry into later nights.' },
@@ -52,6 +60,9 @@ function createDefaultProgress() {
     cameraVisit: false,
     powerVisit: false,
     reportVisit: false,
+    spacesVisit: false,
+    prepVisit: false,
+    suspectBoardVisit: false,
     surviveDawn: false
   };
 }
@@ -143,6 +154,7 @@ export function markPanelVisited(onboardingState, panelId) {
   if (panelId === 'cameras-panel') next.progress.cameraVisit = true;
   if (panelId === 'power-panel') next.progress.powerVisit = true;
   if (panelId === 'report-panel') next.progress.reportVisit = true;
+  if (panelId === 'spaces-panel') next.progress.spacesVisit = true;
   if (panelId === 'frontdesk-panel' && next.progress.deskDecision) next.progress.roomStatus = true;
 
   next.activePanelIntro = !hasSeenPanel && PANEL_INTRO_COPY[panelId]
@@ -181,6 +193,15 @@ export function markTutorialEvent(onboardingState, eventKey, payload = {}) {
   if (event === 'report-action') {
     next.progress.reportVisit = true;
   }
+  if (event === 'shared-space-action') {
+    next.progress.spacesVisit = true;
+  }
+  if (event === 'prep-opened') {
+    next.progress.prepVisit = true;
+  }
+  if (event === 'suspect-board-used') {
+    next.progress.suspectBoardVisit = true;
+  }
   if (event === 'night-complete' && Number(payload.night || 0) === 1) {
     next.progress.surviveDawn = true;
     next.firstRunCompleted = true;
@@ -190,7 +211,15 @@ export function markTutorialEvent(onboardingState, eventKey, payload = {}) {
 }
 
 function getGuidedHintModel(renderState) {
-  const { onboarding, guests, occupiedRooms, unresolvedCameraCount, activePanelId } = renderState;
+  const {
+    onboarding,
+    guests,
+    occupiedRooms,
+    unresolvedCameraCount,
+    activePanelId,
+    sharedPressureCount,
+    emergencyActive
+  } = renderState;
   const progress = onboarding.progress || createDefaultProgress();
 
   if (!progress.welcome) {
@@ -255,6 +284,24 @@ function getGuidedHintModel(renderState) {
       panelId: 'report-panel'
     };
   }
+  if (!progress.spacesVisit && (sharedPressureCount > 0 || occupiedRooms > 0)) {
+    return {
+      key: 'tutorial-spaces',
+      title: 'Step 7: Check Shared Spaces',
+      body: sharedPressureCount > 0
+        ? 'Shared-space pressure is already active. Parking, hallway, and lobby trouble can reach rooms if ignored.'
+        : 'The motel is wider than the desk. Shared Spaces tracks where danger is moving before it becomes a room crisis.',
+      panelId: 'spaces-panel'
+    };
+  }
+  if (emergencyActive) {
+    return {
+      key: 'tutorial-emergency',
+      title: 'Emergency command is live',
+      body: 'The motel has tipped into command-state pressure. Use emergency actions to stop spread, then absorb the cost afterward.',
+      panelId: 'spaces-panel'
+    };
+  }
 
   return {
     key: 'tutorial-survive',
@@ -265,8 +312,24 @@ function getGuidedHintModel(renderState) {
 }
 
 function getLightContextHint(renderState) {
-  const { guests, unresolvedCameraCount, power, activePanelId, night } = renderState;
+  const { guests, unresolvedCameraCount, power, activePanelId, night, sharedPressureCount, emergencyActive, suspectBoardHeat } = renderState;
   if (night >= 5) return null;
+  if (emergencyActive && activePanelId !== 'spaces-panel') {
+    return {
+      key: 'light-emergency-context',
+      title: 'Emergency priority',
+      body: 'Shared Spaces now matters most. Command decisions can stop pressure from moving through the property.',
+      panelId: 'spaces-panel'
+    };
+  }
+  if (sharedPressureCount > 0 && activePanelId !== 'spaces-panel') {
+    return {
+      key: 'light-shared-space-context',
+      title: 'Shared-space pressure',
+      body: 'Trouble is active outside rooms. Check Shared Spaces before it spreads into multiple zones.',
+      panelId: 'spaces-panel'
+    };
+  }
   if (unresolvedCameraCount > 0 && activePanelId !== 'cameras-panel') {
     return {
       key: 'light-camera-context',
@@ -291,6 +354,14 @@ function getLightContextHint(renderState) {
       panelId: 'frontdesk-panel'
     };
   }
+  if (suspectBoardHeat > 0 && guests > 0) {
+    return {
+      key: 'light-board-context',
+      title: 'Pattern memory',
+      body: 'Vehicle clues, false units, and document tells pay off over time. Keep the suspect board in mind when reads repeat.',
+      panelId: 'frontdesk-panel'
+    };
+  }
   return null;
 }
 
@@ -304,6 +375,11 @@ export function buildOnboardingUiModel(gameState, onboardingState, context = {})
   const unresolvedCameraCount = cameras.filter((camera) =>
     events.some((event) => String(event?.cameraId) === String(camera.id))
   ).length;
+  const sharedPressureCount = Array.isArray(gameState?.sharedSpaces)
+    ? gameState.sharedSpaces.filter((entry) => Number(entry?.pressureScore || 0) >= 3).length
+    : 0;
+  const emergencyActive = Boolean(gameState?.emergencyNight?.active);
+  const suspectBoardHeat = Array.isArray(gameState?.suspectBoard?.entries) ? gameState.suspectBoard.entries.length : 0;
 
   const activePanelId = context.activePanelId || 'frontdesk-panel';
   const activeScreenId = context.activeScreenId || 'main-menu';
@@ -312,14 +388,17 @@ export function buildOnboardingUiModel(gameState, onboardingState, context = {})
   const heavyGuidance = firstRunActive && onboarding.runModePreference !== 'standard';
 
   const guidedHint = heavyGuidance
-    ? getGuidedHintModel({ onboarding, guests, occupiedRooms, unresolvedCameraCount, activePanelId })
+    ? getGuidedHintModel({ onboarding, guests, occupiedRooms, unresolvedCameraCount, activePanelId, sharedPressureCount, emergencyActive })
     : null;
   const contextualHint = onboarding.tutorialEnabled ? getLightContextHint({
     guests,
     unresolvedCameraCount,
     power: Number(gameState?.power || 100),
     activePanelId,
-    night: Number(gameState?.night || 1)
+    night: Number(gameState?.night || 1),
+    sharedPressureCount,
+    emergencyActive,
+    suspectBoardHeat
   }) : null;
 
   const hint = guidedHint || contextualHint;
@@ -334,12 +413,12 @@ export function buildOnboardingUiModel(gameState, onboardingState, context = {})
     tutorialEnabled: onboarding.tutorialEnabled,
     tutorialActiveStartFlow: activeScreenId === 'main-menu' && onboarding.tutorialEnabled && !onboarding.firstRunCompleted,
     runModePreference: onboarding.runModePreference,
-    blurb: 'A tense management sim: assess guests, contain incidents, and survive each night until dawn.',
+    blurb: 'A tense motel-management thriller: read guests, contain moving pressure, manage staff and owner demands, and survive until dawn.',
     tips: [
-      'Use Risk + Policy together before check-in decisions.',
-      'Scan cameras often enough to catch anomalies early.',
-      'Power is your safety budget—avoid panic spending.',
-      'Dispatch and tactical actions trade safety for cost, reputation, or instability.'
+      'Start narrow: process the desk queue, then branch into cameras or shared spaces only when pressure actually appears.',
+      'Use Risk + Policy together before check-in decisions. Safer checks are slower, but bad approvals echo later.',
+      'Shared spaces matter. Parking, hallway, utility, and lobby pressure can move before a room becomes obviously dangerous.',
+      'Morning prep is part of survival: staffing, owner pressure, suspect-board memory, and upgrades all shape later nights.'
     ]
   };
 
