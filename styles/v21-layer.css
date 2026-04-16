@@ -1,0 +1,420 @@
+/* Dead End Motel v0.21 — Spatial UI / Focused Layout / Zero-Clutter */
+
+/* ============================================================
+   ROOM TWO-LEVEL SYSTEM
+   ============================================================ */
+
+#room-list.room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--v20-space-xs) var(--v20-space-sm);
+  align-items: start;
+}
+
+.room-card.room-card-focused {
+  grid-column: 1 / -1;
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 8px 32px rgba(0, 0, 0, 0.28);
+}
+
+/* --- Overview Row (always visible compact strip) --- */
+
+.room-overview-row {
+  display: flex;
+  align-items: center;
+  gap: var(--v20-space-sm);
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.room-overview-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--v20-space-xs);
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.room-overview-identity h4 {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.room-overview-guest {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 0.76rem;
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.room-urgency-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.38rem;
+  border-radius: var(--v20-chip-radius);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.room-urgency-chip.is-call {
+  background: rgba(248, 113, 113, 0.14);
+  color: rgba(248, 113, 113, 0.96);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+}
+
+.room-urgency-chip.is-chain {
+  background: rgba(251, 191, 36, 0.1);
+  color: rgba(251, 191, 36, 0.95);
+  border: 1px solid rgba(251, 191, 36, 0.22);
+}
+
+.room-focus-btn {
+  flex-shrink: 0;
+  font-size: 0.72rem !important;
+  padding: 0.22rem 0.6rem !important;
+  white-space: nowrap;
+}
+
+/* --- Detail Panel (hidden until focused) --- */
+
+.room-card-occupied .room-detail-panel {
+  display: none;
+}
+
+.room-card-occupied.room-card-focused .room-detail-panel {
+  display: block;
+  margin-top: var(--v20-space-md);
+  padding-top: var(--v20-space-md);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  animation: v21-panel-appear 0.14s ease-out;
+}
+
+@keyframes v21-panel-appear {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Compact occupied card when not focused */
+.room-card-occupied:not(.room-card-focused) {
+  padding: var(--v20-space-sm) var(--v20-space-md);
+}
+
+/* Vacant / locked rooms: compact */
+.room-card-vacant {
+  padding: var(--v20-space-sm) var(--v20-space-md);
+}
+
+.room-card-vacant .room-meta {
+  font-size: 0.76rem;
+  margin: 0.15rem 0 0;
+  color: var(--text-soft);
+}
+
+.room-card-locked {
+  padding: var(--v20-space-sm) var(--v20-space-md);
+  opacity: 0.58;
+}
+
+/* Detail panel header strip */
+.room-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--v20-space-sm);
+  margin-bottom: var(--v20-space-sm);
+  padding-bottom: var(--v20-space-xs);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.room-detail-label {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+/* ============================================================
+   SHARED SPACE TILES — COMPACT BOARD
+   ============================================================ */
+
+#shared-space-grid.shared-space-board {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.shared-space-card {
+  padding: var(--v20-space-md);
+}
+
+/* Issue line: prominent single-line summary */
+.shared-space-headline {
+  margin: var(--v20-space-xs) 0 0 !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+}
+
+/* Connection badges: inline compact pills */
+.shared-space-connection-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--v20-chip-radius);
+  text-transform: uppercase;
+}
+
+.shared-space-connection-badge.has-room-calls {
+  background: rgba(96, 165, 250, 0.1);
+  color: rgba(96, 165, 250, 0.95);
+  border: 1px solid rgba(96, 165, 250, 0.22);
+}
+
+.shared-space-connection-badge.has-scanner {
+  background: rgba(192, 132, 252, 0.1);
+  color: rgba(192, 132, 252, 0.95);
+  border: 1px solid rgba(192, 132, 252, 0.22);
+}
+
+/* Verbose zone info: collapsed by default */
+.shared-space-detail-drawer {
+  margin-top: var(--v20-space-sm);
+  border-radius: var(--radius-md);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.shared-space-detail-drawer > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: var(--v20-space-xs) var(--v20-space-sm);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.shared-space-detail-drawer > summary::-webkit-details-marker {
+  display: none;
+}
+
+.shared-space-detail-body {
+  padding: 0 var(--v20-space-sm) var(--v20-space-sm);
+  font-size: 0.75rem;
+  line-height: var(--v20-line-body);
+  color: var(--text-soft);
+}
+
+.shared-space-detail-body > p {
+  margin: 0.25rem 0 0;
+}
+
+/* Actions: always at bottom of tile */
+.shared-space-actions {
+  margin-top: var(--v20-space-sm) !important;
+}
+
+/* Compact pressure chips on shared spaces */
+.shared-space-card .room-pressure-row {
+  flex-wrap: wrap;
+  gap: var(--v20-space-xs);
+  margin-bottom: 0;
+}
+
+.shared-space-card .room-pressure-row .room-state-chip {
+  font-size: 0.62rem;
+  padding: 0.1rem 0.35rem;
+}
+
+/* ============================================================
+   GUEST CASE BOARD — DENSITY REDUCTION
+   ============================================================ */
+
+.guest-card.guest-card-v20 {
+  padding: var(--v20-space-md) var(--v20-space-md) var(--v20-space-sm);
+}
+
+.guest-chip-row {
+  gap: var(--v20-space-xs);
+  flex-wrap: wrap;
+}
+
+.guest-chip-row .guest-signal-chip,
+.guest-chip-row .guest-meta-chip {
+  font-size: 0.65rem;
+}
+
+.guest-case-strapline {
+  margin: var(--v20-space-xs) 0 var(--v20-space-sm) !important;
+  font-size: 0.83rem !important;
+}
+
+/* Investigation group: visually subordinate */
+.action-group-investigate {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: var(--v20-space-xs) var(--v20-space-sm);
+}
+
+.action-group-investigate > .action-group-label {
+  font-size: 0.6rem;
+  margin-bottom: var(--v20-space-xs);
+}
+
+.action-group-investigate .button {
+  font-size: 0.73rem;
+  padding: 0.22rem 0.55rem;
+}
+
+.action-group-investigate .button[disabled] {
+  opacity: 0.38;
+}
+
+/* Desk decision: clear hierarchy */
+.action-group-decide {
+  margin-bottom: var(--v20-space-xs);
+}
+
+.action-group-decide .button-primary {
+  font-weight: 700;
+}
+
+/* ============================================================
+   SCANNER LEGEND — COLLAPSED BY DEFAULT
+   ============================================================ */
+
+.scanner-legend-drawer {
+  margin-top: var(--v20-space-xs);
+}
+
+.scanner-legend-drawer > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  padding: var(--v20-space-xs) 0;
+  opacity: 0.75;
+}
+
+.scanner-legend-drawer > summary::-webkit-details-marker {
+  display: none;
+}
+
+.scanner-legend-drawer[open] > summary {
+  opacity: 1;
+}
+
+/* ============================================================
+   BUTTON HIERARCHY
+   ============================================================ */
+
+.room-service-row .button {
+  font-size: 0.78rem;
+  padding: 0.28rem 0.62rem;
+}
+
+.room-tactical-row .button {
+  font-size: 0.78rem;
+}
+
+.shared-space-actions .button {
+  font-size: 0.78rem;
+  padding: 0.28rem 0.62rem;
+}
+
+/* ============================================================
+   VISUAL GAME-FEEL
+   ============================================================ */
+
+.room-card.room-tone-hostile {
+  border-left: 2px solid rgba(248, 113, 113, 0.55);
+}
+
+.room-card.room-tone-strained {
+  border-left: 2px solid rgba(251, 191, 36, 0.4);
+}
+
+.room-card.is-critical-pulse {
+  animation: v21-pulse-ring 2.2s ease-in-out infinite;
+}
+
+@keyframes v21-pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0px rgba(248, 113, 113, 0); }
+  50%       { box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.18); }
+}
+
+.is-emergency-priority {
+  outline: 1px solid rgba(248, 113, 113, 0.38);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   LAPTOP-FIRST LAYOUT
+   ============================================================ */
+
+.shift-situation-drawer .shift-context-block {
+  padding: var(--v20-space-sm) var(--v20-space-md);
+}
+
+.microcopy-line {
+  margin: var(--v20-space-xs) 0 var(--v20-space-sm);
+  font-size: 0.77rem;
+}
+
+.desk-scanner-card {
+  margin-bottom: var(--v20-space-md);
+}
+
+.panel .panel-header.split-space {
+  margin-top: var(--v20-space-lg);
+  padding-top: var(--v20-space-md);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: var(--v20-space-xs);
+}
+
+/* ============================================================
+   RESPONSIVE — MOBILE SAFETY
+   ============================================================ */
+
+@media (max-width: 960px) {
+  #room-list.room-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  #room-list.room-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .room-card.room-card-focused {
+    grid-column: auto;
+  }
+
+  .room-overview-row {
+    flex-wrap: wrap;
+  }
+
+  .room-overview-guest {
+    white-space: normal;
+    flex-basis: 100%;
+  }
+
+  #shared-space-grid.shared-space-board {
+    grid-template-columns: 1fr;
+  }
+}

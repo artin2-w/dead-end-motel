@@ -5,6 +5,8 @@ import {
 } from './nightCycle.js';
 import { getRoomPresentationMeta } from './presentation.js';
 
+let _v21SelectedRoomId = null;
+
 function formatMoney(value) {
   return `$${value}`;
 }
@@ -1168,7 +1170,10 @@ export function renderRooms(
     const card = document.createElement('article');
     const lockedOut = room?.unlocked === false;
     const systemNoise = Boolean(state?.systemOverride?.active) && Boolean(room?.serviceState?.pendingRequest);
-    card.className = `room-card ${getRoomConditionClass(room.condition || 'Stable')} room-tone-${presentation.tone} ${presentation.shouldPulse ? 'is-critical-pulse' : ''} ${room.occupied ? 'room-card-occupied' : 'room-card-vacant'} ${lockedOut ? 'room-card-locked' : ''} ${systemNoise ? 'room-card-system-noise' : ''}`.trim();
+    const roomHasPendingRequest = Boolean(room?.serviceState?.pendingRequest);
+    const roomChainHigh = Number(room?.chainPressure || 0) >= 4;
+    const isSelectedRoom = _v21SelectedRoomId === room.id;
+    card.className = `room-card ${getRoomConditionClass(room.condition || 'Stable')} room-tone-${presentation.tone} ${presentation.shouldPulse ? 'is-critical-pulse' : ''} ${room.occupied ? 'room-card-occupied' : 'room-card-vacant'} ${lockedOut ? 'room-card-locked' : ''} ${systemNoise ? 'room-card-system-noise' : ''} ${isSelectedRoom ? 'room-card-focused' : ''}`.trim();
     if (lockedOut) {
       card.innerHTML = `
         <div class="room-card-header">
@@ -1251,6 +1256,46 @@ export function renderRooms(
       `;
 
     if (room.occupied) {
+      const v20Surface = card.querySelector('.room-card-v20-surface');
+      if (v20Surface) {
+        const detailPanel = document.createElement('div');
+        detailPanel.className = 'room-detail-panel';
+        card.replaceChild(detailPanel, v20Surface);
+        detailPanel.appendChild(v20Surface);
+
+        const overviewRow = document.createElement('div');
+        overviewRow.className = 'room-overview-row';
+        overviewRow.innerHTML =
+          '<div class="room-overview-identity">' +
+            '<h4>' + room.label + '</h4>' +
+            '<span class="room-condition-pill">' + (room.condition || 'Stable') + '</span>' +
+            (roomHasPendingRequest ? '<span class="room-urgency-chip is-call">Call</span>' : '') +
+            (roomChainHigh ? '<span class="room-urgency-chip is-chain">Chain&nbsp;' + Number(room.chainPressure) + '</span>' : '') +
+          '</div>' +
+          '<span class="room-overview-guest">' + (room.guestName || room.occupiedBy || '') + (room.occupantArchetypeLabel ? ' &middot; ' + room.occupantArchetypeLabel : '') + '</span>' +
+          '<button class="button button-secondary room-focus-btn" type="button">' + (isSelectedRoom ? 'Close &times;' : 'Manage &rsaquo;') + '</button>';
+        card.insertBefore(overviewRow, detailPanel);
+
+        const focusBtn = overviewRow.querySelector('.room-focus-btn');
+        if (focusBtn) {
+          focusBtn.addEventListener('click', () => {
+            const wasSelected = card.classList.contains('room-card-focused');
+            roomList.querySelectorAll('.room-card-focused').forEach((c) => {
+              c.classList.remove('room-card-focused');
+              const btn = c.querySelector('.room-focus-btn');
+              if (btn) btn.textContent = 'Manage \u203a';
+            });
+            if (!wasSelected) {
+              _v21SelectedRoomId = room.id;
+              card.classList.add('room-card-focused');
+              focusBtn.textContent = 'Close \u00d7';
+            } else {
+              _v21SelectedRoomId = null;
+            }
+          });
+        }
+      }
+
       const serviceActions = card.querySelector('.room-service-row');
       const actions = card.querySelector('.room-tactical-row');
       const hasPendingRequest = Boolean(room?.serviceState?.pendingRequest);
@@ -1406,6 +1451,27 @@ export function renderSharedSpaces(state) {
         </div>
       </div>
     `;
+
+    const spaceWhyEl = card.querySelector('.shared-space-why');
+    const spaceRouteEl = card.querySelector('.shared-space-route-line');
+    const spaceConnEl = card.querySelector('.shared-space-connection-line');
+    const spaceModDrawer = card.querySelector('.shared-space-modifiers-drawer');
+    const spaceZonesEl = card.querySelector('.shared-space-zones');
+    const spaceActionGroup = card.querySelector('.shared-space-actions');
+    if (spaceZonesEl && spaceActionGroup && (spaceWhyEl || spaceRouteEl || spaceConnEl || spaceModDrawer)) {
+      const detailDrawer = document.createElement('details');
+      detailDrawer.className = 'shared-space-detail-drawer';
+      const detailSummary = document.createElement('summary');
+      detailSummary.textContent = 'Zone detail & route';
+      detailDrawer.appendChild(detailSummary);
+      const detailBody = document.createElement('div');
+      detailBody.className = 'shared-space-detail-body';
+      detailDrawer.appendChild(detailBody);
+      [spaceWhyEl, spaceRouteEl, spaceConnEl, spaceModDrawer].forEach((el) => {
+        if (el) detailBody.appendChild(el);
+      });
+      spaceZonesEl.insertBefore(detailDrawer, spaceActionGroup);
+    }
 
     const actions = card.querySelector('.room-service-row');
     const openButton = document.createElement('button');
