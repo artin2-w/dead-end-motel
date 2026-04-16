@@ -1,0 +1,1123 @@
+/* Dead End Motel v0.22 — Visual Command Overhaul */
+
+/* ============================================================
+   CSS VARIABLES
+   ============================================================ */
+
+:root {
+  --v22-zone-lobby:   rgba(251, 191, 36, 1);
+  --v22-zone-parking: rgba(52, 211, 153, 1);
+  --v22-zone-hallway: rgba(96, 165, 250, 1);
+  --v22-zone-utility: rgba(251, 146, 60, 1);
+  --v22-zone-rear:    rgba(192, 132, 252, 1);
+
+  --v22-room-occupied: rgba(52, 211, 153, 0.55);
+  --v22-room-tense:    rgba(251, 191, 36, 0.75);
+  --v22-room-hostile:  rgba(248, 113, 113, 0.85);
+
+  --v22-camera-bg:    #060c18;
+  --v22-camera-green: rgba(0, 220, 80, 1);
+
+  --v22-incident-high:   rgba(248, 113, 113, 0.9);
+  --v22-incident-medium: rgba(251, 191, 36, 0.8);
+  --v22-incident-low:    rgba(96, 165, 250, 0.7);
+}
+
+/* ============================================================
+   MOTEL COMMAND BOARD
+   ============================================================ */
+
+.motel-command-board {
+  margin: var(--v20-space-sm) 0;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(5, 10, 22, 0.82);
+  overflow: hidden;
+}
+
+.mcb-inner {
+  padding: 0.45rem 0.75rem 0.5rem;
+}
+
+/* Top strip: title + status badge */
+.mcb-top-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.mcb-title {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.mcb-badge {
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+}
+
+.mcb-badge-live    { background: rgba(52, 211, 153, 0.15); color: rgba(52, 211, 153, 0.8); border: 1px solid rgba(52, 211, 153, 0.25); }
+.mcb-badge-blackout { background: rgba(248, 113, 113, 0.18); color: rgba(248, 113, 113, 0.9); border: 1px solid rgba(248, 113, 113, 0.35); animation: mcb-badge-flash 2s ease-in-out infinite; }
+.mcb-badge-hunt    { background: rgba(192, 132, 252, 0.15); color: rgba(192, 132, 252, 0.9); border: 1px solid rgba(192, 132, 252, 0.3); }
+.mcb-badge-override { background: rgba(251, 146, 60, 0.15); color: rgba(251, 146, 60, 0.9); border: 1px solid rgba(251, 146, 60, 0.3); }
+.mcb-badge-finale  { background: rgba(248, 113, 113, 0.22); color: rgba(248, 113, 113, 0.95); border: 1px solid rgba(248, 113, 113, 0.45); animation: mcb-badge-flash 1.4s ease-in-out infinite; }
+
+@keyframes mcb-badge-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* Schematic layout */
+.mcb-layout {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.mcb-layout::-webkit-scrollbar { display: none; }
+
+.mcb-zone-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+/* Zone tiles */
+.mcb-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.12rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(10, 16, 32, 0.75);
+  min-width: 2.6rem;
+  color: rgba(255, 255, 255, 0.35);
+  transition: border-color 0.4s ease, background 0.4s ease, color 0.4s ease;
+  cursor: default;
+}
+
+.mcb-zone-icon {
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.mcb-zone-name {
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Pressure bar */
+.mcb-zone-bar {
+  height: 2px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 1px;
+  position: relative;
+  margin-top: 2px;
+}
+
+.mcb-zone-bar::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: var(--zp, 0%);
+  background: currentColor;
+  border-radius: 1px;
+  transition: width 0.6s ease;
+}
+
+/* Pressure level variants */
+.mcb-zone.mcb-watch {
+  color: rgba(96, 165, 250, 0.75);
+  border-color: rgba(96, 165, 250, 0.22);
+  background: rgba(10, 18, 36, 0.8);
+}
+
+.mcb-zone.mcb-elevated {
+  color: rgba(251, 191, 36, 0.85);
+  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(22, 18, 6, 0.8);
+}
+
+.mcb-zone.mcb-danger {
+  color: rgba(248, 113, 113, 0.9);
+  border-color: rgba(248, 113, 113, 0.38);
+  background: rgba(22, 8, 8, 0.82);
+  animation: mcb-zone-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes mcb-zone-pulse {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 6px rgba(248, 113, 113, 0.18); }
+}
+
+/* Zone identity accent colors */
+.mcb-zone-park:not(.mcb-watch):not(.mcb-elevated):not(.mcb-danger) { color: rgba(52, 211, 153, 0.4); }
+.mcb-zone-lobby:not(.mcb-watch):not(.mcb-elevated):not(.mcb-danger) { color: rgba(251, 191, 36, 0.4); }
+.mcb-zone-hall:not(.mcb-watch):not(.mcb-elevated):not(.mcb-danger) { color: rgba(96, 165, 250, 0.4); }
+.mcb-zone-util:not(.mcb-watch):not(.mcb-elevated):not(.mcb-danger) { color: rgba(251, 146, 60, 0.4); }
+.mcb-zone-rear:not(.mcb-watch):not(.mcb-elevated):not(.mcb-danger) { color: rgba(192, 132, 252, 0.4); }
+
+/* Connectors */
+.mcb-connector {
+  flex: 0 0 10px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  position: relative;
+  align-self: center;
+}
+
+.mcb-connector::after {
+  content: '›';
+  position: absolute;
+  right: -5px;
+  top: -8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.2);
+  line-height: 1;
+}
+
+/* Room tiles strip */
+.mcb-rooms-strip {
+  display: flex;
+  gap: 0.15rem;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.mcb-rooms-block {
+  display: flex;
+  align-items: center;
+}
+
+.mcb-room {
+  width: 24px;
+  height: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 16, 32, 0.6);
+  position: relative;
+  cursor: default;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+.mcb-room-num {
+  font-size: 0.52rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 1;
+}
+
+.mcb-room-initial {
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.mcb-call-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(248, 113, 113, 0.9);
+  animation: mcb-call-pulse 1.3s ease-in-out infinite;
+}
+
+@keyframes mcb-call-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.3; transform: scale(0.65); }
+}
+
+/* Room state colors */
+.mcb-room-vacant {
+  background: rgba(8, 14, 28, 0.5);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.mcb-room-vacant .mcb-room-num { color: rgba(255, 255, 255, 0.18); }
+
+.mcb-room-occupied {
+  background: rgba(8, 26, 18, 0.65);
+  border-color: rgba(52, 211, 153, 0.22);
+}
+
+.mcb-room-occupied .mcb-room-num   { color: rgba(52, 211, 153, 0.6); }
+.mcb-room-occupied .mcb-room-initial { color: rgba(52, 211, 153, 0.85); }
+
+.mcb-room-tense {
+  background: rgba(26, 22, 6, 0.7);
+  border-color: rgba(251, 191, 36, 0.32);
+}
+
+.mcb-room-tense .mcb-room-num    { color: rgba(251, 191, 36, 0.65); }
+.mcb-room-tense .mcb-room-initial { color: rgba(251, 191, 36, 0.9); }
+
+.mcb-room-hostile {
+  background: rgba(26, 8, 8, 0.72);
+  border-color: rgba(248, 113, 113, 0.45);
+  animation: mcb-hostile-flicker 2.8s ease-in-out infinite;
+}
+
+.mcb-room-hostile .mcb-room-num    { color: rgba(248, 113, 113, 0.7); }
+.mcb-room-hostile .mcb-room-initial { color: rgba(248, 113, 113, 0.95); }
+
+@keyframes mcb-hostile-flicker {
+  0%, 100% { border-color: rgba(248, 113, 113, 0.45); }
+  50%       { border-color: rgba(248, 113, 113, 0.7); }
+}
+
+/* Stats row */
+.mcb-stats {
+  display: flex;
+  gap: 0.65rem;
+  margin-top: 0.38rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mcb-stat {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.04em;
+}
+
+.mcb-stat strong {
+  color: rgba(255, 255, 255, 0.65);
+  font-weight: 700;
+}
+
+.mcb-stat-alert strong { color: rgba(248, 113, 113, 0.9); }
+.mcb-stat-warn strong  { color: rgba(251, 191, 36, 0.85); }
+
+/* Hide command board on non-game screens */
+#app:not(.screen-game-screen) .motel-command-board {
+  display: none;
+}
+
+/* ============================================================
+   ROOM TILE VISUAL SYSTEM
+   ============================================================ */
+
+/* Status bar along top of each occupied room card */
+.room-card-occupied {
+  position: relative;
+  overflow: hidden;
+}
+
+.room-card-occupied::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 0;
+  pointer-events: none;
+  z-index: 1;
+  transition: background 0.4s ease;
+}
+
+.room-card-occupied.room-tone-steady::before   { background: rgba(52, 211, 153, 0.45); }
+.room-card-occupied.room-tone-strained::before { background: rgba(251, 191, 36, 0.65); }
+.room-card-occupied.room-tone-hostile::before  { background: rgba(248, 113, 113, 0.82); animation: room-tile-bar-pulse 1.8s ease-in-out infinite; }
+
+@keyframes room-tile-bar-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Overview row identity */
+.room-overview-identity h4 {
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+/* Condition pill: more compact and semantic */
+.room-overview-identity .room-condition-pill {
+  font-size: 0.6rem !important;
+  padding: 0.08rem 0.35rem !important;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+/* Guest info: subtle */
+.room-overview-guest {
+  font-size: 0.73rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Tone-specific room card backgrounds */
+.room-card-occupied.room-tone-strained:not(.room-card-focused) {
+  background: rgba(24, 20, 6, 0.45);
+}
+
+.room-card-occupied.room-tone-hostile:not(.room-card-focused) {
+  background: rgba(24, 8, 8, 0.45);
+}
+
+/* ============================================================
+   FOCUSED ROOM INSPECTOR — UPGRADE
+   ============================================================ */
+
+.room-card-focused .room-detail-panel .room-card-v20-surface {
+  position: relative;
+}
+
+/* Active call block: incident card feel */
+.room-card-focused .room-service-alert {
+  position: relative;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(12, 18, 34, 0.7);
+  overflow: hidden;
+  margin-bottom: var(--v20-space-sm);
+}
+
+.room-card-focused .room-service-alert::before {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 3px;
+}
+
+.room-card-focused .room-service-alert-high::before   { background: var(--v22-incident-high); }
+.room-card-focused .room-service-alert-medium::before { background: var(--v22-incident-medium); }
+.room-card-focused .room-service-alert-low::before    { background: var(--v22-incident-low); }
+
+.room-service-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--v20-space-sm);
+}
+
+.room-service-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: var(--v20-line-snug);
+}
+
+.room-service-pill {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Service response: stronger group framing */
+.room-card-focused .room-action-stack {
+  margin-top: var(--v20-space-md);
+  padding: var(--v20-space-md);
+  background: rgba(8, 14, 28, 0.4);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ============================================================
+   CAMERA WALL / FEED LAYER
+   ============================================================ */
+
+#camera-grid.camera-grid {
+  background: var(--v22-camera-bg);
+  border: 1px solid rgba(0, 220, 80, 0.1);
+  border-radius: var(--radius-lg);
+  padding: 3px;
+  gap: 2px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.camera-card {
+  background: #07111e;
+  border: 1px solid rgba(0, 220, 80, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Status indicator light */
+.camera-card::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(0, 220, 80, 0.55);
+  z-index: 3;
+  box-shadow: 0 0 4px rgba(0, 220, 80, 0.3);
+}
+
+.camera-card.is-actionable::before {
+  background: rgba(248, 113, 113, 0.9);
+  box-shadow: 0 0 6px rgba(248, 113, 113, 0.4);
+  animation: cam-alert-blink 1.1s ease-in-out infinite;
+}
+
+@keyframes cam-alert-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.15; }
+}
+
+/* Monitor preview area */
+.camera-preview {
+  height: 72px;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(0, 0, 0, 0.18) 1px,
+      rgba(0, 0, 0, 0.18) 2px
+    ),
+    radial-gradient(ellipse at 50% 40%, rgba(0, 30, 15, 0.7) 0%, rgba(4, 10, 20, 0.95) 100%);
+  position: relative;
+  border-bottom: 1px solid rgba(0, 220, 80, 0.08);
+}
+
+/* Vignette overlay */
+.camera-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.55) 100%);
+  pointer-events: none;
+}
+
+/* Camera text: tinted green */
+.camera-card h4 {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(0, 220, 80, 0.7);
+  padding: 0.3rem 0.55rem 0.1rem;
+  margin: 0;
+}
+
+.camera-card .camera-meta {
+  font-size: 0.65rem;
+  padding: 0 0.55rem;
+  color: rgba(0, 220, 80, 0.45);
+  margin: 0.1rem 0;
+}
+
+.camera-card .camera-status-badge {
+  font-weight: 700;
+}
+
+.camera-card .camera-status-badge.is-clear {
+  color: rgba(52, 211, 153, 0.75);
+}
+
+.camera-card .camera-status-badge.is-alert {
+  color: rgba(248, 113, 113, 0.9);
+}
+
+.camera-card .camera-alert-line {
+  font-size: 0.65rem;
+  color: rgba(248, 113, 113, 0.8);
+  padding: 0.1rem 0.55rem 0.3rem;
+  margin: 0;
+  letter-spacing: 0.03em;
+}
+
+.camera-card .button.camera-investigate-btn {
+  margin: 0.3rem 0.4rem 0.4rem;
+  font-size: 0.72rem;
+  padding: 0.25rem 0.6rem;
+  width: calc(100% - 0.8rem);
+  box-sizing: border-box;
+}
+
+/* Glitch/interference states: enhanced */
+.camera-grid-glitch-light .camera-card {
+  border-color: rgba(251, 191, 36, 0.15);
+}
+
+.camera-grid-glitch-heavy .camera-card {
+  border-color: rgba(248, 113, 113, 0.18);
+  animation: cam-glitch-heavy 3.2s steps(1) infinite;
+}
+
+@keyframes cam-glitch-heavy {
+  0%, 94%  { filter: none; }
+  95%       { filter: hue-rotate(90deg) brightness(1.3); }
+  97%       { filter: hue-rotate(-30deg); }
+  100%      { filter: none; }
+}
+
+/* ============================================================
+   ZONE IDENTITY — SHARED SPACES
+   ============================================================ */
+
+/* Zone accent via data attribute */
+.shared-space-card[data-zone-id="1"] {
+  --zone-accent-color: var(--v22-zone-lobby);
+  --zone-bg:  rgba(40, 30, 0, 0.2);
+  --zone-border: rgba(251, 191, 36, 0.28);
+}
+
+.shared-space-card[data-zone-id="2"] {
+  --zone-accent-color: var(--v22-zone-parking);
+  --zone-bg:  rgba(0, 36, 22, 0.2);
+  --zone-border: rgba(52, 211, 153, 0.25);
+}
+
+.shared-space-card[data-zone-id="3"] {
+  --zone-accent-color: var(--v22-zone-hallway);
+  --zone-bg:  rgba(6, 22, 50, 0.2);
+  --zone-border: rgba(96, 165, 250, 0.25);
+}
+
+.shared-space-card[data-zone-id="4"] {
+  --zone-accent-color: var(--v22-zone-utility);
+  --zone-bg:  rgba(40, 20, 0, 0.2);
+  --zone-border: rgba(251, 146, 60, 0.28);
+}
+
+.shared-space-card[data-zone-id="6"] {
+  --zone-accent-color: var(--v22-zone-rear);
+  --zone-bg:  rgba(20, 8, 42, 0.2);
+  --zone-border: rgba(192, 132, 252, 0.25);
+}
+
+.shared-space-card[data-zone-id] {
+  background-color: var(--zone-bg, transparent);
+  border-left: 3px solid var(--zone-border, rgba(255, 255, 255, 0.08));
+  border-left-width: 3px;
+}
+
+/* Zone name: identity accent */
+.shared-space-card[data-zone-id] .shared-space-head h4 {
+  color: var(--zone-accent-color, var(--text-main));
+  font-size: 0.92rem;
+}
+
+/* Zone status pill: inherit accent */
+.shared-space-card[data-zone-id] .room-condition-pill {
+  border-color: var(--zone-border, rgba(255, 255, 255, 0.15));
+  color: var(--zone-accent-color, var(--text-soft));
+}
+
+/* High-pressure: override zone identity with danger */
+.shared-space-card.room-tone-hostile[data-zone-id] {
+  --zone-bg: rgba(30, 8, 8, 0.28);
+  --zone-border: rgba(248, 113, 113, 0.38);
+  border-left-color: rgba(248, 113, 113, 0.55);
+}
+
+/* ============================================================
+   INCIDENT CARD FRAMING
+   ============================================================ */
+
+/* Room service alert: incident card */
+.room-service-alert {
+  position: relative;
+  padding-left: calc(var(--v20-space-md) + 3px);
+  overflow: hidden;
+}
+
+.room-service-alert::before {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 3px;
+  border-radius: 0;
+}
+
+.room-service-alert-high::before   { background: var(--v22-incident-high); }
+.room-service-alert-medium::before { background: var(--v22-incident-medium); }
+.room-service-alert-low::before    { background: var(--v22-incident-low); }
+.room-service-alert-critical::before { background: rgba(248, 113, 113, 1); animation: incident-critical-pulse 1.2s ease-in-out infinite; }
+
+@keyframes incident-critical-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+.room-service-title {
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+}
+
+/* Spillover spill line: route feel */
+.room-service-spill {
+  font-size: 0.72rem;
+  padding: 0.2rem var(--v20-space-sm);
+  margin-top: var(--v20-space-xs);
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.room-service-spill.is-hot {
+  border-left-color: rgba(248, 113, 113, 0.5);
+  background: rgba(30, 8, 8, 0.2);
+}
+
+/* Route line: pressure path */
+.room-service-route {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.02em;
+  margin-top: 0.15rem;
+}
+
+/* ============================================================
+   GUEST CASE BOARD VISUAL
+   ============================================================ */
+
+/* Verdict strip on top of card */
+.guest-card.guest-card-v20 {
+  position: relative;
+  overflow: hidden;
+}
+
+.guest-card-elevated::before,
+.guest-card-urgent::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.guest-card-elevated::before { background: rgba(248, 113, 113, 0.72); }
+.guest-card-urgent::before   { background: rgba(251, 191, 36, 0.65); }
+
+/* Guest case read: elevated panel */
+.guest-case-read {
+  background: rgba(8, 14, 30, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: var(--v20-space-sm) var(--v20-space-md);
+  margin: var(--v20-space-xs) 0;
+}
+
+.guest-case-read.is-hot {
+  border-color: rgba(248, 113, 113, 0.22);
+  background: rgba(24, 6, 6, 0.3);
+}
+
+.guest-case-read.has-scanner-friction {
+  border-color: rgba(192, 132, 252, 0.2);
+  background: rgba(16, 6, 28, 0.3);
+}
+
+/* Contradiction items: incident-style left border */
+.guest-contradiction-item {
+  padding-left: var(--v20-space-sm);
+  border-left: 2px solid rgba(248, 113, 113, 0.42);
+  font-size: 0.78rem;
+  line-height: var(--v20-line-snug);
+  margin-bottom: 0.22rem;
+}
+
+/* Scanner friction line: highlighted */
+.guest-scan-friction {
+  background: rgba(88, 28, 135, 0.14);
+  border-radius: var(--radius-sm);
+  padding: 0.18rem var(--v20-space-sm);
+  border: 1px solid rgba(192, 132, 252, 0.18);
+  font-size: 0.75rem;
+}
+
+/* Policy badge: stronger */
+.policy-badge {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.45rem;
+}
+
+/* Risk badge: more distinct */
+.risk-badge {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* Followup line: emphasize */
+.guest-followup-line {
+  font-size: 0.77rem;
+  margin-top: var(--v20-space-xs);
+  color: rgba(96, 165, 250, 0.85);
+}
+
+/* ============================================================
+   TOPBAR — COMMAND STATION
+   ============================================================ */
+
+.stat-box {
+  position: relative;
+  background: rgba(6, 10, 22, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stat-box .label {
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.stat-box strong {
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Warning / danger emphasis */
+.stat-box.is-warning {
+  border-color: rgba(251, 191, 36, 0.35);
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.06);
+}
+
+.stat-box.is-danger {
+  border-color: rgba(248, 113, 113, 0.42);
+  box-shadow: 0 0 10px rgba(248, 113, 113, 0.09);
+  animation: stat-danger-glow 2s ease-in-out infinite;
+}
+
+@keyframes stat-danger-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(248, 113, 113, 0.09); }
+  50%       { box-shadow: 0 0 18px rgba(248, 113, 113, 0.18); }
+}
+
+.stat-box.is-highlight {
+  border-color: rgba(96, 165, 250, 0.35);
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.07);
+}
+
+/* Live alert strip: more visual */
+.live-alert {
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.55rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-size: 0.76rem;
+  line-height: var(--v20-line-snug);
+}
+
+.live-alert-danger {
+  background: rgba(30, 8, 8, 0.5);
+  border-left: 2px solid rgba(248, 113, 113, 0.65);
+}
+
+.live-alert-warning {
+  background: rgba(30, 24, 6, 0.5);
+  border-left: 2px solid rgba(251, 191, 36, 0.55);
+}
+
+.live-alert-info {
+  background: rgba(6, 18, 36, 0.4);
+  border-left: 2px solid rgba(96, 165, 250, 0.45);
+}
+
+.live-alert-label {
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  flex-shrink: 0;
+}
+
+/* Context strip: more command-station feel */
+.topbar-context-strip {
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 0.15rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ============================================================
+   SHARED SPACES AS PHYSICAL ZONES
+   ============================================================ */
+
+/* Zone header: bigger + identity accent */
+.shared-space-head h4 {
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+/* Active issue headline: prominent */
+.shared-space-headline {
+  padding: 0.2rem 0;
+}
+
+/* Pressure chip row: more condensed */
+.shared-space-card .room-pressure-row {
+  margin-bottom: var(--v20-space-xs);
+}
+
+.shared-space-card .room-state-chip {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
+}
+
+/* Emergency priority zones: strong visual signal */
+.shared-space-card.is-emergency-priority {
+  animation: zone-emergency-flash 2s ease-in-out infinite;
+}
+
+@keyframes zone-emergency-flash {
+  0%, 100% { outline-color: rgba(248, 113, 113, 0.38); }
+  50%       { outline-color: rgba(248, 113, 113, 0.7); }
+}
+
+/* System noise: compromised look */
+.shared-space-card.shared-space-system-noise {
+  border-style: dashed;
+}
+
+/* ============================================================
+   THREAT ROUTING VISUAL CUES
+   ============================================================ */
+
+/* Rooms with active calls: routing glow */
+.room-card-occupied:has(.room-urgency-chip.is-call):not(.room-card-focused) {
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.2), inset 0 0 12px rgba(248, 113, 113, 0.04);
+}
+
+/* Linked scanner + room-call shared space: connection line */
+.shared-space-card.has-linked-scanner {
+  box-shadow: 0 0 0 1px rgba(192, 132, 252, 0.22), 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+/* Spill connection between room and shared space */
+.room-service-spill::before {
+  content: '↗ ';
+  font-size: 0.65rem;
+  opacity: 0.6;
+}
+
+/* Chain pressure line: visual bar */
+.room-chain-line {
+  font-size: 0.68rem;
+  padding: 0.12rem 0.42rem;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.room-chain-line.is-high {
+  color: rgba(248, 113, 113, 0.9);
+  border-color: rgba(248, 113, 113, 0.25);
+  background: rgba(30, 8, 8, 0.2);
+}
+
+/* ============================================================
+   CINEMATIC POLISH
+   ============================================================ */
+
+/* Focused room: open command-file feel */
+.room-card-focused {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+/* Panel transitions */
+.panel.active-panel {
+  animation: panel-enter 0.18s ease-out;
+}
+
+@keyframes panel-enter {
+  from { opacity: 0.7; transform: translateY(4px); }
+  to   { opacity: 1;   transform: translateY(0); }
+}
+
+/* Tab badge: more prominent */
+.tab-attention-badge {
+  font-size: 0.58rem;
+  font-weight: 800;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Active night event card: elevated */
+.active-night-event-card.is-active {
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  background: rgba(24, 18, 4, 0.5);
+  border-radius: var(--radius-md);
+  padding: var(--v20-space-sm) var(--v20-space-md);
+}
+
+/* Severity badges: strong tags */
+.active-event-severity {
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+}
+
+.severity-high   { background: rgba(248, 113, 113, 0.18); color: rgba(248, 113, 113, 0.95); border: 1px solid rgba(248, 113, 113, 0.32); }
+.severity-medium { background: rgba(251, 191, 36, 0.15); color: rgba(251, 191, 36, 0.95); border: 1px solid rgba(251, 191, 36, 0.28); }
+.severity-low    { background: rgba(96, 165, 250, 0.12); color: rgba(96, 165, 250, 0.85); border: 1px solid rgba(96, 165, 250, 0.22); }
+
+/* Objective items: cleaner */
+.objective-item {
+  font-size: 0.77rem;
+  padding: 0.18rem 0;
+}
+
+.objective-mark {
+  font-weight: 900;
+}
+
+.is-complete .objective-mark { color: rgba(52, 211, 153, 0.85); }
+.is-failed  .objective-mark  { color: rgba(248, 113, 113, 0.7); }
+
+/* Shift pressure label: stronger emphasis */
+.shift-pressure-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.shift-pressure-label.pressure-emergency {
+  color: rgba(248, 113, 113, 0.95);
+  animation: pressure-emergency-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pressure-emergency-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+/* Progress track: thicker */
+.shift-progress-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: var(--v20-space-xs) 0;
+}
+
+.shift-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.6), rgba(96, 165, 250, 0.7));
+  transition: width 0.8s ease;
+}
+
+/* ============================================================
+   VISUAL HIERARCHY / SECTION FRAMING
+   ============================================================ */
+
+/* Panel header: stronger separator */
+.panel .panel-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: var(--v20-space-sm);
+  margin-bottom: var(--v20-space-sm);
+}
+
+/* Scanner card: terminal-like */
+.desk-scanner-card.intelligence-feed-card {
+  background: rgba(4, 10, 22, 0.6);
+  border-color: rgba(96, 165, 250, 0.18);
+}
+
+.scanner-feed-item {
+  font-size: 0.76rem;
+  line-height: var(--v20-line-snug);
+  padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.scanner-feed-label {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+}
+
+/* Log items: tighter + clearer */
+.log-item {
+  font-size: 0.76rem;
+}
+
+.log-pill {
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 0.08rem 0.35rem;
+}
+
+/* ============================================================
+   RESPONSIVE — MOBILE SAFETY
+   ============================================================ */
+
+@media (max-width: 960px) {
+  .mcb-layout {
+    gap: 0.2rem;
+  }
+
+  .mcb-zone {
+    min-width: 2.2rem;
+    padding: 0.22rem 0.35rem;
+  }
+
+  .mcb-room {
+    width: 20px;
+    height: 30px;
+  }
+}
+
+@media (max-width: 720px) {
+  .motel-command-board {
+    margin: var(--v20-space-xs) 0;
+  }
+
+  .mcb-inner {
+    padding: 0.35rem 0.5rem 0.4rem;
+  }
+
+  .camera-card h4,
+  .camera-card .camera-meta {
+    color: rgba(0, 220, 80, 0.55);
+  }
+
+  #camera-grid.camera-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}

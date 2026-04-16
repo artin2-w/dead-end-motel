@@ -244,6 +244,93 @@ export function setActivePanel(panelId) {
   });
 }
 
+function renderMotelCommandBoard(state) {
+  const board = document.getElementById('motel-command-board');
+  if (!board) return;
+
+  const rooms = Array.isArray(state?.rooms) ? state.rooms : [];
+  const spaces = Array.isArray(state?.sharedSpaces) ? state.sharedSpaces : [];
+  if (!rooms.length && !spaces.length) { board.innerHTML = ''; return; }
+
+  const zoneById = {};
+  spaces.forEach((sp) => { if (sp) zoneById[Number(sp.zoneId || 0)] = sp; });
+
+  const getPressureClass = (zoneId) => {
+    const sp = zoneById[zoneId];
+    if (!sp) return '';
+    const score = Number(sp.pressureScore || 0);
+    if (sp.severity === 'high' || score >= 5) return 'mcb-danger';
+    if (sp.severity === 'medium' || score >= 3) return 'mcb-elevated';
+    if (score >= 1) return 'mcb-watch';
+    return '';
+  };
+
+  const getScore = (zoneId) => Number(zoneById[zoneId]?.pressureScore || 0);
+  const getPct = (zoneId) => Math.min(100, (getScore(zoneId) / 6) * 100).toFixed(0);
+
+  const blackoutLevel = state?.blackoutState?.level || 'none';
+  const huntActive = Boolean(state?.huntNight?.active);
+  const overrideActive = Boolean(state?.systemOverride?.active);
+  const finaleActive = Boolean(state?.finaleUi?.active);
+
+  let badgeClass = 'mcb-badge-live';
+  let badgeText = 'Live';
+  if (finaleActive)             { badgeClass = 'mcb-badge-finale';   badgeText = 'FINALE'; }
+  else if (blackoutLevel !== 'none') { badgeClass = 'mcb-badge-blackout'; badgeText = 'BLACKOUT'; }
+  else if (overrideActive)      { badgeClass = 'mcb-badge-override'; badgeText = 'OVERRIDE'; }
+  else if (huntActive)          { badgeClass = 'mcb-badge-hunt';     badgeText = 'HUNT'; }
+
+  const unlocked = rooms.filter((r) => r.unlocked !== false);
+  const occupiedCount = unlocked.filter((r) => r.occupied).length;
+  const callCount    = unlocked.filter((r) => r.occupied && Boolean(r?.serviceState?.pendingRequest)).length;
+  const tenseCount   = unlocked.filter((r) => r.occupied && (r.condition === 'Tense' || r.condition === 'Hostile')).length;
+
+  const zoneHtml = (zoneId, slug, name) => {
+    const pClass = getPressureClass(zoneId);
+    return '<div class="mcb-zone mcb-zone-' + slug + ' ' + pClass + '" title="' + name + ' \u2014 Pressure: ' + getScore(zoneId) + '">' +
+      '<span class="mcb-zone-name">' + name + '</span>' +
+      '<span class="mcb-zone-bar" style="--zp:' + getPct(zoneId) + '%"></span>' +
+    '</div>';
+  };
+
+  const roomTilesHtml = unlocked.slice(0, 8).map((room) => {
+    const num = String(room.label || '').replace(/\D/g, '') || '?';
+    if (!room.occupied) {
+      return '<div class="mcb-room mcb-room-vacant" title="' + room.label + ' \u2014 Vacant"><span class="mcb-room-num">' + num + '</span></div>';
+    }
+    const cond = room.condition || 'Stable';
+    const hasPending = Boolean(room?.serviceState?.pendingRequest);
+    const condClass = cond === 'Hostile' ? 'mcb-room-hostile' : cond === 'Tense' ? 'mcb-room-tense' : 'mcb-room-occupied';
+    const initial = (room.guestName || '?').charAt(0).toUpperCase();
+    return '<div class="mcb-room ' + condClass + (hasPending ? ' mcb-room-call' : '') + '" title="' + room.label + ' \u2014 ' + (room.guestName || 'Guest') + ' \u2014 ' + cond + '">' +
+      '<span class="mcb-room-num">' + num + '</span>' +
+      '<span class="mcb-room-initial">' + initial + '</span>' +
+      (hasPending ? '<span class="mcb-call-dot"></span>' : '') +
+    '</div>';
+  }).join('');
+
+  board.innerHTML =
+    '<div class="mcb-inner">' +
+      '<div class="mcb-top-strip">' +
+        '<span class="mcb-title">Command</span>' +
+        '<span class="mcb-badge ' + badgeClass + '">' + badgeText + '</span>' +
+      '</div>' +
+      '<div class="mcb-layout">' +
+        '<div class="mcb-zone-col">' + zoneHtml(2, 'park', 'Park') + zoneHtml(1, 'lobby', 'Lobby') + '</div>' +
+        '<div class="mcb-connector"></div>' +
+        zoneHtml(3, 'hall', 'Hall') +
+        '<div class="mcb-connector"></div>' +
+        '<div class="mcb-rooms-block"><div class="mcb-rooms-strip">' + roomTilesHtml + '</div></div>' +
+        '<div class="mcb-zone-col">' + zoneHtml(4, 'util', 'Util') + zoneHtml(6, 'rear', 'Rear') + '</div>' +
+      '</div>' +
+      '<div class="mcb-stats">' +
+        '<span class="mcb-stat">Rooms <strong>' + occupiedCount + '/' + unlocked.length + '</strong></span>' +
+        (callCount > 0 ? '<span class="mcb-stat mcb-stat-alert">Calls <strong>' + callCount + '</strong></span>' : '') +
+        (tenseCount > 0 ? '<span class="mcb-stat mcb-stat-warn">Tense <strong>' + tenseCount + '</strong></span>' : '') +
+      '</div>' +
+    '</div>';
+}
+
 export function renderTopbar(state) {
   document.getElementById('night-display').textContent = state.night;
   const timeDisplay = document.getElementById('time-display');
@@ -682,6 +769,8 @@ export function renderTopbar(state) {
       }
     };
   }
+
+  renderMotelCommandBoard(state);
 }
 
 function getRiskBadgeClass(riskLevel = 'Low') {
@@ -1421,6 +1510,7 @@ export function renderSharedSpaces(state) {
     const systemNoise = Boolean(state?.systemOverride?.active) && scannerHot;
     const linkedScanner = linkedRoomCalls > 0 && scannerHot;
     card.className = `room-card shared-space-card ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'} ${emergencyPriority ? 'is-emergency-priority' : ''} ${systemNoise ? 'shared-space-system-noise' : ''} ${linkedScanner ? 'has-linked-scanner' : ''}`.trim();
+    card.dataset.zoneId = String(space.zoneId || 0);
     card.innerHTML = `
       <div class="shared-space-zones">
         <div class="room-card-header shared-space-head">
