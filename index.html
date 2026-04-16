@@ -3,45 +3,51 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dead End Motel v0.19</title>
+  <title>Dead End Motel v0.20</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
+  <link rel="stylesheet" href="styles/v20-layer.css" />
 </head>
 <body>
   <div id="app" class="app-shell screen-main-menu">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">Dead End Motel v0.19</p>
+    <header class="topbar topbar-v20" role="banner">
+      <div class="topbar-brand">
+        <p class="eyebrow">Dead End Motel v0.20</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
-      <div class="topbar-stats">
-        <div class="stat-box" id="night-stat-box">
-          <span class="label">Night</span>
-          <strong id="night-display">1</strong>
+      <div class="topbar-primary-readout">
+        <div class="topbar-stats" role="group" aria-label="Shift resources">
+          <div class="stat-box" id="night-stat-box">
+            <span class="label">Night</span>
+            <strong id="night-display">1</strong>
+          </div>
+          <div class="stat-box" id="time-stat-box">
+            <span class="label">Time</span>
+            <strong id="time-display">10:00 PM</strong>
+          </div>
+          <div class="stat-box" id="money-stat-box">
+            <span class="label">Money</span>
+            <strong id="money-display">$120</strong>
+          </div>
+          <div class="stat-box" id="power-stat-box">
+            <span class="label">Power</span>
+            <strong id="power-display">100%</strong>
+          </div>
+          <div class="stat-box" id="reputation-stat-box">
+            <span class="label">Reputation</span>
+            <strong id="reputation-display">50</strong>
+          </div>
         </div>
-        <div class="stat-box" id="time-stat-box">
-          <span class="label">Time</span>
-          <strong id="time-display">10:00 PM</strong>
-        </div>
-        <div class="stat-box" id="money-stat-box">
-          <span class="label">Money</span>
-          <strong id="money-display">$120</strong>
-        </div>
-        <div class="stat-box" id="power-stat-box">
-          <span class="label">Power</span>
-          <strong id="power-display">100%</strong>
-        </div>
-        <div class="stat-box" id="reputation-stat-box">
-          <span class="label">Reputation</span>
-          <strong id="reputation-display">50</strong>
-        </div>
+        <p id="topbar-context-strip" class="topbar-context-strip muted" aria-live="polite"></p>
+        <p id="active-upgrades-inline" class="topbar-upgrades muted">Active Upgrades: None</p>
       </div>
-      <p id="active-upgrades-inline" class="topbar-upgrades muted">Active Upgrades: None</p>
-      <button id="audio-toggle-btn" class="button audio-toggle" type="button">Sound: On</button>
-      <button id="open-settings-btn" class="button button-secondary" type="button">Settings</button>
-      <button id="open-help-btn" class="button button-secondary" type="button">Help</button>
+      <div class="topbar-toolbar">
+        <button id="audio-toggle-btn" class="button audio-toggle" type="button">Sound: On</button>
+        <button id="open-settings-btn" class="button button-secondary" type="button">Settings</button>
+        <button id="open-help-btn" class="button button-secondary" type="button">Help</button>
+      </div>
     </header>
 
     <main>
@@ -141,31 +147,37 @@
             </div>
           </div>
 
-          <div class="shift-context-block">
-            <div id="finale-banner" class="finale-banner" hidden>Final Night</div>
-            <div id="finale-state-card" class="finale-state-card" hidden>
-              <p id="finale-pressure-label" class="finale-pressure-label">Finale pressure: CONTAINED (0)</p>
-              <p id="finale-chain-label" class="finale-chain-label muted"></p>
-              <div id="finale-command-row" class="finale-command-row"></div>
-            </div>
-            <div class="scenario-card">
-              <div id="scenario-label" class="scenario-label">Standard Shift</div>
-              <div id="scenario-description" class="scenario-description">
-                A normal night on paper, but the motel still feels one bad decision away from trouble.
+          <details class="shift-situation-drawer" open>
+            <summary class="shift-situation-summary">
+              <span>Situation, doctrine &amp; outlook</span>
+              <span class="shift-situation-hint muted">Show / hide</span>
+            </summary>
+            <div class="shift-context-block">
+              <div id="finale-banner" class="finale-banner" hidden>Final Night</div>
+              <div id="finale-state-card" class="finale-state-card" hidden>
+                <p id="finale-pressure-label" class="finale-pressure-label">Finale pressure: CONTAINED (0)</p>
+                <p id="finale-chain-label" class="finale-chain-label muted"></p>
+                <div id="finale-command-row" class="finale-command-row"></div>
+              </div>
+              <div class="scenario-card">
+                <div id="scenario-label" class="scenario-label">Standard Shift</div>
+                <div id="scenario-description" class="scenario-description">
+                  A normal night on paper, but the motel still feels one bad decision away from trouble.
+                </div>
+              </div>
+              <div id="run-identity-strip" class="run-identity-strip">
+                <p class="muted">Doctrine: Stability Manager</p>
+                <p class="muted">Faction climate remains mostly neutral tonight.</p>
+              </div>
+              <p id="campaign-shift-line" class="campaign-shift-line muted">Campaign: Night 1 of 5</p>
+              <p id="motel-capacity-line" class="campaign-shift-line muted"></p>
+              <p id="shift-branch-hint" class="shift-branch-hint muted">Outlook: Pressure is mixed tonight.</p>
+              <p id="hallway-threat-line" class="shift-branch-hint muted">Hallway feel: the shared spaces still seem quiet, but not trustworthy.</p>
+              <div id="active-story-beat-card" class="active-story-beat-card">
+                <p class="muted">No recurring story beat active tonight.</p>
               </div>
             </div>
-            <div id="run-identity-strip" class="run-identity-strip">
-              <p class="muted">Doctrine: Stability Manager</p>
-              <p class="muted">Faction climate remains mostly neutral tonight.</p>
-            </div>
-            <p id="campaign-shift-line" class="campaign-shift-line muted">Campaign: Night 1 of 5</p>
-            <p id="motel-capacity-line" class="campaign-shift-line muted"></p>
-            <p id="shift-branch-hint" class="shift-branch-hint muted">Outlook: Pressure is mixed tonight.</p>
-            <p id="hallway-threat-line" class="shift-branch-hint muted">Hallway feel: the shared spaces still seem quiet, but not trustworthy.</p>
-            <div id="active-story-beat-card" class="active-story-beat-card">
-              <p class="muted">No recurring story beat active tonight.</p>
-            </div>
-          </div>
+          </details>
 
           <div class="shift-secondary-block">
             <p class="section-tag">Objectives</p>
@@ -187,8 +199,8 @@
               <button id="spawn-guest-btn" class="button button-secondary">Call Next Arrival</button>
             </div>
             <p id="frontdesk-intake-line" class="muted microcopy-line"></p>
-            <p class="muted microcopy-line">Desk flow: read the guest, inspect when needed, then choose between direct approval and slower safer checks.</p>
-            <div class="desk-scanner-card">
+            <p class="muted microcopy-line">Desk flow: read → verify if needed → decide.</p>
+            <div class="desk-scanner-card intelligence-feed-card">
               <div class="panel-header split-space">
                 <div>
                   <p class="section-tag">Local Scanner</p>
@@ -196,6 +208,13 @@
                 </div>
               </div>
               <div id="desk-scanner-feed" class="scanner-feed-list"></div>
+              <dl class="scanner-legend" aria-label="Feed line types">
+                <div><dt class="legend-tone-vehicle">Vehicle</dt><dd>Lot &amp; route</dd></div>
+                <div><dt class="legend-tone-group">Group</dt><dd>Family / pairs</dd></div>
+                <div><dt class="legend-tone-desk">Desk</dt><dd>Paper &amp; stories</dd></div>
+                <div><dt class="legend-tone-emergency">Urgent</dt><dd>Utility / unrest</dd></div>
+                <div><dt class="legend-tone-planted">Planted</dt><dd>Compromised line</dd></div>
+              </dl>
             </div>
             <div id="guest-queue" class="card-list"></div>
 
@@ -227,8 +246,8 @@
                 <h3>Shared Space Pressure</h3>
               </div>
             </div>
-            <p class="muted microcopy-line">Track tension in the lobby, hallway, parking lot, utility lane, and rear exit. These spaces can spill into rooms if ignored.</p>
-            <div id="shared-space-grid" class="shared-space-grid"></div>
+            <p class="muted microcopy-line">Live situation board: pressure routes, spillover, and what to do next.</p>
+            <div id="shared-space-grid" class="shared-space-grid shared-space-board"></div>
           </section>
 
           <section id="power-panel" class="panel">
@@ -276,34 +295,43 @@
       </section>
 
       <section id="summary-screen" class="screen">
-        <div class="hero-card">
-          <div>
-            <div class="summary-primary-block">
-              <p class="section-tag">Shift Complete</p>
-              <h2 id="summary-title">Night 1 Complete</h2>
-              <p id="summary-text" class="muted">
-                You kept the motel open. A few things still feel wrong.
-              </p>
-              <p id="summary-scenario-label" class="summary-scenario-label muted"></p>
-              <p id="summary-campaign-progress" class="summary-campaign-progress muted"></p>
-              <p id="summary-run-setup" class="summary-campaign-progress muted"></p>
-              <p id="summary-run-reward-bonus" class="summary-campaign-progress muted"></p>
-              <h3 id="summary-outcome-title" class="summary-outcome-title"></h3>
-              <p id="summary-outcome-note" class="summary-outcome-note"></p>
-            </div>
+        <div class="hero-card summary-hero-v20">
+          <div class="summary-aar">
+            <section class="aar-block aar-block-lede" aria-labelledby="aar-lede-heading">
+              <h3 id="aar-lede-heading" class="aar-block-title">After-action — what kind of night</h3>
+              <div class="summary-primary-block">
+                <p class="section-tag">Shift Complete</p>
+                <h2 id="summary-title">Night 1 Complete</h2>
+                <p id="summary-text" class="summary-lede-text">
+                  You kept the motel open. A few things still feel wrong.
+                </p>
+                <p id="summary-scenario-label" class="summary-scenario-label muted"></p>
+                <p id="summary-campaign-progress" class="summary-campaign-progress muted"></p>
+                <p id="summary-run-setup" class="summary-campaign-progress muted"></p>
+                <p id="summary-run-reward-bonus" class="summary-campaign-progress muted"></p>
+                <h3 id="summary-outcome-title" class="summary-outcome-title"></h3>
+                <p id="summary-outcome-note" class="summary-outcome-note"></p>
+              </div>
+            </section>
 
-            <div class="summary-performance-block">
-              <div id="summary-rating" class="summary-rating"></div>
-              <ul id="summary-breakdown" class="summary-breakdown"></ul>
-              <div id="summary-objective-list" class="objective-list summary-objectives"></div>
-            </div>
+            <section class="aar-block aar-block-score" aria-labelledby="aar-score-heading">
+              <h3 id="aar-score-heading" class="aar-block-title">Scorecard &amp; objectives</h3>
+              <div class="summary-performance-block">
+                <div id="summary-rating" class="summary-rating"></div>
+                <ul id="summary-breakdown" class="summary-breakdown"></ul>
+                <div id="summary-objective-list" class="objective-list summary-objectives"></div>
+              </div>
+            </section>
 
-            <div class="summary-flavor-block">
-              <ul id="summary-campaign-flavor" class="summary-thread-flavor summary-campaign-flavor"></ul>
-              <ul id="summary-thread-flavor" class="summary-thread-flavor"></ul>
-              <ul id="summary-identity-flavor" class="summary-thread-flavor summary-identity-flavor"></ul>
-              <ul id="summary-branch-flavor" class="summary-thread-flavor summary-branch-flavor"></ul>
-            </div>
+            <section class="aar-block aar-block-threads" aria-labelledby="aar-threads-heading">
+              <h3 id="aar-threads-heading" class="aar-block-title">Threads, identity &amp; carryover</h3>
+              <div class="summary-flavor-block">
+                <ul id="summary-campaign-flavor" class="summary-thread-flavor summary-campaign-flavor"></ul>
+                <ul id="summary-thread-flavor" class="summary-thread-flavor"></ul>
+                <ul id="summary-identity-flavor" class="summary-thread-flavor summary-identity-flavor"></ul>
+                <ul id="summary-branch-flavor" class="summary-thread-flavor summary-branch-flavor"></ul>
+              </div>
+            </section>
           </div>
           <div class="hero-actions">
             <button id="next-night-btn" class="button button-primary">Continue to Night Prep</button>
@@ -313,7 +341,7 @@
       </section>
 
       <section id="night-prep-screen" class="screen">
-        <div class="hero-card night-prep-card">
+        <div class="hero-card night-prep-card night-prep-v20">
           <div>
             <div class="prep-primary-block">
               <p class="section-tag">Between-Nights Management</p>

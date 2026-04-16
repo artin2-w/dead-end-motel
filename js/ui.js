@@ -58,6 +58,10 @@ function getSharedSpaceRouteLabel(zoneId) {
   return 'Pressure route unknown';
 }
 
+function prepSurface(slug, title, innerHtml) {
+  return `<section class="prep-surface prep-surface-${slug}" aria-label="${title}"><h3 class="prep-surface-title">${title}</h3><div class="prep-surface-body">${innerHtml}</div></section>`;
+}
+
 function buildUpgradeEffectSummary(upgrade = {}) {
   const effects = upgrade?.effects || {};
   const lines = [];
@@ -403,6 +407,20 @@ export function renderTopbar(state) {
   if (activeUpgradesInline) {
     const summary = state?.activeUpgradeSummary || 'No active upgrades yet.';
     activeUpgradesInline.textContent = `Active Upgrades: ${summary}`;
+  }
+
+  const contextStrip = document.getElementById('topbar-context-strip');
+  if (contextStrip) {
+    const pressure = state?.uiPressureLevel || 'calm';
+    const scenario = state?.activeScenario?.label || 'Standard Shift';
+    const identity = state?.nightIdentityLine ? String(state.nightIdentityLine).slice(0, 88) : '';
+    const emergency = state?.emergencyNight?.active ? String(state.emergencyNight.label || 'Emergency').slice(0, 56) : '';
+    const hunt = state?.huntNight?.active ? 'Hunt night' : '';
+    const blackout = state?.blackoutState?.level && state.blackoutState.level !== 'none' ? `Lights: ${state.blackoutState.level}` : '';
+    contextStrip.textContent = [scenario, `${pressure} pressure`, identity, emergency, hunt, blackout]
+      .filter(Boolean)
+      .join(' · ')
+      .slice(0, 260);
   }
 
   const storyBeatCard = document.getElementById('active-story-beat-card');
@@ -804,7 +822,7 @@ export function renderGuests(
       : Number(guest?.urgencySignal || 0) >= 2
         ? 'guest-card-urgent'
         : '';
-    card.className = `guest-card ${emphasisClass}`.trim();
+    card.className = `guest-card guest-card-v20 ${emphasisClass}`.trim();
     const contradictionLines = Array.isArray(guest?.contradictionLines) ? guest.contradictionLines.slice(0, 3) : [];
     const scannerFriction = (guest?.scannerMatches || []).some((line) => /mismatch|planted/i.test(String(line)));
     const recommendedQuestions = Array.isArray(guest?.recommendedQuestionLabels) ? guest.recommendedQuestionLabels.slice(0, 3) : [];
@@ -814,6 +832,8 @@ export function renderGuests(
       state?.progressionModifiers?.scannerFeedDensity ? 'Heavy scanner indexing active' : ''
     ].filter(Boolean);
     const linkedCaseLabel = guest?.linkedArrival?.kind ? formatCaseLabel(guest.linkedArrival.kind) : '';
+    const policyLead = String(guest.policyAlignmentLine || guest.policyReason || '').trim();
+    const strapline = (guest?.inspectionHeadline || policyLead.split('.')[0] || 'Scan chips and case read before releasing a room.').trim();
     card.innerHTML = `
       <div class="guest-card-header">
         <h4>${guest.name}</h4>
@@ -843,6 +863,7 @@ export function renderGuests(
         ${guest?.idInspected ? '<span class="guest-meta-chip guest-meta-chip-verified">ID Read</span>' : ''}
         ${guest?.uvInspected ? '<span class="guest-meta-chip guest-meta-chip-uv">UV Used</span>' : ''}
       </div>
+      <p class="guest-case-strapline">${strapline}</p>
       ${(guest?.inspectionHeadline || contradictionLines.length || recommendedQuestions.length)
         ? `<div class="guest-case-read ${[contradictionLines.length >= 3 ? 'is-hot' : '', scannerFriction ? 'has-scanner-friction' : ''].filter(Boolean).join(' ')}">
             <div class="guest-case-read-header">
@@ -866,19 +887,22 @@ export function renderGuests(
           <p class="guest-special-clue">${guest.specialEncounter.clue || ''}</p>
         `
         : ''}
-      <div class="guest-detail-block">
-        ${guest.archetypeClue ? `<p class="guest-archetype-clue">${emphasizeClueText(guest.archetypeClue)}</p>` : ''}
-        <p class="guest-policy-reason">${guest.policyAlignmentLine || guest.policyReason || 'No policy concerns detected.'}</p>
-        <p class="guest-note">${guest.riskNote || ''}</p>
-        ${(guest?.contextTag || guest?.visualHint)
-          ? `<p class="guest-scan-line">${guest.contextTag ? `Context: ${guest.contextTag}. ` : ''}${guest.visualHint ? `Visual: ${guest.visualHint}.` : ''}</p>`
-          : ''}
-        ${guest?.vehicleProfile?.summary ? `<p class="guest-scan-line guest-scan-line-warning">Vehicle: ${guest.vehicleProfile.summary}</p>` : ''}
-        ${guest?.linkedArrival?.note ? `<p class="guest-scan-line guest-scan-line-warning">${guest.linkedArrival.note}</p>` : ''}
-        ${guest?.scannerMatches?.length
-          ? `<p class="guest-scan-line guest-scan-line-warning${scannerFriction ? ' guest-scan-friction' : ''}">${guest.scannerMatches.join(' ')}</p>`
-          : ''}
-      </div>
+      <details class="guest-notes-drawer">
+        <summary>Supporting notes &amp; tie-ins</summary>
+        <div class="guest-notes-drawer-body">
+          ${guest.archetypeClue ? `<p class="guest-archetype-clue">${emphasizeClueText(guest.archetypeClue)}</p>` : ''}
+          <p class="guest-policy-reason">${guest.policyAlignmentLine || guest.policyReason || 'No policy concerns detected.'}</p>
+          <p class="guest-note">${guest.riskNote || ''}</p>
+          ${(guest?.contextTag || guest?.visualHint)
+            ? `<p class="guest-scan-line">${guest.contextTag ? `Context: ${guest.contextTag}. ` : ''}${guest.visualHint ? `Visual: ${guest.visualHint}.` : ''}</p>`
+            : ''}
+          ${guest?.vehicleProfile?.summary ? `<p class="guest-scan-line guest-scan-line-warning">Vehicle: ${guest.vehicleProfile.summary}</p>` : ''}
+          ${guest?.linkedArrival?.note ? `<p class="guest-scan-line guest-scan-line-warning">${guest.linkedArrival.note}</p>` : ''}
+          ${guest?.scannerMatches?.length
+            ? `<p class="guest-scan-line guest-scan-line-warning${scannerFriction ? ' guest-scan-friction' : ''}">${guest.scannerMatches.join(' ')}</p>`
+            : ''}
+        </div>
+      </details>
       <details class="guest-inspection-drawer">
         <summary>Desk Inspection</summary>
         <div class="guest-inspection-grid">
@@ -922,8 +946,16 @@ export function renderGuests(
             ${guest.threadMemoryLine ? `<p class="guest-history-line">${guest.threadMemoryLine}</p>` : ''}
           </div>`
         : ''}
-      <div class="guest-action-row"></div>
-      <div class="guest-action-row guest-action-row-secondary"></div>
+      <div class="guest-action-stack">
+        <div class="action-group action-group-decide">
+          <p class="action-group-label">Desk decision</p>
+          <div class="action-group-body guest-action-row"></div>
+        </div>
+        <div class="action-group action-group-investigate">
+          <p class="action-group-label">Investigation</p>
+          <div class="action-group-body guest-action-row-secondary"></div>
+        </div>
+      </div>
     `;
 
     const actions = card.querySelector('.guest-action-row');
@@ -1150,53 +1182,65 @@ export function renderRooms(
     }
     card.innerHTML = room.occupied
       ? `
-        <div class="room-card-header">
-          <h4>${room.label}</h4>
-          <span class="room-condition-pill">${room.condition || 'Stable'}</span>
-        </div>
-        <div class="room-occupant-block">
-          <p class="room-meta">Occupied by <strong>${room.guestName || room.occupiedBy}</strong></p>
-          ${Number(room.stayNightsRemaining) > 0 ? `<p class="room-stay-line muted">Stay remaining: ${room.stayNightsRemaining} night${Number(room.stayNightsRemaining) === 1 ? '' : 's'} incl. tonight${Number(room.stayNightsRemaining) === 1 ? ' • checkout at dawn' : ''}</p>` : ''}
-          ${room.occupantArchetypeLabel ? `<p class="room-archetype-line">Archetype: ${room.occupantArchetypeLabel}</p>` : ''}
+        <div class="room-card-v20-surface">
+          <div class="room-card-header">
+            <h4>${room.label}</h4>
+            <span class="room-condition-pill">${room.condition || 'Stable'}</span>
+          </div>
+          <p class="room-occupant-summary">Occupied by <strong>${room.guestName || room.occupiedBy}</strong>${room.occupantArchetypeLabel ? ` · ${room.occupantArchetypeLabel}` : ''}</p>
+          ${Number(room.stayNightsRemaining) > 0 ? `<p class="room-stay-line muted">Stay: ${room.stayNightsRemaining} night${Number(room.stayNightsRemaining) === 1 ? '' : 's'} incl. tonight${Number(room.stayNightsRemaining) === 1 ? ' · checkout dawn' : ''}</p>` : ''}
           ${room?.memory?.note ? `<p class="room-memory-line muted">${room.memory.note}</p>` : ''}
-        </div>
-        <div class="room-pressure-row">
-          ${typeof room.chainPressure === 'number' && room.chainPressure > 0 ? `<p class="room-chain-line ${room.chainPressure >= 6 ? 'is-high' : ''}" title="Chain pressure tracks linked incident momentum across rooms.">Chain Pressure: ${room.chainPressure}</p>` : '<p class="room-chain-line" title="Chain pressure tracks linked incident momentum across rooms.">Chain Pressure: Low</p>'}
-          <span class="room-state-chip">Locked: ${getBooleanText(room.lockedDown)}</span>
-          <span class="room-state-chip">Power Cut: ${getBooleanText(room.powerCut)}</span>
-          <span class="room-state-chip">Mood: ${room?.serviceState?.mood || 'steady'}</span>
-          <span class="room-state-chip">Attitude: ${room?.serviceState?.attitudeLabel || 'Guarded'}</span>
-        </div>
-        ${room?.serviceState?.pendingRequest
-          ? `<div class="room-service-alert room-service-alert-${room.serviceState.pendingRequest.urgency || 'low'} room-service-kind-${String(room.serviceState.pendingRequest.kind || 'generic').replace(/[^a-z0-9-]/gi, '-').toLowerCase()}">
-              <div class="room-service-head">
-                <p class="room-service-title">Red Phone: ${room.serviceState.pendingRequest.title}</p>
-                <span class="room-service-pill">${String(room.serviceState.pendingRequest.urgency || 'low').toUpperCase()} • ${getZoneHintLabel(room.serviceState.pendingRequest.zoneHint)}</span>
+          <div class="room-pressure-row">
+            ${typeof room.chainPressure === 'number' && room.chainPressure > 0 ? `<p class="room-chain-line ${room.chainPressure >= 6 ? 'is-high' : ''}" title="Chain pressure tracks linked incident momentum across rooms.">Chain: ${room.chainPressure}</p>` : '<p class="room-chain-line" title="Chain pressure tracks linked incident momentum across rooms.">Chain: Low</p>'}
+            <span class="room-state-chip">Locked: ${getBooleanText(room.lockedDown)}</span>
+            <span class="room-state-chip">Power: ${getBooleanText(room.powerCut)}</span>
+            <span class="room-state-chip">Mood: ${room?.serviceState?.mood || 'steady'}</span>
+            <span class="room-state-chip">Attitude: ${room?.serviceState?.attitudeLabel || 'Guarded'}</span>
+          </div>
+          ${room?.serviceState?.pendingRequest
+            ? `<div class="room-service-alert room-service-alert-${room.serviceState.pendingRequest.urgency || 'low'} room-service-kind-${String(room.serviceState.pendingRequest.kind || 'generic').replace(/[^a-z0-9-]/gi, '-').toLowerCase()}">
+                <div class="room-service-head">
+                  <p class="room-service-title">Active call: ${room.serviceState.pendingRequest.title}</p>
+                  <span class="room-service-pill">${String(room.serviceState.pendingRequest.urgency || 'low').toUpperCase()} • ${getZoneHintLabel(room.serviceState.pendingRequest.zoneHint)}</span>
+                </div>
+                <p class="room-service-detail">${room.serviceState.pendingRequest.detail || ''}</p>
+                ${room.serviceState.pendingRequest.routeLine ? `<p class="room-service-route">${room.serviceState.pendingRequest.routeLine}</p>` : ''}
+                ${(() => {
+                  const spillSpace = (Array.isArray(state?.sharedSpaces) ? state.sharedSpaces : []).find((space) => Number(space?.zoneId || 0) === Number(room?.serviceState?.pendingRequest?.zoneHint || 0));
+                  return spillSpace
+                    ? `<p class="room-service-spill ${spillSpace?.severity === 'high' ? 'is-hot' : ''}">Spill: ${spillSpace.label} · pressure ${spillSpace.pressureScore || 0}${spillSpace?.activeIssue ? ` · ${spillSpace.activeIssue}` : ''}</p>`
+                    : '';
+                })()}
+              </div>`
+            : ''}
+          <details class="room-meta-drawer">
+            <summary>Figures &amp; service log</summary>
+            <div class="room-meta-drawer-body">
+              <div class="room-meta-grid room-meta-grid-compact">
+                ${presentation.compactMetaRows
+                  .map((row) => `<p class="room-meta-line"><span>${row.label}</span><strong>${row.value}</strong></p>`)
+                  .join('')}
+                <p class="room-meta-line"><span>Open issues</span><strong>${Number(room?.serviceState?.unresolvedIssues || 0)}</strong></p>
+                <p class="room-meta-line"><span>Service desk</span><strong>${room?.serviceState?.responseStatus || 'Quiet'}</strong></p>
               </div>
-              <p class="room-service-detail">${room.serviceState.pendingRequest.detail || ''}</p>
-              ${room.serviceState.pendingRequest.routeLine ? `<p class="room-service-route">${room.serviceState.pendingRequest.routeLine}</p>` : ''}
-              ${(() => {
-                const spillSpace = (Array.isArray(state?.sharedSpaces) ? state.sharedSpaces : []).find((space) => Number(space?.zoneId || 0) === Number(room?.serviceState?.pendingRequest?.zoneHint || 0));
-                return spillSpace
-                  ? `<p class="room-service-spill ${spillSpace?.severity === 'high' ? 'is-hot' : ''}">Spilling into ${spillSpace.label} • Pressure ${spillSpace.pressureScore || 0}${spillSpace?.activeIssue ? ` • ${spillSpace.activeIssue}` : ''}</p>`
-                  : '';
-              })()}
-            </div>`
-          : ''}
-        <div class="room-meta-grid room-meta-grid-compact">
-          ${presentation.compactMetaRows
-            .map((row) => `<p class="room-meta-line"><span>${row.label}</span><strong>${row.value}</strong></p>`)
-            .join('')}
-          <p class="room-meta-line"><span>Open Issues</span><strong>${Number(room?.serviceState?.unresolvedIssues || 0)}</strong></p>
-          <p class="room-meta-line"><span>Service</span><strong>${room?.serviceState?.responseStatus || 'Quiet'}</strong></p>
+              ${room?.serviceState?.lastCheckLine ? `<p class="room-service-note muted">${room.serviceState.lastCheckLine}</p>` : ''}
+              ${room?.serviceState?.attitudeNote ? `<p class="room-service-note muted">${room.serviceState.attitudeNote}</p>` : ''}
+              ${room?.serviceState?.serviceHistory?.length
+                ? `<p class="room-service-note muted">Recent: ${room.serviceState.serviceHistory[0]}</p>`
+                : ''}
+            </div>
+          </details>
+          <div class="room-action-stack">
+            <div class="action-group">
+              <p class="action-group-label">Service response</p>
+              <div class="action-group-body room-service-row"></div>
+            </div>
+            <div class="action-group action-group-control">
+              <p class="action-group-label">Room control</p>
+              <div class="action-group-body room-tactical-row"></div>
+            </div>
+          </div>
         </div>
-        ${room?.serviceState?.lastCheckLine ? `<p class="room-service-note muted">${room.serviceState.lastCheckLine}</p>` : ''}
-        ${room?.serviceState?.attitudeNote ? `<p class="room-service-note muted">${room.serviceState.attitudeNote}</p>` : ''}
-        ${room?.serviceState?.serviceHistory?.length
-          ? `<p class="room-service-note muted">Recent service: ${room.serviceState.serviceHistory[0]}</p>`
-          : ''}
-        <div class="room-service-row"></div>
-        <div class="room-tactical-row"></div>
       `
       : `
         <div class="room-card-header">
@@ -1333,29 +1377,34 @@ export function renderSharedSpaces(state) {
     const linkedScanner = linkedRoomCalls > 0 && scannerHot;
     card.className = `room-card shared-space-card ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'} ${emergencyPriority ? 'is-emergency-priority' : ''} ${systemNoise ? 'shared-space-system-noise' : ''} ${linkedScanner ? 'has-linked-scanner' : ''}`.trim();
     card.innerHTML = `
-      <div class="room-card-header">
-        <h4>${space.label}</h4>
-        <span class="room-condition-pill">${space.statusLine || 'Clear'}</span>
-      </div>
-      <div class="room-pressure-row">
-        <span class="room-state-chip">Pressure: ${space.pressureScore || 0}</span>
-        <span class="room-state-chip">Stage: ${space.issueStage || 0}</span>
-        <span class="room-state-chip">Follow-up: ${space.followupPressure || 0}</span>
-        <span class="room-state-chip">Open: ${space.unresolvedCount || 0}</span>
-        ${linkedRoomCalls > 0 ? `<span class="room-state-chip">Room Spill: ${linkedRoomCalls}</span>` : ''}
-        ${scannerHot ? '<span class="room-state-chip">Scanner Echo</span>' : ''}
-      </div>
-      <div class="guest-detail-block">
-        <p class="room-service-title">${space.activeIssue || 'No active issue'}</p>
-        <p class="room-service-note muted">${space.note || ''}</p>
-        <p class="shared-space-route-line muted">Route: ${getSharedSpaceRouteLabel(space.zoneId)}</p>
+      <div class="shared-space-zones">
+        <div class="room-card-header shared-space-head">
+          <h4>${space.label}</h4>
+          <span class="room-condition-pill">${space.statusLine || 'Clear'}</span>
+        </div>
+        <div class="room-pressure-row">
+          <span class="room-state-chip">Pressure ${space.pressureScore || 0}</span>
+          <span class="room-state-chip">Stage ${space.issueStage || 0}</span>
+          <span class="room-state-chip">Follow-up ${space.followupPressure || 0}</span>
+          <span class="room-state-chip">Open ${space.unresolvedCount || 0}</span>
+          ${linkedRoomCalls > 0 ? `<span class="room-state-chip">Room calls ${linkedRoomCalls}</span>` : ''}
+          ${scannerHot ? '<span class="room-state-chip">Scanner</span>' : ''}
+        </div>
+        <p class="shared-space-headline">${space.activeIssue || 'No active issue'}</p>
+        <p class="shared-space-why muted">${space.note || 'No extra zone read tonight.'}</p>
+        <p class="shared-space-route-line muted">${getSharedSpaceRouteLabel(space.zoneId)}</p>
         ${(linkedRoomCalls > 0 || scannerHot)
-          ? `<p class="shared-space-connection-line${linkedScanner ? ' is-linked-scanner' : ''}">${linkedRoomCalls > 0 ? `${linkedRoomCalls} room-call source${linkedRoomCalls === 1 ? '' : 's'}` : 'No room-call source'}${scannerHot ? ' • scanner traffic agrees' : ''}</p>`
+          ? `<p class="shared-space-connection-line${linkedScanner ? ' is-linked-scanner' : ''}">${linkedRoomCalls > 0 ? `${linkedRoomCalls} room-call line${linkedRoomCalls === 1 ? '' : 's'}` : 'No room-call line'}${scannerHot ? ' · scanner agrees' : ''}</p>`
           : ''}
         ${emergencyPriority ? '<p class="room-service-note room-service-note-priority">Emergency priority zone.</p>' : ''}
-        ${space?.modifiers?.length ? `<p class="room-service-note muted">Modifiers: ${space.modifiers.join(' • ')}</p>` : ''}
+        ${space?.modifiers?.length
+          ? `<details class="shared-space-modifiers-drawer"><summary>Zone modifiers</summary><div class="shared-space-modifiers-body">${space.modifiers.join(' · ')}</div></details>`
+          : ''}
+        <div class="action-group shared-space-actions">
+          <p class="action-group-label">Zone response</p>
+          <div class="action-group-body room-service-row"></div>
+        </div>
       </div>
-      <div class="room-service-row"></div>
     `;
 
     const actions = card.querySelector('.room-service-row');
@@ -1627,6 +1676,7 @@ export function renderSpecialEncounterOverlay(state) {
 export function renderLogs(state) {
   const list = document.getElementById('incident-log');
   list.innerHTML = '';
+  list.className = 'log-list log-list-v20';
 
   if (!state.logs.length) {
     list.innerHTML = '<div class="log-item">No incidents yet.</div>';
@@ -1704,10 +1754,19 @@ function getSummaryGradeClass(grade = 'C') {
   return `summary-grade-${String(grade).toLowerCase()}`;
 }
 
+function getSummaryBreakdownLineClass(line = '') {
+  const s = String(line);
+  if (/^What went right/i.test(s)) return 'aar-line aar-line-good';
+  if (/^What hurt/i.test(s)) return 'aar-line aar-line-bad';
+  if (/^Dominant pressure/i.test(s)) return 'aar-line aar-line-pressure';
+  if (/^Dawn read/i.test(s)) return 'aar-line aar-line-dawn';
+  return 'aar-line';
+}
+
 export function renderSummary(summary, state, outcomeFlavor = null) {
   const summaryCard = document.querySelector('#summary-screen .hero-card');
   if (summaryCard) {
-    summaryCard.classList.add('summary-polish-card');
+    summaryCard.classList.add('summary-polish-card', 'summary-hero-v20');
   }
   document.getElementById('summary-title').textContent = summary.title;
   document.getElementById('summary-text').textContent = summary.text;
@@ -1765,6 +1824,7 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
     (Array.isArray(summary.breakdown) ? summary.breakdown : []).forEach((line) => {
       const item = document.createElement('li');
       item.textContent = line;
+      item.className = getSummaryBreakdownLineClass(line);
       breakdown.appendChild(item);
     });
 
@@ -1775,28 +1835,37 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
 
       if (positiveLine) {
         const item = document.createElement('li');
-        item.textContent = `What went right: ${positiveLine}`;
+        const text = `What went right: ${positiveLine}`;
+        item.textContent = text;
+        item.className = getSummaryBreakdownLineClass(text);
         breakdown.appendChild(item);
       }
       if (negativeLine) {
         const item = document.createElement('li');
-        item.textContent = `What hurt most: ${negativeLine}`;
+        const text = `What hurt most: ${negativeLine}`;
+        item.textContent = text;
+        item.className = getSummaryBreakdownLineClass(text);
         breakdown.appendChild(item);
       }
       if (snapshot?.dominantPressureTag) {
         const item = document.createElement('li');
-        item.textContent = `Dominant pressure: ${snapshot.dominantPressureTag}`;
+        const text = `Dominant pressure: ${snapshot.dominantPressureTag}`;
+        item.textContent = text;
+        item.className = getSummaryBreakdownLineClass(text);
         breakdown.appendChild(item);
       }
       if (state?.lastSummary?.branchOutcome) {
         const item = document.createElement('li');
-        item.textContent = `Dawn read: ${state.lastSummary.branchOutcome}`;
+        const text = `Dawn read: ${state.lastSummary.branchOutcome}`;
+        item.textContent = text;
+        item.className = getSummaryBreakdownLineClass(text);
         breakdown.appendChild(item);
       }
     }
   }
 
   if (threadFlavor) {
+    threadFlavor.className = 'summary-thread-flavor summary-thread-v20';
     threadFlavor.innerHTML = '';
     const lines = Array.isArray(outcomeFlavor?.threadLines)
       ? outcomeFlavor.threadLines
@@ -1809,6 +1878,7 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
   }
 
   if (campaignFlavor) {
+    campaignFlavor.className = 'summary-thread-flavor summary-campaign-flavor summary-thread-v20';
     campaignFlavor.innerHTML = '';
     const lines = Array.isArray(state?.campaignSummaryNotes) ? state.campaignSummaryNotes : [];
     lines.slice(0, 3).forEach((line) => {
@@ -1819,6 +1889,7 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
   }
 
   if (identityFlavor) {
+    identityFlavor.className = 'summary-thread-flavor summary-identity-flavor summary-thread-v20';
     identityFlavor.innerHTML = '';
     const lines = Array.isArray(state?.summaryIdentityLines) ? state.summaryIdentityLines : [];
     lines.slice(0, 4).forEach((line) => {
@@ -1829,6 +1900,7 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
   }
 
   if (branchFlavor) {
+    branchFlavor.className = 'summary-thread-flavor summary-branch-flavor summary-thread-v20';
     branchFlavor.innerHTML = '';
     const lines = [
       ...(state?.signatureNight?.active && state?.signatureNight?.namedThread
@@ -1895,12 +1967,13 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
 
   if (campaignForecast) {
     const notes = Array.isArray(state?.campaignPrepForecast) ? state.campaignPrepForecast.slice(0, 4) : [];
-    campaignForecast.innerHTML = `
-      <p class="section-tag">Campaign Forecast</p>
-      ${notes.length
+    campaignForecast.innerHTML = prepSurface(
+      'forecast',
+      'Campaign outlook',
+      notes.length
         ? `<ul class="prep-notes-list">${notes.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
-        : '<p class="muted">No special campaign warnings.</p>'}
-    `;
+        : '<p class="muted">No special campaign warnings.</p>'
+    );
   }
 
   if (doctrine) {
@@ -1909,24 +1982,27 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
     const doctrineHints = Array.isArray(state?.doctrineDisplay?.hints) ? state.doctrineDisplay.hints.slice(0, 2) : [];
     const doctrineTrack = state?.doctrineTrack?.title || 'Pattern Hunter';
     const doctrineTrackNotes = Array.isArray(state?.doctrineTrack?.notes) ? state.doctrineTrack.notes.slice(0, 1) : [];
-    doctrine.innerHTML = `
-      <p class="section-tag">Run Identity</p>
-      <p><strong>${doctrineTitle}</strong></p>
+    doctrine.innerHTML = prepSurface(
+      'doctrine',
+      'Doctrine & management track',
+      `<p><strong>${doctrineTitle}</strong></p>
       <p class="muted">${doctrineSummary}</p>
       <p class="muted"><strong>Management track:</strong> ${doctrineTrack}</p>
       ${doctrineHints.length
         ? `<ul class="prep-notes-list">${doctrineHints.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
         : ''}
       ${doctrineTrackNotes.length ? `<p class="muted">${doctrineTrackNotes[0]}</p>` : ''}
-    `;
+    `
+    );
   }
 
   if (staff) {
     const roster = Array.isArray(state?.staffRoster) ? state.staffRoster : [];
     const profile = state?.staffProfile || {};
-    staff.innerHTML = `
-      <p class="section-tag">Staff Roster</p>
-      <p><strong>${(profile?.focus || 'balanced').replaceAll('-', ' ')}</strong> staffing • Active payroll: ${formatMoney(Number(profile?.activePayroll || 0))}</p>
+    staff.innerHTML = prepSurface(
+      'staff',
+      'Staff roster',
+      `<p><strong>${(profile?.focus || 'balanced').replaceAll('-', ' ')}</strong> staffing • Active payroll: ${formatMoney(Number(profile?.activePayroll || 0))}</p>
       <div class="prep-staff-grid">
         ${roster.map((member) => `
           <button class="prep-staff-card ${member.active ? 'is-active' : member.onCall ? 'is-oncall' : ''}" data-staff-id="${member.id}">
@@ -1940,7 +2016,8 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
           </button>
         `).join('')}
       </div>
-    `;
+    `
+    );
     if (typeof state?.onCycleStaffAssignment === 'function') {
       staff.querySelectorAll('[data-staff-id]').forEach((button) => {
         button.addEventListener('click', () => state.onCycleStaffAssignment(button.dataset.staffId));
@@ -1951,24 +2028,27 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
   if (budget) {
     const summary = state?.budgetSummary || {};
     const lines = Array.isArray(summary?.lines) ? summary.lines.slice(0, 4) : [];
-    budget.innerHTML = `
-      <p class="section-tag">Budget / Settlement</p>
-      <p><strong>Projected net:</strong> ${formatMoney(Number(summary?.net || 0))}</p>
+    budget.innerHTML = prepSurface(
+      'budget',
+      'Budget & settlement',
+      `<p><strong>Projected net:</strong> ${formatMoney(Number(summary?.net || 0))}</p>
       <p class="muted">Income ${formatMoney(Number(summary?.income || 0))} • Costs ${formatMoney(Number(summary?.costs || 0))}</p>
       <p class="muted">Payroll ${formatMoney(Number(summary?.payroll || 0))} • Repairs ${formatMoney(Number(summary?.repairs || 0))} • Refunds ${formatMoney(Number(summary?.refunds || 0) + Number(summary?.compensationPaid || 0))}</p>
       <p class="muted">Emergency ${formatMoney(Number(summary?.emergencies || 0))} • Utility ${formatMoney(Number(summary?.utilities || 0))} • Owner ${formatMoney(Number(summary?.ownerDeductions || 0))}</p>
       ${lines.length
         ? `<ul class="prep-notes-list">${lines.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
         : '<p class="muted">No budget notes yet.</p>'}
-    `;
+    `
+    );
   }
 
   if (factions) {
     const climate = Array.isArray(state?.factionClimate) ? state.factionClimate : [];
     const notes = Array.isArray(state?.prepFactionNotes) ? state.prepFactionNotes : [];
-    factions.innerHTML = `
-      <p class="section-tag">Faction Climate</p>
-      <div class="prep-faction-chip-row">
+    factions.innerHTML = prepSurface(
+      'factions',
+      'Faction climate',
+      `<div class="prep-faction-chip-row">
         ${climate.map((entry) => `<span class="prep-faction-chip">${entry.id}: ${entry.band}</span>`).join('')}
       </div>
       ${notes.length
@@ -1977,79 +2057,91 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
             .map((line) => `<li><span>${line}</span></li>`)
             .join('')}</ul>`
         : '<p class="muted">No notable faction pressure shifts.</p>'}
-    `;
+    `
+    );
   }
 
   if (director) {
     const notes = Array.isArray(state?.directorBriefingNotes) ? state.directorBriefingNotes.slice(0, 4) : [];
     const shiftHint = state?.directorShiftHint || '';
-    director.innerHTML = `
-      <p class="section-tag">Tonight’s Outlook</p>
-      ${state?.nightMoodLine ? `<p><strong>${state.nightMoodLine}</strong></p>` : ''}
+    director.innerHTML = prepSurface(
+      'director',
+      'Tonight’s outlook',
+      `${state?.nightMoodLine ? `<p><strong>${state.nightMoodLine}</strong></p>` : ''}
       ${state?.nightIdentityLine ? `<p class="muted">${state.nightIdentityLine}</p>` : ''}
       ${shiftHint ? `<p class="muted">${shiftHint}</p>` : ''}
       ${notes.length
         ? `<ul class="prep-notes-list">${notes.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
         : '<p class="muted">No unusual directional pressure forecast for this shift.</p>'}
-    `;
+    `
+    );
   }
 
   if (carryover) {
     const notes = Array.isArray(state?.carryoverBriefingNotes) ? state.carryoverBriefingNotes.slice(0, 4) : [];
-    carryover.innerHTML = `
-      <p class="section-tag">Incoming Night Notes</p>
-      ${notes.length
+    carryover.innerHTML = prepSurface(
+      'carryover',
+      'Incoming night notes',
+      notes.length
         ? `<ul class="prep-notes-list">${notes
             .map((entry) => `<li><strong>${entry.title}</strong><span>${entry.note || ''}</span></li>`)
             .join('')}</ul>`
-        : '<p class="muted">No major carryover warnings detected.</p>'}
-    `;
+        : '<p class="muted">No major carryover warnings detected.</p>'
+    );
   }
 
   if (threads) {
     const activeThreads = Array.isArray(state?.activeRunThreads) ? state.activeRunThreads.slice(0, 3) : [];
-    threads.innerHTML = `
-      <p class="section-tag">Active Run Threads</p>
-      ${activeThreads.length
+    threads.innerHTML = prepSurface(
+      'threads',
+      'Active run threads',
+      activeThreads.length
         ? `<ul class="prep-notes-list">${activeThreads
             .map((entry) => `<li><strong>${entry.title} (Stage ${entry.stage})</strong><span>${entry.note || ''}</span></li>`)
             .join('')}</ul>`
-        : '<p class="muted">No active long-running thread pressure.</p>'}
-    `;
+        : '<p class="muted">No active long-running thread pressure.</p>'
+    );
   }
 
   if (owner) {
     const brief = state?.ownerPressureBrief || {};
     const lines = Array.isArray(brief?.lines) ? brief.lines.slice(0, 4) : [];
-    owner.innerHTML = `
-      <p class="section-tag">Owner Pressure</p>
-      <p><strong>${brief?.mood || 'Watchful'}</strong> oversight • Last settlement: ${formatMoney(Number(brief?.settlement || 0))}</p>
+    owner.innerHTML = prepSurface(
+      'owner',
+      'Owner memo',
+      `<p><strong>${brief?.mood || 'Watchful'}</strong> oversight • Last settlement: ${formatMoney(Number(brief?.settlement || 0))}</p>
       <p class="muted">${brief?.memo || 'Ownership has not issued a new morning memo.'}</p>
       ${state?.nightMoodLine ? `<p class="muted">${state.nightMoodLine}</p>` : ''}
       <p class="muted">Demand: ${(brief?.ownerDemand || 'margin-watch').replaceAll('-', ' ')} • Doctrine read: ${brief?.doctrineTrack || 'Stability Manager'} • Staffing cost: ${formatMoney(Number(brief?.staffingCost || 0))}</p>
       ${lines.length
         ? `<ul class="prep-notes-list">${lines.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
         : '<p class="muted">No additional owner notes.</p>'}
-    `;
+    `
+    );
   }
 
   if (suspectBoard) {
     const board = state?.suspectBoard || {};
     const entries = Array.isArray(board?.entries) ? board.entries.slice(0, 4) : [];
-    suspectBoard.innerHTML = `
-      <p class="section-tag">Evidence / Suspect Board</p>
-      ${entries.length
+    suspectBoard.innerHTML = prepSurface(
+      'suspect',
+      'Evidence / suspect board',
+      `${entries.length
         ? `<ul class="prep-notes-list">${entries
             .map((entry) => `<li><strong>${entry.label}</strong><span>${entry.detail || ''}</span></li>`)
             .join('')}</ul>`
         : '<p class="muted">No durable suspect patterns on the board yet.</p>'}
-      <p class="muted">Names: ${(board?.namesSeen || []).join(' • ') || 'none yet'}</p>
-      <p class="muted">Marks: ${(board?.marksSeen || []).join(' • ') || 'none yet'}</p>
-      <p class="muted">Vehicles: ${(board?.vehiclesSeen || []).join(' • ') || 'none yet'}</p>
-      <p class="muted">Groups: ${(board?.groupLabels || []).join(' • ') || 'none yet'}</p>
-      <p class="muted">Documents: ${(board?.documentPatterns || []).join(' • ') || 'none yet'}</p>
-      <p class="muted">Cross-links: ${(board?.crossLinks || []).join(' • ') || 'none yet'}</p>
-    `;
+      <details class="prep-suspect-extras"><summary>Index lines</summary>
+        <div class="prep-suspect-extras-body">
+          <p class="muted">Names: ${(board?.namesSeen || []).join(' • ') || 'none yet'}</p>
+          <p class="muted">Marks: ${(board?.marksSeen || []).join(' • ') || 'none yet'}</p>
+          <p class="muted">Vehicles: ${(board?.vehiclesSeen || []).join(' • ') || 'none yet'}</p>
+          <p class="muted">Groups: ${(board?.groupLabels || []).join(' • ') || 'none yet'}</p>
+          <p class="muted">Documents: ${(board?.documentPatterns || []).join(' • ') || 'none yet'}</p>
+          <p class="muted">Cross-links: ${(board?.crossLinks || []).join(' • ') || 'none yet'}</p>
+        </div>
+      </details>`
+    );
   }
 
   if (plans) {

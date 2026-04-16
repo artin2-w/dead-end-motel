@@ -11,7 +11,7 @@ function applyMobileUsabilityPass() {
   }
 
   if (isNarrow) {
-    document.querySelectorAll('#guest-queue .guest-action-row .button').forEach((button) => {
+    document.querySelectorAll('#guest-queue .guest-action-row .button, #guest-queue .guest-action-row-secondary .button').forEach((button) => {
       button.classList.add('phase3-tap-button');
     });
   }
@@ -35,7 +35,7 @@ function applyMobileUsabilityPass() {
         const target = event.target;
         if (!(target instanceof Element)) return;
         const actionable = target.closest(
-          '.button, .tab-button, .camera-scene-action-btn, .guest-action-row button, .report-panel-actions button, .room-tactical-row button'
+          '.button, .tab-button, .camera-scene-action-btn, .guest-action-row button, .guest-action-row-secondary button, .report-panel-actions button, .room-service-row button, .room-tactical-row button'
         );
         if (!actionable) return;
         const now = Date.now();
