@@ -412,7 +412,8 @@ export function getPressureAudioLevel(state) {
     (state?.reputation ?? 50) <= 40 ||
     criticalOccupiedRooms >= 1 ||
     progress >= 78 ||
-    chainPressure >= 4;
+    chainPressure >= 4 ||
+    (Boolean(state?.systemOverride?.active) && Number(state.systemOverride.corruptionLevel || 0) >= 1);
 
   if (tenseSignals) return 'tense';
   return 'calm';

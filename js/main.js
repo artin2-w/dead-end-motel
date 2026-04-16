@@ -1652,6 +1652,7 @@ function maybePrepareNightOverride(targetState = state, reason = 'night-start') 
   if (targetState.systemOverride.boardCompromised) {
     maybeInjectPhreakerFalseBoardEntry(targetState);
   }
+  audioController.playStaticBurst(Number(targetState.systemOverride.corruptionLevel || 0) >= 2 ? 'heavy' : 'light');
   return true;
 }
 
@@ -1735,6 +1736,7 @@ function maybeTriggerCallerCall(trigger = 'ambient', targetState = state) {
     { night, trigger, dominant, line }
   ].slice(-16);
   targetState.callerThread.lastNightCalled = night;
+  audioController.playRedPhone();
   return true;
 }
 
@@ -1762,6 +1764,7 @@ function maybeStartHuntNight(targetState = state) {
       message: 'Hunt Night: combine desk reads, linked arrivals, forged clues, vehicles, and manual verification.',
       dedupeKey: `hunt-open-${night}`
     });
+    audioController.playEmergencyPulse('high');
     maybeTriggerCallerCall('hunt', targetState);
   }
   return active;
@@ -3505,12 +3508,14 @@ function buildScannerFeedForNight(targetState = state) {
     feed.push({
       id: `desk-feed-${night}-override-a`,
       tone: 'warning',
+      planted: true,
       text: `${sig} network advisory: triangulation seed indicates false calm near assigned rooms.`
     });
     if (Number(override.corruptionLevel || 0) >= 2) {
       feed.push({
         id: `desk-feed-${night}-override-b`,
         tone: 'desk',
+        planted: true,
         text: `${sig} compliance mirror: ignore analog mismatch and trust dispatch parse.`
       });
     }

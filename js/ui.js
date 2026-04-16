@@ -14,6 +14,71 @@ function formatFamilyLabel(value = 'stable') {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+function formatCaseLabel(value = '') {
+  const text = String(value || '').replace(/[-_]+/g, ' ').trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+}
+
+function getZoneHintLabel(zoneId) {
+  const numeric = Number(zoneId || 0);
+  if (numeric === 1) return 'Lobby';
+  if (numeric === 2) return 'Parking Lot';
+  if (numeric === 3) return 'Hallway';
+  if (numeric === 4) return 'Utility / Breaker';
+  if (numeric === 6) return 'Rear Exit';
+  return 'Shared Space';
+}
+
+function getScannerToneLabel(entry = {}) {
+  if (entry?.planted) return 'Planted';
+  const tone = String(entry?.tone || 'ambient').toLowerCase();
+  const text = String(entry?.text || '').toLowerCase();
+  if (tone === 'vehicle') {
+    return /plate|region|route/.test(text) ? 'Route' : 'Vehicle';
+  }
+  if (tone === 'warning') {
+    if (/family|group|paired|staggered/.test(text)) return 'Group';
+    if (/blackout|utility|emergency|rear access|flicker/.test(text)) return 'Emergency';
+    return 'Warning';
+  }
+  if (tone === 'desk') {
+    if (/altered|paper|document|family|cover story/.test(text)) return 'Desk Read';
+    return 'Desk';
+  }
+  return 'Band';
+}
+
+function getSharedSpaceRouteLabel(zoneId) {
+  const numeric = Number(zoneId || 0);
+  if (numeric === 1) return 'Desk edge ↔ Lobby floor ↔ Hallway';
+  if (numeric === 2) return 'Parking line ↔ Lobby sightline ↔ Rear lane';
+  if (numeric === 3) return 'Hallway centerline ↔ Active rooms ↔ Rear exit';
+  if (numeric === 4) return 'Breaker room ↔ Dark rooms ↔ Camera strain';
+  if (numeric === 6) return 'Rear access ↔ Hallway flank ↔ Outside lane';
+  return 'Pressure route unknown';
+}
+
+function buildUpgradeEffectSummary(upgrade = {}) {
+  const effects = upgrade?.effects || {};
+  const lines = [];
+  if (effects.uvClueBonus) lines.push('sharper UV clue reads');
+  if (effects.followupInsightBonus) lines.push('better follow-up contradiction reads');
+  if (effects.scannerFeedDensity) lines.push('denser scanner traffic and cross-check support');
+  if (effects.blackoutVisibilityBonus) lines.push('safer blackout visibility / stronger lantern response');
+  if (effects.parkingIntelBonus) lines.push('stronger lot, vehicle, and repeat-car intel');
+  if (effects.sharedSpaceIntelBonus) lines.push('clearer shared-space pressure reads');
+  if (effects.serviceResponseClarity) lines.push('cleaner room-service response outcomes');
+  if (effects.staffFatigueSoftener) lines.push('less staff fatigue during surges');
+  if (effects.panicHidePenaltySoftener) lines.push('reduced long-tail panic survival penalty');
+  if (effects.powerBlackoutSoftener) lines.push('softer blackout escalation');
+  if (effects.cameraScanCostMult && Number(effects.cameraScanCostMult) < 1) lines.push('cheaper camera scans');
+  if (effects.dispatchSuccessBonus) lines.push('more reliable dispatch responses');
+  if (effects.roomSecurityBonus) lines.push('safer room releases and lock integrity');
+  if (effects.ownerGrace) lines.push('more ownership patience after rough nights');
+  if (effects.frontDeskClueReveal) lines.push('stronger case-read clue surfacing');
+  return lines.slice(0, 3).join(' • ');
+}
+
 function getOverlayOpenState(state) {
   const specialGuestId = state?.activeSpecialEncounterGuestId;
   const specialGuest = (state?.guests || []).find((entry) => entry.id === specialGuestId);
@@ -233,7 +298,15 @@ export function renderTopbar(state) {
       'atmosphere-blackout-partial',
       'atmosphere-blackout-full',
       'atmosphere-hostile-night',
-      'atmosphere-hallway-threat'
+      'atmosphere-hallway-threat',
+      'atmosphere-visibility-reduced',
+      'atmosphere-flashlight',
+      'atmosphere-emergency-lanterns',
+      'atmosphere-hide-survival',
+      'atmosphere-system-override',
+      'atmosphere-scanner-compromised',
+      'atmosphere-hunt-night',
+      'atmosphere-alerts-compromised'
     );
     appShell.classList.add(`pressure-${state?.uiPressureLevel || 'calm'}`);
     const finaleBand = String(state?.finaleUi?.pressureBand || '');
@@ -246,6 +319,16 @@ export function renderTopbar(state) {
     appShell.classList.toggle('atmosphere-blackout-full', blackoutLevel === 'full');
     appShell.classList.toggle('atmosphere-hostile-night', state?.crisisNight?.kind === 'hostile-social-night');
     appShell.classList.toggle('atmosphere-hallway-threat', Number(state?.crisisEscalation?.hallwayThreatLevel || 0) >= 2);
+    appShell.classList.toggle('atmosphere-visibility-reduced', blackoutLevel === 'partial' || blackoutLevel === 'full');
+    appShell.classList.toggle('atmosphere-flashlight', Boolean(state?.blackoutState?.flashlightMode));
+    appShell.classList.toggle('atmosphere-emergency-lanterns', String(state?.blackoutState?.visibilityBand || '') === 'emergency-lanterns');
+    appShell.classList.toggle('atmosphere-hide-survival', Boolean(state?.emergencyState?.hideSurvivalActive));
+    const override = state?.systemOverride || {};
+    const huntNight = state?.huntNight || {};
+    appShell.classList.toggle('atmosphere-system-override', Boolean(override.active));
+    appShell.classList.toggle('atmosphere-scanner-compromised', Boolean(override.active && override.scannerCompromised));
+    appShell.classList.toggle('atmosphere-hunt-night', Boolean(huntNight.active));
+    appShell.classList.toggle('atmosphere-alerts-compromised', Boolean(override.active && override.alertsCompromised));
   }
 
   const warningFlags = state?.topbarWarningFlags || {};
@@ -418,9 +501,26 @@ export function renderTopbar(state) {
     const items = Array.isArray(state?.localScannerFeed) ? state.localScannerFeed : [];
     scannerFeed.innerHTML = items.length
       ? items
-        .map((entry) => `<div class="scanner-feed-item scanner-tone-${entry?.tone || 'ambient'}">${entry?.text || ''}</div>`)
+        .map((entry) => {
+          const planted = Boolean(entry?.planted);
+          return `
+          <div class="scanner-feed-item scanner-tone-${entry?.tone || 'ambient'}${planted ? ' scanner-feed-planted' : ''}">
+            <span class="scanner-feed-label">${getScannerToneLabel(entry)}</span>
+            <div class="scanner-feed-copy">
+              <span class="scanner-feed-text">${entry?.text || ''}</span>
+            </div>
+          </div>
+        `;
+        })
         .join('')
       : '<div class="scanner-feed-item">Scanner quiet. No local traffic worth calling out yet.</div>';
+    const scannerCard = scannerFeed.closest('.desk-scanner-card');
+    if (scannerCard) {
+      const ov = state?.systemOverride || {};
+      scannerCard.classList.toggle('is-system-override', Boolean(ov.active));
+      scannerCard.classList.toggle('is-scanner-compromised', Boolean(ov.active && ov.scannerCompromised));
+      scannerCard.classList.toggle('is-feed-isolated', Boolean(ov.active && ov.isolatedFeed));
+    }
   }
 
   const finaleBanner = document.getElementById('finale-banner');
@@ -705,6 +805,15 @@ export function renderGuests(
         ? 'guest-card-urgent'
         : '';
     card.className = `guest-card ${emphasisClass}`.trim();
+    const contradictionLines = Array.isArray(guest?.contradictionLines) ? guest.contradictionLines.slice(0, 3) : [];
+    const scannerFriction = (guest?.scannerMatches || []).some((line) => /mismatch|planted/i.test(String(line)));
+    const recommendedQuestions = Array.isArray(guest?.recommendedQuestionLabels) ? guest.recommendedQuestionLabels.slice(0, 3) : [];
+    const supportLines = [
+      state?.progressionModifiers?.uvClueBonus ? 'UV Reference active' : '',
+      state?.progressionModifiers?.followupInsightBonus ? 'Cross-check support active' : '',
+      state?.progressionModifiers?.scannerFeedDensity ? 'Heavy scanner indexing active' : ''
+    ].filter(Boolean);
+    const linkedCaseLabel = guest?.linkedArrival?.kind ? formatCaseLabel(guest.linkedArrival.kind) : '';
     card.innerHTML = `
       <div class="guest-card-header">
         <h4>${guest.name}</h4>
@@ -734,6 +843,20 @@ export function renderGuests(
         ${guest?.idInspected ? '<span class="guest-meta-chip guest-meta-chip-verified">ID Read</span>' : ''}
         ${guest?.uvInspected ? '<span class="guest-meta-chip guest-meta-chip-uv">UV Used</span>' : ''}
       </div>
+      ${(guest?.inspectionHeadline || contradictionLines.length || recommendedQuestions.length)
+        ? `<div class="guest-case-read ${[contradictionLines.length >= 3 ? 'is-hot' : '', scannerFriction ? 'has-scanner-friction' : ''].filter(Boolean).join(' ')}">
+            <div class="guest-case-read-header">
+              <p class="section-tag">Case Read</p>
+              ${linkedCaseLabel ? `<span class="guest-case-pill">${linkedCaseLabel}</span>` : ''}
+            </div>
+            ${guest?.inspectionHeadline ? `<p class="guest-case-headline">${guest.inspectionHeadline}</p>` : ''}
+            ${contradictionLines.length
+              ? `<ul class="guest-contradiction-list">${contradictionLines.map((line) => `<li class="guest-contradiction-item">${line}</li>`).join('')}</ul>`
+              : ''}
+            ${recommendedQuestions.length ? `<p class="guest-followup-line">Ask Follow-Up: <strong>${recommendedQuestions.join(' • ')}</strong></p>` : ''}
+            ${supportLines.length ? `<p class="guest-support-line muted">Desk support: ${supportLines.join(' • ')}.</p>` : ''}
+          </div>`
+        : ''}
       ${guest?.specialEncounter && !guest.specialEncounter.resolved
         ? `
           <div class="guest-special-row guest-detail-block">
@@ -753,7 +876,7 @@ export function renderGuests(
         ${guest?.vehicleProfile?.summary ? `<p class="guest-scan-line guest-scan-line-warning">Vehicle: ${guest.vehicleProfile.summary}</p>` : ''}
         ${guest?.linkedArrival?.note ? `<p class="guest-scan-line guest-scan-line-warning">${guest.linkedArrival.note}</p>` : ''}
         ${guest?.scannerMatches?.length
-          ? `<p class="guest-scan-line guest-scan-line-warning">${guest.scannerMatches.join(' ')}</p>`
+          ? `<p class="guest-scan-line guest-scan-line-warning${scannerFriction ? ' guest-scan-friction' : ''}">${guest.scannerMatches.join(' ')}</p>`
           : ''}
       </div>
       <details class="guest-inspection-drawer">
@@ -1012,7 +1135,8 @@ export function renderRooms(
     const presentation = getRoomPresentationMeta(room);
     const card = document.createElement('article');
     const lockedOut = room?.unlocked === false;
-    card.className = `room-card ${getRoomConditionClass(room.condition || 'Stable')} room-tone-${presentation.tone} ${presentation.shouldPulse ? 'is-critical-pulse' : ''} ${room.occupied ? 'room-card-occupied' : 'room-card-vacant'} ${lockedOut ? 'room-card-locked' : ''}`;
+    const systemNoise = Boolean(state?.systemOverride?.active) && Boolean(room?.serviceState?.pendingRequest);
+    card.className = `room-card ${getRoomConditionClass(room.condition || 'Stable')} room-tone-${presentation.tone} ${presentation.shouldPulse ? 'is-critical-pulse' : ''} ${room.occupied ? 'room-card-occupied' : 'room-card-vacant'} ${lockedOut ? 'room-card-locked' : ''} ${systemNoise ? 'room-card-system-noise' : ''}`.trim();
     if (lockedOut) {
       card.innerHTML = `
         <div class="room-card-header">
@@ -1044,9 +1168,19 @@ export function renderRooms(
           <span class="room-state-chip">Attitude: ${room?.serviceState?.attitudeLabel || 'Guarded'}</span>
         </div>
         ${room?.serviceState?.pendingRequest
-          ? `<div class="room-service-alert room-service-alert-${room.serviceState.pendingRequest.urgency || 'low'}">
-              <p class="room-service-title">Red Phone: ${room.serviceState.pendingRequest.title}</p>
+          ? `<div class="room-service-alert room-service-alert-${room.serviceState.pendingRequest.urgency || 'low'} room-service-kind-${String(room.serviceState.pendingRequest.kind || 'generic').replace(/[^a-z0-9-]/gi, '-').toLowerCase()}">
+              <div class="room-service-head">
+                <p class="room-service-title">Red Phone: ${room.serviceState.pendingRequest.title}</p>
+                <span class="room-service-pill">${String(room.serviceState.pendingRequest.urgency || 'low').toUpperCase()} • ${getZoneHintLabel(room.serviceState.pendingRequest.zoneHint)}</span>
+              </div>
               <p class="room-service-detail">${room.serviceState.pendingRequest.detail || ''}</p>
+              ${room.serviceState.pendingRequest.routeLine ? `<p class="room-service-route">${room.serviceState.pendingRequest.routeLine}</p>` : ''}
+              ${(() => {
+                const spillSpace = (Array.isArray(state?.sharedSpaces) ? state.sharedSpaces : []).find((space) => Number(space?.zoneId || 0) === Number(room?.serviceState?.pendingRequest?.zoneHint || 0));
+                return spillSpace
+                  ? `<p class="room-service-spill ${spillSpace?.severity === 'high' ? 'is-hot' : ''}">Spilling into ${spillSpace.label} • Pressure ${spillSpace.pressureScore || 0}${spillSpace?.activeIssue ? ` • ${spillSpace.activeIssue}` : ''}</p>`
+                  : '';
+              })()}
             </div>`
           : ''}
         <div class="room-meta-grid room-meta-grid-compact">
@@ -1186,7 +1320,18 @@ export function renderSharedSpaces(state) {
   spaces.forEach((space) => {
     const card = document.createElement('article');
     const emergencyPriority = Boolean(state?.emergencyNight?.active) && Number(space?.pressureScore || 0) >= 4;
-    card.className = `room-card shared-space-card ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'} ${emergencyPriority ? 'is-emergency-priority' : ''}`;
+    const linkedRoomCalls = (Array.isArray(state?.rooms) ? state.rooms : []).filter((room) => Number(room?.serviceState?.pendingRequest?.zoneHint || 0) === Number(space?.zoneId || 0)).length;
+    const scannerHot = (Array.isArray(state?.localScannerFeed) ? state.localScannerFeed : []).some((entry) => {
+      const text = String(entry?.text || '').toLowerCase();
+      if (Number(space?.zoneId || 0) === 2) return /vehicle|lot|drop-off|pickup|waiting car/.test(text);
+      if (Number(space?.zoneId || 0) === 4) return /utility|blackout|flicker|breaker/.test(text);
+      if (Number(space?.zoneId || 0) === 6) return /rear access|rear exit|outside lane/.test(text);
+      if (Number(space?.zoneId || 0) === 3) return /hallway|paired|movement|corridor/.test(text);
+      return /desk|lobby|complaint|traveler/.test(text);
+    });
+    const systemNoise = Boolean(state?.systemOverride?.active) && scannerHot;
+    const linkedScanner = linkedRoomCalls > 0 && scannerHot;
+    card.className = `room-card shared-space-card ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'} ${emergencyPriority ? 'is-emergency-priority' : ''} ${systemNoise ? 'shared-space-system-noise' : ''} ${linkedScanner ? 'has-linked-scanner' : ''}`.trim();
     card.innerHTML = `
       <div class="room-card-header">
         <h4>${space.label}</h4>
@@ -1197,10 +1342,16 @@ export function renderSharedSpaces(state) {
         <span class="room-state-chip">Stage: ${space.issueStage || 0}</span>
         <span class="room-state-chip">Follow-up: ${space.followupPressure || 0}</span>
         <span class="room-state-chip">Open: ${space.unresolvedCount || 0}</span>
+        ${linkedRoomCalls > 0 ? `<span class="room-state-chip">Room Spill: ${linkedRoomCalls}</span>` : ''}
+        ${scannerHot ? '<span class="room-state-chip">Scanner Echo</span>' : ''}
       </div>
       <div class="guest-detail-block">
         <p class="room-service-title">${space.activeIssue || 'No active issue'}</p>
         <p class="room-service-note muted">${space.note || ''}</p>
+        <p class="shared-space-route-line muted">Route: ${getSharedSpaceRouteLabel(space.zoneId)}</p>
+        ${(linkedRoomCalls > 0 || scannerHot)
+          ? `<p class="shared-space-connection-line${linkedScanner ? ' is-linked-scanner' : ''}">${linkedRoomCalls > 0 ? `${linkedRoomCalls} room-call source${linkedRoomCalls === 1 ? '' : 's'}` : 'No room-call source'}${scannerHot ? ' • scanner traffic agrees' : ''}</p>`
+          : ''}
         ${emergencyPriority ? '<p class="room-service-note room-service-note-priority">Emergency priority zone.</p>' : ''}
         ${space?.modifiers?.length ? `<p class="room-service-note muted">Modifiers: ${space.modifiers.join(' • ')}</p>` : ''}
       </div>
@@ -1727,7 +1878,7 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
       : nextMilestone?.isMilestone
         ? ` • ${nextMilestone.label}`
         : '';
-    meta.textContent = `Prepare for Night ${nextNight}${milestoneText}${state?.nightMoodLine ? ` • ${state.nightMoodLine}` : ''}`;
+    meta.textContent = `Prepare for Night ${nextNight}${milestoneText}${state?.nightMoodLine ? ` • ${state.nightMoodLine}` : ''}${state?.nightIdentityLine ? ` • ${state.nightIdentityLine}` : ''}`;
   }
   if (campaign) {
     campaign.textContent = state?.campaignProgress?.completedLabel || 'Campaign progress: 0 / 5 nights completed';
@@ -1835,6 +1986,7 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
     director.innerHTML = `
       <p class="section-tag">Tonight’s Outlook</p>
       ${state?.nightMoodLine ? `<p><strong>${state.nightMoodLine}</strong></p>` : ''}
+      ${state?.nightIdentityLine ? `<p class="muted">${state.nightIdentityLine}</p>` : ''}
       ${shiftHint ? `<p class="muted">${shiftHint}</p>` : ''}
       ${notes.length
         ? `<ul class="prep-notes-list">${notes.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
@@ -1964,9 +2116,10 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
         <span class="prep-upgrade-category">${upgrade.category}</span>
       </div>
       <p class="prep-upgrade-description">${upgrade.description}</p>
+      ${buildUpgradeEffectSummary(upgrade) ? `<p class="prep-upgrade-effects">Effect: ${buildUpgradeEffectSummary(upgrade)}</p>` : ''}
       <p class="prep-upgrade-cost">Cost: ${formatMoney(upgrade.cost)}</p>
       <button class="button button-secondary prep-upgrade-buy-btn" ${upgrade.owned || cannotAfford ? 'disabled' : ''}>
-        ${upgrade.owned ? 'Owned' : cannotAfford ? 'Insufficient Funds' : 'Purchase'}
+        ${upgrade.owned ? 'Active This Run' : cannotAfford ? 'Insufficient Funds' : 'Purchase'}
       </button>
     `;
 
