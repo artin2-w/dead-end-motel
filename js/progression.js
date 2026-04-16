@@ -78,6 +78,30 @@ const UPGRADE_DEFS = Object.freeze([
     }
   },
   {
+    id: 'desk-uv-reference-kit',
+    title: 'UV Reference Kit',
+    category: 'Desk Tools',
+    cost: 78,
+    description: 'Reference overlays and residue strips make UV reads and family-story mismatches easier to decode.',
+    oneTime: true,
+    effects: {
+      uvClueBonus: 1,
+      followupInsightBonus: 1
+    }
+  },
+  {
+    id: 'desk-crosscheck-binder',
+    title: 'Cross-Check Binder',
+    category: 'Desk Tools',
+    cost: 94,
+    description: 'Desk-side contradiction sheets make scanner, vehicle, and follow-up reads connect faster.',
+    oneTime: true,
+    effects: {
+      followupInsightBonus: 1,
+      scannerFeedDensity: 1
+    }
+  },
+  {
     id: 'power-load-balancer',
     title: 'Load Balancer Retrofit',
     category: 'Power / Utility',
@@ -169,6 +193,18 @@ const UPGRADE_DEFS = Object.freeze([
     }
   },
   {
+    id: 'power-emergency-lanterns',
+    title: 'Emergency Lantern Rack',
+    category: 'Power / Utility',
+    cost: 84,
+    description: 'Keeps partial-blackout visibility more workable and makes emergency lighting actions hit harder.',
+    oneTime: true,
+    effects: {
+      blackoutVisibilityBonus: 1,
+      powerBlackoutSoftener: 0.05
+    }
+  },
+  {
     id: 'ownership-guestbook',
     title: 'Owner Guestbook Pack',
     category: 'Operations',
@@ -177,6 +213,42 @@ const UPGRADE_DEFS = Object.freeze([
     oneTime: true,
     effects: {
       ownerGrace: 1
+    }
+  },
+  {
+    id: 'surv-lot-camera-mesh',
+    title: 'Lot Camera Mesh',
+    category: 'Surveillance',
+    cost: 94,
+    description: 'Improves parking reads, repeat-vehicle catches, and shared-space clue carryover.',
+    oneTime: true,
+    effects: {
+      parkingIntelBonus: 1,
+      sharedSpaceIntelBonus: 1
+    }
+  },
+  {
+    id: 'service-shift-coffee',
+    title: 'Shift Coffee / Aid Cart',
+    category: 'Service',
+    cost: 72,
+    description: 'Keeps staff sharper during room-call surges and softens fatigue from emergency handling.',
+    oneTime: true,
+    effects: {
+      serviceResponseClarity: 0.04,
+      staffFatigueSoftener: 0.08
+    }
+  },
+  {
+    id: 'ops-emergency-binder',
+    title: 'Emergency Desk Binder',
+    category: 'Operations',
+    cost: 88,
+    description: 'Improves command-state readability and reduces the long-tail damage of panic survival choices.',
+    oneTime: true,
+    effects: {
+      panicHidePenaltySoftener: 1,
+      scannerFeedDensity: 1
     }
   }
 ]);
@@ -208,6 +280,14 @@ const DEFAULT_MODIFIERS = Object.freeze({
   tacticalChainCalmBonus: 0,
   forgeryRevealBonus: 0,
   scannerIntelBonus: 0,
+  uvClueBonus: 0,
+  followupInsightBonus: 0,
+  parkingIntelBonus: 0,
+  blackoutVisibilityBonus: 0,
+  panicHidePenaltySoftener: 0,
+  scannerFeedDensity: 0,
+  staffFatigueSoftener: 0,
+  sharedSpaceIntelBonus: 0,
   serviceResponseClarity: 0,
   roomSecurityBonus: 0,
   powerBlackoutSoftener: 0,
