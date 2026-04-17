@@ -1121,3 +1121,60 @@
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
 }
+
+/* ============================================================
+   v0.23 — BLIND CAMERAS / SABOTAGE / TARGETED BLACKOUT
+   ============================================================ */
+
+.camera-card-blind {
+  border-color: rgba(248, 113, 113, 0.3);
+  opacity: 0.75;
+}
+
+.camera-card-blind::before {
+  background: rgba(248, 113, 113, 0.7) !important;
+  animation: cam-alert-blink 1.8s ease-in-out infinite;
+}
+
+.camera-preview-blind {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.5) 2px,
+      rgba(0, 0, 0, 0.5) 4px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 8px,
+      rgba(248, 113, 113, 0.04) 8px,
+      rgba(248, 113, 113, 0.04) 9px
+    ),
+    rgba(20, 4, 4, 0.9) !important;
+  position: relative;
+}
+
+.camera-preview-blind::after {
+  content: 'NO SIGNAL';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  color: rgba(248, 113, 113, 0.55);
+}
+
+/* Dawn / Raid status emphasis in context strip */
+.topbar-context-strip.is-dawn {
+  color: rgba(251, 191, 36, 0.95);
+  font-weight: 700;
+}
+
+.topbar-context-strip.is-raid {
+  color: rgba(248, 113, 113, 0.95);
+  animation: cam-alert-blink 1.4s ease-in-out infinite;
+}

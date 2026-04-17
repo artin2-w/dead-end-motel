@@ -5157,6 +5157,8 @@ function buildRenderState() {
     onRespondNightEvent: handleRespondNightEvent,
     onCloseNightEvent: handleCloseNightEvent,
     onNightEventChoice: handleNightEventChoice,
+    onRepairBlindCamera: repairBlindCamera,
+    onTriggerZoneBlackout: triggerZoneBlackout,
     onHandleSpecialEncounter: handleOpenSpecialEncounter,
     onCloseSpecialEncounter: handleCloseSpecialEncounter,
     onSpecialEncounterChoice: handleSpecialEncounterChoice,
@@ -5796,6 +5798,11 @@ function bootstrapState() {
   normalizeIntakeState(state);
   normalizeAdminSpamState(state);
   state.deferredShiftCosts = Array.isArray(state.deferredShiftCosts) ? state.deferredShiftCosts : [];
+  if (typeof state.dirtyPressure !== 'number') state.dirtyPressure = 0;
+  if (typeof state.raidTriggered !== 'boolean') state.raidTriggered = false;
+  if (typeof state.raidStatus !== 'string') state.raidStatus = 'none';
+  if (typeof state.cameraSabotageTriggered !== 'boolean') state.cameraSabotageTriggered = false;
+  if (typeof state.burnerPhoneOffered !== 'boolean') state.burnerPhoneOffered = false;
   if (!state?.nightStartSnapshot?.state) {
     captureNightStartSnapshot('bootstrap-fallback', { force: true });
   }
@@ -6122,6 +6129,307 @@ function startShift() {
   renderAll();
 }
 
+// ============================================================
+// v0.23 — RAID / CAMERA SABOTAGE / BURNER PHONE / ZONE BLACKOUT
+// ============================================================
+
+function triggerPoliceRaidEvent() {
+  state.activeNightEvent = {
+    id: 'police-raid',
+    title: 'Police Raid — 5:45 AM Sweep',
+    description: 'Officers are inbound for an end-of-night sweep. Dirty activity at this property triggered a coordinated raid. Respond before 6:00 AM.',
+    severity: 'high',
+    options: [
+      {
+        id: 'raid-comply',
+        label: 'Comply — Cooperate fully',
+        preview: '−12 reputation, raid clears cleanly',
+        description: 'Open the books and let officers search. A clean showing limits fallout.',
+        note: 'Flagged guests may be questioned. Reputation hit is unavoidable but controlled.'
+      },
+      {
+        id: 'raid-evacuate',
+        label: 'Evacuate — Move the problem guests',
+        preview: '−$40 fee, all flagged rooms vacated',
+        description: 'Evict every flagged room immediately. The property looks clean when officers arrive.',
+        note: 'Money cost is immediate. Reputation is mostly protected if done before dawn.'
+      },
+      {
+        id: 'raid-stall',
+        label: 'Stall — Hope for the best',
+        preview: 'Auto-resolves at 6 AM with heavy penalty if ignored',
+        description: 'Do nothing. Officers may find nothing actionable before shift close.',
+        note: 'Very risky. Heavy reputation loss if unresolved at dawn.'
+      }
+    ]
+  };
+  state.raidStatus = 'pending';
+  state.nightEventOverlayOpen = true;
+  pushLiveAlert(state, {
+    type: 'danger',
+    message: 'POLICE RAID — 5:45 AM sweep triggered. Officers inbound. Respond before dawn.',
+    dedupeKey: 'raid-incoming-night-' + state.night
+  });
+  state.logs.push('Police raid triggered at 5:45 AM. Accumulated dirty pressure drew law enforcement attention.');
+  renderAll();
+}
+
+function handleRaidChoice(choiceId) {
+  state.nightEventOverlayOpen = false;
+  state.activeNightEvent = null;
+  if (choiceId === 'raid-comply') {
+    state.reputation = Math.max(0, (state.reputation || 50) - 12);
+    state.raidStatus = 'resolved-comply';
+    state.dirtyPressure = Math.max(0, (state.dirtyPressure || 0) - 3);
+    state.logs.push('You cooperated with the police raid. Officers swept the property. Reputation took a hit but the motel avoided escalation.');
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'Raid resolved: cooperated. −12 reputation. Motel clear.',
+      dedupeKey: 'raid-resolved-comply'
+    });
+  } else if (choiceId === 'raid-evacuate') {
+    state.money = Math.max(0, (state.money || 0) - 40);
+    state.raidStatus = 'resolved-evacuate';
+    state.dirtyPressure = Math.max(0, (state.dirtyPressure || 0) - 4);
+    (state.rooms || []).forEach((room, idx) => {
+      if (room.occupied && room.deskFlagged) {
+        state.rooms[idx] = {
+          ...room,
+          occupied: false,
+          occupiedBy: null,
+          guestName: null,
+          condition: 'Vacant',
+          deskFlagged: false,
+          serviceState: getDefaultRoomServiceState()
+        };
+        state.logs.push('Room ' + room.label + ': flagged guest evacuated before raid sweep.');
+      }
+    });
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'Raid avoided: flagged rooms evacuated. −$40 coordination cost.',
+      dedupeKey: 'raid-resolved-evacuate'
+    });
+  } else if (choiceId === 'raid-stall') {
+    state.raidStatus = 'pending';
+    pushLiveAlert(state, {
+      type: 'danger',
+      message: 'You chose to stall. Heavy penalties at 6:00 AM if unresolved.',
+      dedupeKey: 'raid-stall-chosen'
+    });
+  }
+  if (progressShift('raid-response', { timeScale: 0.2, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+function triggerCameraSabotageEvent() {
+  const clearCameras = (state.cameras || []).filter((cam) => !cam.blindMode);
+  if (!clearCameras.length) return;
+  const target = clearCameras[Math.floor(Math.random() * clearCameras.length)];
+  state.cameras = (state.cameras || []).map((cam) =>
+    cam.id === target.id ? { ...cam, blindMode: 'sabotage', status: 'Blocked' } : cam
+  );
+  state.activeNightEvent = {
+    id: 'camera-sabotage',
+    title: 'Camera Sabotage — ' + target.name + ' Feed Lost',
+    description: 'The ' + target.name + ' camera has been deliberately blinded. A hostile faction guest has cut your visibility in that zone. You can dispatch maintenance to restore it.',
+    severity: 'medium',
+    options: [
+      {
+        id: 'sabotage-repair',
+        label: 'Dispatch Maintenance — Restore feed',
+        preview: '−8 power, camera restored',
+        description: 'Send a technician to restore the camera feed. Costs power and time.',
+        note: 'Zone will be dark until maintenance arrives.'
+      },
+      {
+        id: 'sabotage-ignore',
+        label: 'Leave it — Work blind for now',
+        preview: 'Camera stays dark until dawn',
+        description: 'Accept the blind zone. One less camera for the remainder of the shift.',
+        note: 'Zone becomes harder to monitor. Hostile activity there goes undetected.'
+      }
+    ]
+  };
+  state.nightEventOverlayOpen = true;
+  pushLiveAlert(state, {
+    type: 'warning',
+    message: 'Camera sabotage: ' + target.name + ' feed cut by hostile faction. Investigate or work blind.',
+    dedupeKey: 'camera-sabotage-night-' + state.night
+  });
+  state.logs.push('Camera sabotage: ' + target.name + ' deliberately blinded. A hostile occupant compromised your surveillance.');
+  renderAll();
+}
+
+function handleCameraSabotageChoice(choiceId) {
+  state.nightEventOverlayOpen = false;
+  const sabotageEvent = state.activeNightEvent;
+  state.activeNightEvent = null;
+  const zoneName = (sabotageEvent?.title || '').replace('Camera Sabotage — ', '').replace(' Feed Lost', '');
+  if (choiceId === 'sabotage-repair') {
+    state.power = Math.max(0, (state.power || 100) - 8);
+    state.cameras = (state.cameras || []).map((cam) =>
+      cam.name === zoneName ? { ...cam, blindMode: null, status: 'Clear' } : cam
+    );
+    state.logs.push('Maintenance dispatched: ' + zoneName + ' camera feed restored. −8 power.');
+    pushLiveAlert(state, {
+      type: 'success',
+      message: zoneName + ' camera restored. Feed back online.',
+      dedupeKey: 'camera-repaired-' + state.night
+    });
+  } else {
+    state.logs.push('Camera sabotage: ' + zoneName + ' left dark for the remainder of the shift.');
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: zoneName + ' camera remains dark — zone monitoring lost.',
+      dedupeKey: 'camera-left-dark-' + state.night
+    });
+  }
+  if (progressShift('camera-sabotage-response', { timeScale: 0.3, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+function repairBlindCamera(cameraId) {
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const camIndex = (state.cameras || []).findIndex((cam) => cam.id === cameraId);
+  if (camIndex === -1) return;
+  const cam = state.cameras[camIndex];
+  if (!cam.blindMode) return;
+  if (state.power < 8) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'Not enough power to restore camera. Need at least 8%.',
+      dedupeKey: 'camera-repair-no-power'
+    });
+    renderAll();
+    return;
+  }
+  state.power = Math.max(0, state.power - 8);
+  state.cameras[camIndex] = { ...cam, blindMode: null, blindCooldown: 0, status: 'Clear' };
+  state.logs.push(cam.name + ' camera restored. Feed back online. −8 power.');
+  pushLiveAlert(state, {
+    type: 'success',
+    message: cam.name + ' camera back online.',
+    dedupeKey: 'camera-restored-' + cam.id
+  });
+  if (progressShift('camera-repair', { timeScale: 0.2, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+function triggerBurnerPhoneEvent() {
+  state.activeNightEvent = {
+    id: 'burner-phone',
+    title: 'Anonymous Contact — Burner Line',
+    description: 'An unmarked number rang the desk line. A voice offers a "quiet arrangement" — cash in exchange for looking the other way on a specific room tonight. No names, no paperwork.',
+    severity: 'medium',
+    options: [
+      {
+        id: 'burner-accept',
+        label: 'Accept — Take the money',
+        preview: '+$60 cash, +2 dirty pressure',
+        description: 'Pocket the payment. Nobody has to know.',
+        note: 'Dirty pressure increases. Raid risk goes up for the rest of the shift.'
+      },
+      {
+        id: 'burner-ignore',
+        label: 'Ignore — Hang up',
+        preview: 'No effect',
+        description: 'Put the receiver down. Forget the call.',
+        note: 'Neutral. The caller may try again another night.'
+      },
+      {
+        id: 'burner-report',
+        label: 'Report — Log the contact',
+        preview: '+4 reputation, −$10 processing fee',
+        description: 'File a report with the duty supervisor. Shows good-faith compliance.',
+        note: 'Reputation gains. Dirty pressure decreases slightly.'
+      }
+    ]
+  };
+  state.nightEventOverlayOpen = true;
+  pushLiveAlert(state, {
+    type: 'warning',
+    message: 'Anonymous contact on desk line. Suspicious offer — comply, ignore, or report.',
+    dedupeKey: 'burner-phone-night-' + state.night
+  });
+  state.logs.push('Burner phone contact: anonymous caller offered a cash arrangement for discretion.');
+  renderAll();
+}
+
+function handleBurnerPhoneChoice(choiceId) {
+  state.nightEventOverlayOpen = false;
+  state.activeNightEvent = null;
+  if (choiceId === 'burner-accept') {
+    state.money = (state.money || 0) + 60;
+    state.dirtyPressure = Math.min(10, (state.dirtyPressure || 0) + 2);
+    state.logs.push('You accepted the burner arrangement. +$60. Dirty pressure increased.');
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'Arrangement accepted. +$60. Raid risk elevated.',
+      dedupeKey: 'burner-accepted'
+    });
+  } else if (choiceId === 'burner-ignore') {
+    state.logs.push('Burner call ignored. No action taken.');
+    pushLiveAlert(state, {
+      type: 'info',
+      message: 'Anonymous contact ignored.',
+      dedupeKey: 'burner-ignored'
+    });
+  } else if (choiceId === 'burner-report') {
+    state.money = Math.max(0, (state.money || 0) - 10);
+    state.reputation = Math.min(100, (state.reputation || 50) + 4);
+    state.dirtyPressure = Math.max(0, (state.dirtyPressure || 0) - 1);
+    state.logs.push('Burner contact reported. +4 reputation. −$10 fee. Dirty pressure slightly reduced.');
+    pushLiveAlert(state, {
+      type: 'success',
+      message: 'Contact reported. +4 reputation. Clean record noted.',
+      dedupeKey: 'burner-reported'
+    });
+  }
+  if (progressShift('burner-response', { timeScale: 0.15, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+function triggerZoneBlackout(cameraId) {
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const camIndex = (state.cameras || []).findIndex((cam) => cam.id === cameraId);
+  if (camIndex === -1) return;
+  const cam = state.cameras[camIndex];
+  if (cam.blindMode) {
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: cam.name + ' zone is already dark.',
+      dedupeKey: 'zone-already-dark-' + cameraId
+    });
+    renderAll();
+    return;
+  }
+  state.cameras[camIndex] = { ...cam, blindMode: 'blackout', blindCooldown: 3, status: 'Blocked' };
+  const affectedRooms = (state.rooms || []).filter((r) => r.occupied && Number(r.zoneId || 0) === cameraId);
+  affectedRooms.forEach((room) => {
+    const idx = state.rooms.findIndex((r) => r.id === room.id);
+    if (idx !== -1 && state.rooms[idx].serviceState) {
+      state.rooms[idx].serviceState.hostility = Math.max(0, (state.rooms[idx].serviceState.hostility || 0) - 1);
+    }
+  });
+  const zones = state?.locationState?.zones || {};
+  if (zones[cameraId]) {
+    zones[cameraId].followupPressure = Math.max(0, Number(zones[cameraId].followupPressure || 0) - 1);
+  }
+  state.logs.push('Targeted blackout: ' + cam.name + ' zone power cut. Camera dark for ~3 actions. Hostile pressure in zone reduced.');
+  pushLiveAlert(state, {
+    type: 'info',
+    message: cam.name + ' zone blacked out (tactical). Camera offline ~3 turns. Zone tension reduced.',
+    dedupeKey: 'zone-blackout-' + cameraId
+  });
+  if (progressShift('zone-blackout', { timeScale: 0.3, skipPassiveDrain: false })) return;
+  renderAll();
+}
+
+// ============================================================
+
 function checkFailureState() {
   const failure = evaluateFailureState(state);
   if (!failure) return false;
@@ -6287,13 +6595,92 @@ function progressShift(actionKey, options = {}) {
     triggerSignatureIncident(`crisis-${actionKey}`);
   }
 
+  // ── DAWN CHECK — must run first, before any early returns ──────────────────
+  // v0.23 fix: event trigger blocks previously returned false before this ran,
+  // leaving the game stuck at 6:00 AM with summary never opening.
   if (!state.dawnProcessed && hasReachedDawn(state)) {
     state.shiftElapsedMinutes = SHIFT_DURATION_MINUTES;
     state.dawnProcessed = true;
+    if (state.raidStatus === 'pending') {
+      state.reputation = Math.max(0, (state.reputation || 50) - 18);
+      state.raidStatus = 'auto-resolved-dawn';
+      state.logs.push('Police raid swept the motel at dawn. You failed to respond — major reputation loss.');
+      pushLiveAlert(state, {
+        type: 'danger',
+        message: 'Raid auto-resolved at dawn: you failed to respond. −18 reputation.',
+        dedupeKey: 'raid-auto-dawn-' + state.night
+      });
+    }
+    pushLiveAlert(state, {
+      type: 'info',
+      message: '6:00 AM — dawn. The night shift is over. Closing out.',
+      dedupeKey: 'dawn-arrival-night-' + state.night
+    });
     const failureTriggered = checkFailureState?.() === true;
     if (!failureTriggered) {
       endNight({ force: true });
       return true;
+    }
+    // If failure triggered, fall through — failure screen handles the transition
+    return false;
+  }
+  // ── END DAWN CHECK ──────────────────────────────────────────────────────────
+
+  // Tick camera blind cooldowns (targeted blackouts auto-restore)
+  let cameraRestored = false;
+  state.cameras = (state.cameras || []).map((cam) => {
+    if (cam.blindMode === 'blackout' && Number(cam.blindCooldown || 0) > 0) {
+      const newCooldown = cam.blindCooldown - 1;
+      if (newCooldown <= 0) {
+        cameraRestored = true;
+        state.logs.push(cam.name + ' zone power restored. Camera feed back online.');
+        return { ...cam, blindMode: null, blindCooldown: 0, status: 'Clear' };
+      }
+      return { ...cam, blindCooldown: newCooldown };
+    }
+    return cam;
+  });
+  if (cameraRestored) {
+    pushLiveAlert(state, {
+      type: 'info',
+      message: 'Zone blackout expired — camera feed restored.',
+      dedupeKey: 'zone-blackout-restored-' + state.night + '-' + state.shiftElapsedMinutes
+    });
+  }
+
+  // 5:45 AM — Trigger police raid if dirty pressure is high enough
+  // (only runs if dawn has not been reached — dawn check above guarantees this)
+  if (!state.raidTriggered && !state.activeNightEvent) {
+    const elapsed = Number(state.shiftElapsedMinutes || 0);
+    const dirty = Number(state.dirtyPressure || 0);
+    if (elapsed >= 465 && dirty >= 3) {
+      state.raidTriggered = true;
+      triggerPoliceRaidEvent();
+      return false;
+    }
+  }
+
+  // Camera sabotage — faction-hostile rare event
+  if (!state.cameraSabotageTriggered && !state.activeNightEvent) {
+    const elapsed = Number(state.shiftElapsedMinutes || 0);
+    const dirty = Number(state.dirtyPressure || 0);
+    const hasHostileRoom = (state.rooms || []).some(
+      (r) => r.occupied && Number(r.serviceState?.hostility || 0) >= 2
+    );
+    if (elapsed >= 180 && dirty >= 2 && hasHostileRoom && Math.random() < 0.04) {
+      state.cameraSabotageTriggered = true;
+      triggerCameraSabotageEvent();
+      return false;
+    }
+  }
+
+  // Burner phone — rare desk contact event
+  if (!state.burnerPhoneOffered && !state.activeNightEvent) {
+    const elapsed = Number(state.shiftElapsedMinutes || 0);
+    if (elapsed >= 90 && elapsed < 420 && Math.random() < 0.025) {
+      state.burnerPhoneOffered = true;
+      triggerBurnerPhoneEvent();
+      return false;
     }
   }
 
@@ -7131,6 +7518,9 @@ function checkInGuest(guestId, requestedRoomId = null) {
       reason: 'guest check-in policy override'
     });
   }
+  if (guest.flagged || guest.riskLevel === 'High' || policyResult === 'broken') {
+    state.dirtyPressure = Math.min(10, (state.dirtyPressure || 0) + 1);
+  }
 
   queueDeskConsequenceForAction('checkin', guest, room, policyResult);
 
@@ -7624,6 +8014,21 @@ function closeTopOverlayIfOpen() {
 
 function handleNightEventChoice(optionId) {
   const activeEventId = state?.activeNightEvent?.id || 'none';
+
+  // Dispatch v0.23 custom event handlers before the generic resolver
+  if (activeEventId === 'police-raid') {
+    handleRaidChoice(optionId);
+    return;
+  }
+  if (activeEventId === 'camera-sabotage') {
+    handleCameraSabotageChoice(optionId);
+    return;
+  }
+  if (activeEventId === 'burner-phone') {
+    handleBurnerPhoneChoice(optionId);
+    return;
+  }
+
   const actionKey = `night-event-choice-${activeEventId}`;
   if (!acquireActionLock(actionKey)) return;
   try {
@@ -7973,6 +8378,10 @@ function handleCameraSceneAction(zoneId, actionId) {
 }
 
 function endNight(options = {}) {
+  // Guard: already at summary or prep — do not double-end
+  if (activeScreenId === 'summary-screen' || activeScreenId === 'night-prep-screen') {
+    return false;
+  }
   if (activeScreenId !== 'game-screen' && !options.force) {
     return false;
   }
@@ -7991,6 +8400,8 @@ function endNight(options = {}) {
   }
 
   if (options.force) {
+    // Clear any stuck screen-transition lock so setActiveScreen('summary-screen') can fire
+    isScreenTransitionInProgress = false;
     state.shiftElapsedMinutes = SHIFT_DURATION_MINUTES;
     state.lastAdvanceReason = state.lastAdvanceReason || 'dawn';
   }
@@ -8030,88 +8441,106 @@ function endNight(options = {}) {
   const nextNightIndex = Number(state.night || 1) + 1;
   state.carryoverBriefing = buildIncomingNightNotes(state, nextNightIndex);
 
-  renderTopbar(buildRenderState());
+  try {
+    renderTopbar(buildRenderState());
+  } catch (topbarErr) {
+    console.error('[endNight] renderTopbar failed:', topbarErr);
+  }
 
-  const summary = buildNightSummary(state);
-  state.lastSummary = summary;
-  state.finalePerformance = buildFinalePerformanceContext(state);
-  registerCampaignNightSuccess(state, { summary });
-  const campaignContext = getCampaignContext();
-  const shouldEndRun = shouldEndRunAfterSuccessfulNight(state, state.night);
-  state.pendingRunCompletion = shouldEndRun;
-  if (shouldEndRun) {
-    state.finalePressurePeak = Math.max(Number(state.finalePressurePeak || 0), Number(state?.finaleDirector?.pressurePeak || 0));
-    state.campaign.finaleSurvived = Boolean(state?.finaleDirector?.trueFinalNight);
-    state.runEnding = buildRunEndingPackage(buildRenderState());
-    const alreadyGranted = Boolean(state?.campaign?.metaRewardGranted);
-    if (!alreadyGranted) {
-      const metaRewardResult = applyRunCompletionMetaRewards(metaState, {
-        ending: state.runEnding,
-        state
-      });
-      metaState = metaRewardResult.meta;
-      saveMetaSafe();
-      state.runEnding.metaReward = metaRewardResult.reward;
-      state.campaign.metaRewardGranted = true;
-    } else if (metaState?.lastRunReward) {
-      state.runEnding.metaReward = metaState.lastRunReward;
+  let _endNightSummary = null;
+  let _endNightShouldEndRun = false;
+  try {
+    _endNightSummary = buildNightSummary(state);
+    state.lastSummary = _endNightSummary;
+    state.finalePerformance = buildFinalePerformanceContext(state);
+    registerCampaignNightSuccess(state, { summary: _endNightSummary });
+    const campaignContext = getCampaignContext();
+    _endNightShouldEndRun = shouldEndRunAfterSuccessfulNight(state, state.night);
+    state.pendingRunCompletion = _endNightShouldEndRun;
+    if (_endNightShouldEndRun) {
+      state.finalePressurePeak = Math.max(Number(state.finalePressurePeak || 0), Number(state?.finaleDirector?.pressurePeak || 0));
+      state.campaign.finaleSurvived = Boolean(state?.finaleDirector?.trueFinalNight);
+      state.runEnding = buildRunEndingPackage(buildRenderState());
+      const alreadyGranted = Boolean(state?.campaign?.metaRewardGranted);
+      if (!alreadyGranted) {
+        const metaRewardResult = applyRunCompletionMetaRewards(metaState, {
+          ending: state.runEnding,
+          state
+        });
+        metaState = metaRewardResult.meta;
+        saveMetaSafe();
+        state.runEnding.metaReward = metaRewardResult.reward;
+        state.campaign.metaRewardGranted = true;
+      } else if (metaState?.lastRunReward) {
+        state.runEnding.metaReward = metaState.lastRunReward;
+      }
+      state.runEnding.metaArchive = buildMetaArchiveSummary(metaState);
+      state.campaign.runEndingKey = state.runEnding?.key || null;
+      state.campaign.runEndingGrade = state.runEnding?.grade || null;
     }
-    state.runEnding.metaArchive = buildMetaArchiveSummary(metaState);
-    state.campaign.runEndingKey = state.runEnding?.key || null;
-    state.campaign.runEndingGrade = state.runEnding?.grade || null;
-  }
 
-  state.campaignSummaryNotes = [
-    campaignContext.progress.completedLabel,
-    state?.finalePerformance?.line || '',
-    shouldEndRun
-      ? 'Final campaign night complete. The motel legacy is ready for review.'
-      : campaignContext.nextMilestone.isFinale
-        ? 'Final night approaching: tomorrow decides the motel’s long-run posture.'
-        : campaignContext.nextMilestone.isMilestone
-          ? `Night ${campaignContext.nextMilestone.night} will be a heavier ${campaignContext.nextMilestone.label.toLowerCase()} shift.`
-          : `Night ${campaignContext.nextMilestone.night} outlook: ${campaignContext.nextMilestone.atmosphere}`
-  ].slice(0, 3);
+    state.campaignSummaryNotes = [
+      campaignContext.progress.completedLabel,
+      state?.finalePerformance?.line || '',
+      _endNightShouldEndRun
+        ? 'Final campaign night complete. The motel legacy is ready for review.'
+        : campaignContext.nextMilestone.isFinale
+          ? "Final night approaching: tomorrow decides the motel's long-run posture."
+          : campaignContext.nextMilestone.isMilestone
+            ? `Night ${campaignContext.nextMilestone.night} will be a heavier ${campaignContext.nextMilestone.label.toLowerCase()} shift.`
+            : `Night ${campaignContext.nextMilestone.night} outlook: ${campaignContext.nextMilestone.atmosphere}`
+    ].slice(0, 3);
 
-  const branchContext = getBranchContext(true);
-  const doctrineNotes = buildDoctrineShiftNotes(state.doctrine, 2);
-  const factionLines = buildFactionSummaryLines(state.factions, 3);
-  const branchLines = Array.isArray(branchContext?.summaryNotes) ? branchContext.summaryNotes : [];
-  state.summaryBranchNotes = [
-    ...(state?.finalePerformance?.label ? [`Finale result: ${state.finalePerformance.label}`] : []),
-    ...branchLines
-  ].slice(0, 4);
-  state.summaryIdentityLines = [...doctrineNotes, ...factionLines].slice(0, 4);
-  state.summaryIdentityLines.unshift(buildNightMoodLine(state, buildOwnerPressureBrief(), getEmergencyNightProfile(state)));
-  state.summaryIdentityLines = state.summaryIdentityLines.filter(Boolean).slice(0, 5);
-  if ((state.shiftStats.nightEventsMissed || 0) === 0 && (state.shiftStats.unresolvedLocationScenes || 0) === 0) {
-    applyIdentityImpact({
-      doctrine: { stability: 1, compassion: 1 },
-      factions: { ownership: 1, staff: 1, guests: 1 },
-      reason: 'calm night close'
+    const branchContext = getBranchContext(true);
+    const doctrineNotes = buildDoctrineShiftNotes(state.doctrine, 2);
+    const factionLines = buildFactionSummaryLines(state.factions, 3);
+    const branchLines = Array.isArray(branchContext?.summaryNotes) ? branchContext.summaryNotes : [];
+    state.summaryBranchNotes = [
+      ...(state?.finalePerformance?.label ? [`Finale result: ${state.finalePerformance.label}`] : []),
+      ...branchLines
+    ].slice(0, 4);
+    state.summaryIdentityLines = [...doctrineNotes, ...factionLines].slice(0, 4);
+    state.summaryIdentityLines.unshift(buildNightMoodLine(state, buildOwnerPressureBrief(), getEmergencyNightProfile(state)));
+    state.summaryIdentityLines = state.summaryIdentityLines.filter(Boolean).slice(0, 5);
+    if ((state.shiftStats.nightEventsMissed || 0) === 0 && (state.shiftStats.unresolvedLocationScenes || 0) === 0) {
+      applyIdentityImpact({
+        doctrine: { stability: 1, compassion: 1 },
+        factions: { ownership: 1, staff: 1, guests: 1 },
+        reason: 'calm night close'
+      });
+    }
+    const outcomeFlavor = buildOutcomeFlavor(state, _endNightSummary);
+    const phase2ResultLabel = window.DeadEndPhase2?.buildReplaySummary
+      ? window.DeadEndPhase2.buildReplaySummary(state, _endNightSummary)
+      : '';
+    if (phase2ResultLabel) {
+      outcomeFlavor.note = `${outcomeFlavor.note || ''}${outcomeFlavor.note ? ' \u2022 ' : ''}Run Result: ${phase2ResultLabel}`;
+      state.campaignSummaryNotes = [`Run Result: ${phase2ResultLabel}`, ...(state.campaignSummaryNotes || [])].slice(0, 3);
+    }
+    settleBetweenNightDayShift(_endNightSummary);
+    state.shiftPressureSnapshot = buildShiftPressureSnapshot(_endNightSummary);
+    if (options.force) {
+      audioController.playDawn();
+    } else {
+      audioController.playSummary();
+    }
+    renderSummary(_endNightSummary, state, outcomeFlavor);
+    updateOnboarding((current) => markTutorialEvent(current, 'night-complete', { night: state.night }));
+  } catch (endNightErr) {
+    console.error('[endNight] summary build/render failed:', endNightErr);
+    state.logs = Array.isArray(state.logs) ? state.logs : [];
+    state.logs.push('Shift close error: ' + String(endNightErr?.message || 'unknown') + '. Transitioning to summary.');
+    pushLiveAlert(state, {
+      type: 'danger',
+      message: 'Summary failed to load - transitioning to end of night. Check console for details.',
+      dedupeKey: 'endnight-error-' + (state.night || 0)
     });
-  }
-  const outcomeFlavor = buildOutcomeFlavor(state, summary);
-  const phase2ResultLabel = window.DeadEndPhase2?.buildReplaySummary
-    ? window.DeadEndPhase2.buildReplaySummary(state, summary)
-    : '';
-  if (phase2ResultLabel) {
-    outcomeFlavor.note = `${outcomeFlavor.note || ''}${outcomeFlavor.note ? ' • ' : ''}Run Result: ${phase2ResultLabel}`;
-    state.campaignSummaryNotes = [`Run Result: ${phase2ResultLabel}`, ...(state.campaignSummaryNotes || [])].slice(0, 3);
-  }
-  settleBetweenNightDayShift(summary);
-  state.shiftPressureSnapshot = buildShiftPressureSnapshot(summary);
-  if (options.force) {
-    audioController.playDawn();
-  } else {
-    audioController.playSummary();
-  }
-  renderSummary(summary, state, outcomeFlavor);
-  updateOnboarding((current) => markTutorialEvent(current, 'night-complete', { night: state.night }));
-  setActiveScreen('summary-screen');
-  const nextNightButton = document.getElementById('next-night-btn');
-  if (nextNightButton) {
-    nextNightButton.textContent = shouldEndRun ? 'View Run Ending' : 'Next Night';
+  } finally {
+    setActiveScreen('summary-screen');
+    const nextNightButton = document.getElementById('next-night-btn');
+    if (nextNightButton) {
+      nextNightButton.textContent = _endNightShouldEndRun ? 'View Run Ending' : 'Next Night';
+    }
   }
   return true;
 }
@@ -8735,6 +9164,11 @@ function nextNight() {
   state.lastAdvanceReason = null;
   state.summaryBranchNotes = [];
   state.campaignSummaryNotes = [];
+  state.dirtyPressure = 0;
+  state.raidTriggered = false;
+  state.raidStatus = 'none';
+  state.cameraSabotageTriggered = false;
+  state.burnerPhoneOffered = false;
   state = assignScenarioForNight(state);
   state = normalizePresentationState(state);
   state = normalizeSpecialEncounterState(state);
@@ -8842,6 +9276,37 @@ function bindEvents() {
 bootstrapState();
 bindEvents();
 renderAll();
+
+// Dawn integrity watchdog — last-resort fallback only.
+// Primary fix is dawn check first in progressShift. This catches any remaining
+// edge case where the game is stuck at dawn (e.g., endNight threw, transition
+// lock was stuck, or no player action was available after time crossed 480).
+// NOTE: endNight() guards against double-ending via activeScreenId check.
+setInterval(function dawnWatchdog() {
+  try {
+    if (activeScreenId !== 'game-screen') return;
+    if (!state) return;
+    if (!hasReachedDawn(state)) return;
+    // Still on game-screen at dawn — force close regardless of dawnProcessed flag
+    state.shiftElapsedMinutes = SHIFT_DURATION_MINUTES;
+    state.dawnProcessed = true;
+    if (state.raidStatus === 'pending') {
+      state.reputation = Math.max(0, (state.reputation || 50) - 18);
+      state.raidStatus = 'auto-resolved-dawn';
+      state.logs.push('Watchdog: raid auto-resolved at dawn — heavy reputation loss.');
+    }
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: '6:00 AM — shift closing (watchdog fallback active).',
+      dedupeKey: 'dawn-watchdog-night-' + (state.night || 0)
+    });
+    if (checkFailureState() !== true) {
+      endNight({ force: true });
+    }
+  } catch (watchdogErr) {
+    console.error('[dawnWatchdog] endNight failed:', watchdogErr);
+  }
+}, 5000);
 
 // Temporary dev helpers (Phase 15X verification), opt-in only.
 if (DEV_HELPERS_ENABLED) {

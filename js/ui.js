@@ -506,10 +506,15 @@ export function renderTopbar(state) {
     const emergency = state?.emergencyNight?.active ? String(state.emergencyNight.label || 'Emergency').slice(0, 56) : '';
     const hunt = state?.huntNight?.active ? 'Hunt night' : '';
     const blackout = state?.blackoutState?.level && state.blackoutState.level !== 'none' ? `Lights: ${state.blackoutState.level}` : '';
-    contextStrip.textContent = [scenario, `${pressure} pressure`, identity, emergency, hunt, blackout]
+    const elapsed = Number(state?.shiftElapsedMinutes || 0);
+    const dawnStatus = elapsed >= 480 ? '6:00 AM — DAWN' : elapsed >= 465 ? '5:45 AM — Shift ending soon' : '';
+    const raidStatus = state?.raidStatus === 'pending' ? 'RAID INCOMING' : '';
+    contextStrip.textContent = [scenario, `${pressure} pressure`, identity, emergency, hunt, blackout, dawnStatus, raidStatus]
       .filter(Boolean)
       .join(' · ')
       .slice(0, 260);
+    contextStrip.classList.toggle('is-dawn', elapsed >= 480);
+    contextStrip.classList.toggle('is-raid', state?.raidStatus === 'pending');
   }
 
   const storyBeatCard = document.getElementById('active-story-beat-card');
@@ -1623,18 +1628,34 @@ export function renderCameras(state) {
       ? String(zoneState.containmentTier).replace(/-/g, ' ')
       : 'none';
 
+    const isBlind = Boolean(camera.blindMode);
+    const blindMode = camera.blindMode || null;
+    const blindCooldown = Number(camera.blindCooldown || 0);
+    const blindLabel = blindMode === 'sabotage' ? 'SABOTAGED' : blindMode === 'blackout' ? ('BLACKOUT ' + (blindCooldown > 0 ? blindCooldown + ' left' : '')) : null;
+
     const card = document.createElement('article');
-    card.className = `camera-card ${getCameraStatusClass(camera.status)} ${actionable ? 'is-actionable' : ''} ${cameraInterference >= 2 ? 'camera-card-glitch' : ''} ${cameraInterference >= 3 ? 'camera-card-flicker' : ''}`.trim();
-    const statusClass = camera.status === 'Clear' ? 'is-clear' : 'is-alert';
+    card.className = `camera-card ${getCameraStatusClass(camera.status)} ${actionable ? 'is-actionable' : ''} ${isBlind ? 'camera-card-blind' : ''} ${cameraInterference >= 2 ? 'camera-card-glitch' : ''} ${cameraInterference >= 3 ? 'camera-card-flicker' : ''}`.trim();
+    const statusClass = isBlind ? 'is-alert' : camera.status === 'Clear' ? 'is-clear' : 'is-alert';
+    const displayStatus = blindLabel || camera.status;
     card.innerHTML = `
-      <div class="camera-preview"></div>
+      <div class="camera-preview ${isBlind ? 'camera-preview-blind' : ''}"></div>
       <h4>${camera.name}</h4>
-      <p class="camera-meta">Status: <span class="camera-status-badge ${statusClass}">${camera.status}</span></p>
+      <p class="camera-meta">Status: <span class="camera-status-badge ${statusClass}">${displayStatus}</span></p>
       <p class="camera-meta">Zone: ${zoneStatusText} • ${containmentText}</p>
-      ${actionable ? '<p class="camera-alert-line">Anomaly requires response.</p>' : ''}
+      ${isBlind ? '<p class="camera-alert-line">Feed offline. Zone dark.</p>' : (actionable ? '<p class="camera-alert-line">Anomaly requires response.</p>' : '')}
     `;
 
-    if (actionable) {
+    if (isBlind && typeof state.onRepairBlindCamera === 'function') {
+      const repairBtn = document.createElement('button');
+      repairBtn.className = 'button button-warning camera-investigate-btn';
+      repairBtn.textContent = blindMode === 'blackout' ? 'Restore Early (−8 power)' : 'Repair Camera (−8 power)';
+      repairBtn.title = 'Restore this camera feed. Costs 8% power.';
+      repairBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        state.onRepairBlindCamera(camera.id);
+      });
+      card.appendChild(repairBtn);
+    } else if (!isBlind && actionable) {
       const button = document.createElement('button');
       button.className = 'button button-warning camera-investigate-btn';
       button.textContent = 'Investigate';
@@ -1646,12 +1667,23 @@ export function renderCameras(state) {
         }
       });
       card.appendChild(button);
-
       card.addEventListener('click', () => {
         if (typeof state.onInvestigateCamera === 'function') {
           state.onInvestigateCamera(camera.id);
         }
       });
+    }
+
+    if (!isBlind && !actionable && typeof state.onTriggerZoneBlackout === 'function') {
+      const blackoutBtn = document.createElement('button');
+      blackoutBtn.className = 'button button-secondary camera-investigate-btn';
+      blackoutBtn.textContent = 'Zone Blackout';
+      blackoutBtn.title = 'Cut power to this zone (tactical). Camera goes dark for ~3 turns. Reduces hostile pressure.';
+      blackoutBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        state.onTriggerZoneBlackout(camera.id);
+      });
+      card.appendChild(blackoutBtn);
     }
 
     grid.appendChild(card);
