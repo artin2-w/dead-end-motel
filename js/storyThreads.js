@@ -180,7 +180,14 @@ const EVIDENCE_CATALOG = [
   { id: 'payroll-discrepancy',       type: 'staff', category: 'staff', label: 'Payroll Discrepancy',       desc: 'A staff ledger entry doesn\'t align with the hours logged. Small, deliberate.' },
   { id: 'overwritten-dispatch-note', type: 'staff', category: 'staff', label: 'Overwritten Dispatch Note', desc: 'A response log entry was crossed out and rewritten after it was filed. The original text shows a different room number.' },
   { id: 'staff-loyalty-record',      type: 'staff', category: 'staff', label: 'Staff Loyalty Record',      desc: 'Someone kept a private written note about what was said at the desk on a specific night. Not yours.' },
-  { id: 'inside-job-note',           type: 'staff', category: 'staff', label: 'Inside Job Note',           desc: 'A folded slip found behind the desk board. A handwritten list of rooms with current guest names.' }
+  { id: 'inside-job-note',           type: 'staff', category: 'staff', label: 'Inside Job Note',           desc: 'A folded slip found behind the desk board. A handwritten list of rooms with current guest names.' },
+  // v0.30 contamination / Room 9 / owner-protected space
+  { id: 'owner-access-slip',        type: 'contamination', category: 'owner', label: 'Owner Access Slip',             desc: 'A keycard authorization record. One room number appears outside the standard guest rotation. The access was logged at 2:40 AM.' },
+  { id: 'sealed-housekeeping-memo', type: 'contamination', category: 'owner', label: 'Sealed Housekeeping Memo',      desc: 'An internal notice, still sealed. The room number is crossed out. "Do not service. Owner authorization only." No date.' },
+  { id: 'stained-maintenance-note', type: 'contamination', category: 'owner', label: 'Stained Maintenance Note',      desc: 'Work order for a plumbing issue in a rear room. The room number in the header was scratched out and replaced. The stain on the corner is not coffee.' },
+  { id: 'unsigned-expense-form',    type: 'contamination', category: 'owner', label: 'Unsigned Expense Form',         desc: 'A requisition for "specialized cleaning materials." No signatory. The room number field is blank but the amount is $340.' },
+  { id: 'old-room-ledger',          type: 'contamination', category: 'owner', label: 'Old Room Ledger Fragment',      desc: 'A page from a prior-season log. One room entry spans 94 consecutive nights — under the same reservation name. No checkout was ever recorded.' },
+  { id: 'do-not-enter-copy',        type: 'contamination', category: 'owner', label: '"Do Not Enter" Notice Copy',    desc: 'A duplicate of an internal management notice. Handwritten at the bottom: "Previous manager was told the same thing. He looked anyway."' }
 ];
 
 const MYSTERY_FRAGMENTS = [
@@ -859,6 +866,21 @@ export function buildStaffIntelSummary(state) {
     avgMorale,
     avgFear,
     suspectCount
+  };
+}
+
+export function buildRoom9IntelSummary(state) {
+  const pr = state?.protectedRoom;
+  if (!pr) return { active: false };
+  return {
+    active: true,
+    label: pr.label || 'Room 9',
+    knownToPlayer: Boolean(pr.knownToPlayer),
+    pressureLevel: Number(pr.pressureLevel || 0),
+    contaminationCount: Number(pr.contaminationCount || 0),
+    investigateAttempts: Number(pr.investigateAttempts || 0),
+    ownerWarningFired: Boolean(pr.ownerWarningFired),
+    evidenceFoundCount: Array.isArray(pr.evidenceFound) ? pr.evidenceFound.length : 0
   };
 }
 

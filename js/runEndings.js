@@ -102,6 +102,23 @@ function evaluateCategory(snapshot) {
   const mutinyFired = Boolean(snapshot.mutinyFired);
   const staffDismissed = Boolean(snapshot.staffDismissed);
   const avgStaffMorale = n(snapshot.avgStaffMorale, 0.56);
+  const room9Level = n(snapshot.room9PressureLevel, 0);
+  const room9Contained = Boolean(snapshot.room9Contained);
+  const room9Attempts = n(snapshot.room9InvestigateAttempts, 0);
+
+  // v0.30 Room 9 / contamination endings — checked first
+  if (room9Level >= 3 && !room9Contained && rep >= 38) {
+    return { key: 'motel-was-sick', title: 'The Motel Was Sick', subtitle: 'Something Has Been Wrong Here for a Long Time' };
+  }
+  if (room9Contained && room9Level >= 2 && rep >= 44) {
+    return { key: 'contained-the-rot', title: 'Contained the Rot', subtitle: 'The Source Was Found and Sealed Off' };
+  }
+  if (room9Attempts >= 2 && rep < 44) {
+    return { key: 'owners-machine', title: "Owner's Machine", subtitle: 'Every Door You Tried Was Already Locked' };
+  }
+  if (room9Level >= 1 && !room9Contained && rep >= 40) {
+    return { key: 'lived-beside-wrong-room', title: 'Lived Beside the Wrong Room', subtitle: 'You Managed Around the Thing You Could Not Name' };
+  }
 
   // v0.29 staff endings — checked before v0.28 dirty endings
   if (staffDismissed && !staffCompromised && rep >= 46) {
@@ -195,6 +212,10 @@ function evaluateCategory(snapshot) {
 
 function resolveEndingFamilyFromKey(key = '') {
   const value = String(key || '').toLowerCase();
+  if (value.includes('motel-was-sick')) return 'hostile';
+  if (value.includes('contained-the-rot')) return 'stable';
+  if (value.includes('owners-machine')) return 'hostile';
+  if (value.includes('lived-beside-wrong-room')) return 'fragile';
   if (value.includes('last-honest-shift')) return 'stable';
   if (value.includes('held-together-by-fear')) return 'fragile';
   if (value.includes('broken-team')) return 'hostile';
@@ -267,6 +288,10 @@ function evaluateGrade(snapshot) {
   score -= Math.min(12, snapshot.policyBreaks * 2);
   score += Math.min(10, snapshot.cleanResolutions);
   score += snapshot.finaleSurvived ? 6 : 0;
+  // v0.30 Room 9 / contamination factors
+  score -= Math.min(8, n(snapshot.room9PressureLevel, 0) * 2);
+  score += Boolean(snapshot.room9Contained) ? 5 : 0;
+  score -= n(snapshot.room9InvestigateAttempts, 0) >= 2 && !Boolean(snapshot.room9Contained) ? 3 : 0;
   // v0.29 staff factors
   score -= Boolean(snapshot.mutinyFired) && n(snapshot.avgStaffMorale, 0.56) < 0.30 ? 4 : 0;
   score += Boolean(snapshot.staffDismissed) && !Boolean(snapshot.staffCompromised) ? 3 : 0;
@@ -328,6 +353,12 @@ export function buildRunEndingPackage(state) {
     finalePerformanceLabel: String(state?.finalePerformance?.label || ''),
     finalePerformanceLine: String(state?.finalePerformance?.line || ''),
     endingMood: Array.isArray(state?.summaryIdentityLines) ? String(state.summaryIdentityLines[0] || '') : '',
+    // v0.30
+    room9PressureLevel: n(state?.protectedRoom?.pressureLevel, 0),
+    room9Contained: Boolean(state?.protectedRoom?.investigateAttempts >= 2 && !state?.protectedRoom?.ownerWarningFired),
+    room9InvestigateAttempts: n(state?.protectedRoom?.investigateAttempts, 0),
+    room9ContaminationCount: n(state?.protectedRoom?.contaminationCount, 0),
+    room9EvidenceFound: Array.isArray(state?.protectedRoom?.evidenceFound) ? state.protectedRoom.evidenceFound.length : 0,
     // v0.29
     staffCompromised: Boolean(state?.staffIntel?.compromisedId || state?.staffIntel?.dismissedId),
     mutinyFired: Boolean(state?.staffIntel?.mutinyFired),
@@ -434,6 +465,10 @@ export function buildRunEndingPackage(state) {
     snapshot.totalDirtyMoney >= 100 ? 'Off-Book Cash' : '',
     snapshot.shadowRep >= 4 ? 'Network Standing' : '',
     snapshot.offBookStays >= 2 ? 'Unlogged Stays' : '',
+    // v0.30 tags
+    snapshot.room9PressureLevel >= 3 ? 'Spatial Contamination' : '',
+    snapshot.room9Contained ? 'Rot Contained' : '',
+    snapshot.room9InvestigateAttempts >= 2 ? 'Owner Override' : '',
     // v0.29 tags
     snapshot.staffCompromised && !snapshot.staffDismissed ? 'Compromised Operator' : '',
     snapshot.staffDismissed && !snapshot.staffCompromised ? 'Last Honest Shift' : '',
@@ -468,6 +503,13 @@ export function buildRunEndingPackage(state) {
       unresolved: snapshot.unresolved,
       milestoneNights: n(campaign?.milestoneNightsSurvived, 0)
     },
+    // v0.30
+    room9Line: snapshot.room9PressureLevel >= 1
+      ? `Room 9: pressure level ${snapshot.room9PressureLevel}/4, ${snapshot.room9ContaminationCount} contamination event${snapshot.room9ContaminationCount !== 1 ? 's' : ''}${snapshot.room9EvidenceFound > 0 ? `, ${snapshot.room9EvidenceFound} item${snapshot.room9EvidenceFound !== 1 ? 's' : ''} documented` : ''}.${snapshot.room9Contained ? ' Contained.' : ''}`
+      : '',
+    room9PressureLevel: snapshot.room9PressureLevel,
+    room9Contained: snapshot.room9Contained,
+    room9InvestigateAttempts: snapshot.room9InvestigateAttempts,
     // v0.29
     staffLine: snapshot.staffCompromised
       ? `Staff: ${snapshot.staffDismissed ? 'compromised member identified and dismissed' : 'compromised member active at close'}.${snapshot.mutinyFired ? ' Mutiny occurred this run.' : ''}`

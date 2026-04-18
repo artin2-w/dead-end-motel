@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dead End Motel v0.29</title>
+  <title>Dead End Motel v0.30</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -16,12 +16,13 @@
   <link rel="stylesheet" href="styles/v27-climax.css" />
   <link rel="stylesheet" href="styles/v28-dirty.css" />
   <link rel="stylesheet" href="styles/v29-staff.css" />
+  <link rel="stylesheet" href="styles/v30-contamination.css" />
 </head>
 <body>
   <div id="app" class="app-shell screen-main-menu">
     <header class="topbar topbar-v20" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.29</p>
+        <p class="eyebrow">Dead End Motel v0.30</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -356,6 +357,11 @@
               <div id="summary-staff-section"></div>
             </section>
 
+            <section class="aar-block aar-block-room9" aria-labelledby="aar-room9-heading">
+              <h3 id="aar-room9-heading" class="aar-block-title">Room 9 &amp; protected space</h3>
+              <div id="summary-room9-section"></div>
+            </section>
+
             <section class="aar-block aar-block-evidence" aria-labelledby="aar-evidence-heading">
               <h3 id="aar-evidence-heading" class="aar-block-title">Evidence &amp; surveillance trail</h3>
               <div id="summary-evidence-section"></div>
@@ -408,6 +414,7 @@
               <div id="night-prep-evidence" class="night-prep-evidence"></div>
               <div id="night-prep-dirty-ledger" class="night-prep-dirty-ledger"></div>
               <div id="night-prep-staff-paranoia" class="night-prep-staff-paranoia"></div>
+              <div id="night-prep-room9" class="night-prep-room9"></div>
             </div>
             <div id="night-prep-plan-grid" class="night-prep-plan-grid"></div>
             <div id="night-prep-staff-focus-grid" class="night-prep-plan-grid"></div>
@@ -462,6 +469,8 @@
             <div id="run-ending-v28-tags" class="v28-ending-tag-strip"></div>
             <p id="run-ending-staff-line" class="v29-ending-staff-line muted"></p>
             <div id="run-ending-v29-tags" class="v29-ending-tag-strip"></div>
+            <p id="run-ending-room9-line" class="v30-ending-room9-line muted"></p>
+            <div id="run-ending-v30-tags" class="v30-ending-tag-strip"></div>
             <p id="run-ending-evidence-line" class="v27-ending-evidence-line muted"></p>
             <p id="run-ending-nemesis-line" class="v27-ending-nemesis-line muted"></p>
             <p id="run-ending-hunt-line" class="v27-hunt-outcome-strip muted"></p>

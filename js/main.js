@@ -166,7 +166,8 @@ import {
   buildEvidenceLockerSummary,
   buildDirtyLedgerSummary,
   buildShadowRepNote,
-  buildStaffIntelSummary
+  buildStaffIntelSummary,
+  buildRoom9IntelSummary
 } from './storyThreads.js';
 import {
   normalizeCarryoverState,
@@ -5183,6 +5184,8 @@ function buildRenderState() {
     staffParanoiaModel: buildStaffParanoiaModel(state),
     onPayStaffBonus: payStaffBonus,
     onDismissSuspectedStaff: dismissSuspectedStaff,
+    room9Intel: buildRoom9IntelSummary(state),
+    room9Model: buildRoom9Model(state),
     onHandleSpecialEncounter: handleOpenSpecialEncounter,
     onCloseSpecialEncounter: handleCloseSpecialEncounter,
     onSpecialEncounterChoice: handleSpecialEncounterChoice,
@@ -7728,6 +7731,209 @@ function dismissSuspectedStaff() {
 
 // ─── end v0.29 ────────────────────────────────────────────────
 
+// ─── v0.30 Contamination / Room 9 / Owner-Protected Space ─────
+
+function normalizeProtectedRoom(targetState = state) {
+  if (!targetState.protectedRoom || typeof targetState.protectedRoom !== 'object') {
+    targetState.protectedRoom = {
+      label: 'Room 9',
+      active: true,
+      ownerProtected: true,
+      knownToPlayer: false,
+      pressureLevel: 0,
+      contaminationFired: false,
+      room9EventFiredTonight: false,
+      contaminationCount: 0,
+      investigateAttempts: 0,
+      ownerWarningFired: false,
+      evidenceFound: [],
+      lastContaminationNight: null
+    };
+  }
+  if (!Array.isArray(targetState.protectedRoom.evidenceFound)) {
+    targetState.protectedRoom.evidenceFound = [];
+  }
+}
+
+function applyProtectedRoomContamination(targetState = state) {
+  normalizeProtectedRoom(targetState);
+  if (targetState.protectedRoom.contaminationFired) return;
+  targetState.protectedRoom.contaminationFired = true;
+  targetState.protectedRoom.contaminationCount = (targetState.protectedRoom.contaminationCount || 0) + 1;
+  targetState.protectedRoom.lastContaminationNight = Number(targetState.night || 1);
+  targetState.protectedRoom.knownToPlayer = true;
+
+  const level = Number(targetState.protectedRoom.pressureLevel || 0);
+
+  const V30_CONTAMINATION_LOGS = [
+    `Room 9 corridor — ambient temperature above threshold near the sealed door. Heat sensor logged at 2:18 AM. No access authorized.`,
+    `Housekeeping passed the sealed section: an unspecified concern near the end of the hall. No specifics filed. Staff declined follow-up.`,
+    `Room 5 guest complaint: unusual sounds from the connecting wall side. Maintenance dispatched — nothing found.`,
+    `Room 6 service call: guest reports a persistent smell. Utilities checked — no explanation found. Guest requested do-not-disturb.`,
+    `Rear hallway motion sensor triggered twice between 2:10 and 2:14 AM. Camera feed shows empty corridor. No access log on file.`,
+    `Room 9 external check: door seal undisturbed. Heat register near that corridor running at capacity for a third consecutive night.`,
+    `Room 5 guest requested early reassignment. Cited the atmosphere near their room. Offered no further explanation.`,
+    `Hallway camera near sealed end: 4-second feed flicker, no timestamp registered in system. Loop window unaccounted for.`,
+    `Prior shift maintenance note retrieved from back office: "Do not enter Room 9. Owner's standing instruction. Do not attempt contact."`,
+    `Front desk key return processed for Room 9 this morning. No active registration on file. No matching checkout recorded.`
+  ];
+
+  const idx = Math.floor(Math.random() * V30_CONTAMINATION_LOGS.length);
+  targetState.logs.push(V30_CONTAMINATION_LOGS[idx]);
+
+  // Adjacent room pressure leak (rooms 5 and 6)
+  (targetState.rooms || []).forEach(room => {
+    if ([5, 6].includes(room.id) && room.occupied) {
+      room.chainPressure = Math.min(8, (room.chainPressure || 0) + 2);
+      if (level >= 2 && room.serviceState) {
+        room.serviceState.unresolvedIssues = Math.min(3, (room.serviceState.unresolvedIssues || 0) + 1);
+        room.serviceState.anxiety = Math.min(3, (room.serviceState.anxiety || 0) + 1);
+      }
+    }
+  });
+
+  // Hallway zone pressure leak
+  if (targetState.locationState?.zones) {
+    const zones = Object.values(targetState.locationState.zones);
+    const hallway = zones.find(z => String(z.zoneName || '').toLowerCase() === 'hallway');
+    if (hallway) hallway.followupPressure = (hallway.followupPressure || 0) + 1;
+  }
+
+  // Hallway camera contamination mark (level >= 1)
+  if (level >= 1 && Array.isArray(targetState.cameras)) {
+    const hallwayCam = targetState.cameras.find(c => String(c.name || '').toLowerCase() === 'hallway');
+    if (hallwayCam && !hallwayCam.blindMode) {
+      hallwayCam.contaminationMark = true;
+    }
+  }
+
+  if (targetState.protectedRoom.knownToPlayer && level >= 2) {
+    pushLiveAlert(targetState, {
+      type: 'warning',
+      message: `Room 9 — contamination spreading. Adjacent rooms and corridor affected.`,
+      dedupeKey: `room9-contamination-${targetState.night}`
+    });
+  }
+}
+
+function triggerRoom9Event() {
+  if (state.activeNightEvent) return;
+  normalizeProtectedRoom();
+  if (state.protectedRoom.room9EventFiredTonight) return;
+  state.protectedRoom.room9EventFiredTonight = true;
+  state.protectedRoom.knownToPlayer = true;
+
+  const level = Number(state.protectedRoom.pressureLevel || 0);
+
+  state.activeNightEvent = {
+    id: 'room9-intrusion',
+    title: 'Room 9 — Disturbance Logged',
+    description: `${level >= 2 ? 'Heat readings and movement' : 'Movement'} detected near the sealed room. No guest is registered at that location. The room is marked Owner Authorization Only — staff are not cleared to enter without owner approval.`,
+    severity: level >= 2 ? 'high' : 'medium',
+    options: [
+      {
+        id: 'r9-ignore',
+        label: 'Log it and move on',
+        preview: 'Pressure accumulates. No record.',
+        description: 'Note the disturbance and continue the shift. The room stays sealed.',
+        note: 'Contamination pressure builds unchecked. Adjacent rooms absorb the bleed.'
+      },
+      {
+        id: 'r9-investigate',
+        label: 'Attempt to access the room',
+        preview: '−5 reputation, owner override logged',
+        description: 'Send staff to check the room. The door is sealed and owner-protected.',
+        note: 'Access blocked. Owner will be notified. Reputation cost.'
+      },
+      {
+        id: 'r9-document',
+        label: 'Document from the hallway',
+        preview: 'Evidence item added. No pressure cost.',
+        description: 'Photograph the corridor and log what is observable from outside.',
+        note: 'Safe. Adds an evidence item. Does not resolve the pressure.'
+      }
+    ]
+  };
+  state.nightEventOverlayOpen = true;
+  state.logs.push(`Room 9 disturbance logged — sealed corridor, owner-protected zone. No authorized access.`);
+  pushLiveAlert(state, {
+    type: 'warning',
+    kind: 'actionable',
+    message: 'Room 9 — disturbance logged near sealed corridor.',
+    dedupeKey: `room9-event-${state.night}`
+  });
+  audioController.playEmergencyPulse('high');
+  renderAll();
+}
+
+function handleRoom9Choice(choiceId) {
+  state.nightEventOverlayOpen = false;
+  state.activeNightEvent = null;
+  normalizeProtectedRoom();
+
+  if (choiceId === 'r9-ignore') {
+    state.protectedRoom.pressureLevel = Math.min(4, (state.protectedRoom.pressureLevel || 0) + 1);
+    (state.rooms || []).forEach(room => {
+      if ([5, 6].includes(room.id) && room.occupied) {
+        room.chainPressure = Math.min(8, (room.chainPressure || 0) + 1);
+      }
+    });
+    state.logs.push(`Room 9 disturbance logged and ignored. Pressure from the sealed corridor bleeds unchecked.`);
+
+  } else if (choiceId === 'r9-investigate') {
+    state.protectedRoom.investigateAttempts = (state.protectedRoom.investigateAttempts || 0) + 1;
+    state.reputation = Math.max(0, (state.reputation || 50) - 5);
+    const foundIds = state.protectedRoom.evidenceFound || [];
+    if (!foundIds.includes('do-not-enter-copy')) {
+      addEvidenceItem('do-not-enter-copy', state.night);
+      state.protectedRoom.evidenceFound = [...foundIds, 'do-not-enter-copy'];
+    }
+    state.protectedRoom.ownerWarningFired = true;
+    state.logs.push(`Room 9 access attempt blocked. Owner authorization required. Formal override logged by property management. −5 reputation.`);
+    pushLiveAlert(state, {
+      type: 'danger',
+      message: 'Owner override: Room 9 access blocked. −5 reputation.',
+      dedupeKey: `room9-blocked-${state.night}`
+    });
+
+  } else if (choiceId === 'r9-document') {
+    const POOL = ['owner-access-slip', 'sealed-housekeeping-memo', 'stained-maintenance-note', 'unsigned-expense-form', 'old-room-ledger'];
+    const foundIds = state.protectedRoom.evidenceFound || [];
+    const unfound = POOL.filter(id => !foundIds.includes(id));
+    if (unfound.length > 0) {
+      const toAdd = unfound[0];
+      addEvidenceItem(toAdd, state.night);
+      state.protectedRoom.evidenceFound = [...foundIds, toAdd];
+    }
+    state.logs.push(`Room 9 hallway documented from outside. External evidence logged.`);
+    applyIdentityImpact({ doctrine: { secrecy: 1 }, reason: 'Room 9 documented externally' });
+  }
+
+  renderAll();
+}
+
+function buildRoom9Model(targetState = state) {
+  normalizeProtectedRoom(targetState);
+  const pr = targetState.protectedRoom;
+  const level = Number(pr.pressureLevel || 0);
+  return {
+    active: true,
+    label: pr.label || 'Room 9',
+    ownerProtected: true,
+    knownToPlayer: Boolean(pr.knownToPlayer),
+    pressureLevel: level,
+    pressureLabel: level === 0 ? 'Sealed' : level === 1 ? 'Active' : level === 2 ? 'Contaminating' : level === 3 ? 'Spreading' : 'Critical',
+    pressureClass: level === 0 ? 'is-sealed' : level === 1 ? 'is-low' : level <= 2 ? 'is-medium' : 'is-high',
+    contaminationCount: Number(pr.contaminationCount || 0),
+    investigateAttempts: Number(pr.investigateAttempts || 0),
+    ownerWarningFired: Boolean(pr.ownerWarningFired),
+    evidenceFoundCount: Array.isArray(pr.evidenceFound) ? pr.evidenceFound.length : 0,
+    adjacentRoomIds: [5, 6]
+  };
+}
+
+// ─── end v0.30 ────────────────────────────────────────────────
+
 // ============================================================
 
 function checkFailureState() {
@@ -8079,6 +8285,35 @@ function progressShift(actionKey, options = {}) {
         triggerInsideLeakEvent();
         return false;
       }
+    }
+  }
+
+  // v0.30 Room 9 event — once per night, escalating chance with pressure level
+  if (!state.protectedRoom?.room9EventFiredTonight && !state.activeNightEvent) {
+    const _r9El = Number(state.shiftElapsedMinutes || 0);
+    const _r9Night = Number(state.night || 1);
+    const _r9Level = Number(state.protectedRoom?.pressureLevel || 0);
+    const _r9Chance = _r9Night >= 2
+      ? Math.max(0.012, Math.min(0.04, 0.012 + _r9Level * 0.008))
+      : 0;
+    if (_r9Chance > 0 && _r9El >= 150 && _r9El < 430 && Math.random() < _r9Chance) {
+      normalizeProtectedRoom();
+      triggerRoom9Event();
+      return false;
+    }
+  }
+
+  // v0.30 Room 9 passive contamination — once per night, starts night 2
+  if (!state.protectedRoom?.contaminationFired && !state.activeNightEvent) {
+    const _pcEl = Number(state.shiftElapsedMinutes || 0);
+    const _pcNight = Number(state.night || 1);
+    const _pcLevel = Number(state.protectedRoom?.pressureLevel || 0);
+    const _pcChance = _pcNight >= 2
+      ? Math.max(0.025, Math.min(0.09, 0.025 + _pcLevel * 0.015))
+      : 0;
+    if (_pcChance > 0 && _pcEl >= 90 && Math.random() < _pcChance) {
+      normalizeProtectedRoom();
+      applyProtectedRoomContamination();
     }
   }
 
@@ -9484,6 +9719,10 @@ function handleNightEventChoice(optionId) {
     handleInsideLeakChoice(optionId);
     return;
   }
+  if (activeEventId === 'room9-intrusion') {
+    handleRoom9Choice(optionId);
+    return;
+  }
 
   const actionKey = `night-event-choice-${activeEventId}`;
   if (!acquireActionLock(actionKey)) return;
@@ -9950,6 +10189,31 @@ function endNight(options = {}) {
   if (_s29comp && Number(_s29comp.badOutcomeCount || 0) >= 2) addEvidenceItem('staff-falsified-report', state.night);
   if (_s29comp && (state.dirtyLedger?.totalDirtyMoney || 0) > 0) addEvidenceItem('payroll-discrepancy', state.night);
   if (_s29comp && state.staffIntel?.mutinyFired) addEvidenceItem('altered-repair-slip', state.night);
+
+  // v0.30 protected room end-of-night
+  normalizeProtectedRoom();
+  const _r9EndNight = Number(state.night || 1);
+  if (_r9EndNight >= 2) {
+    const _r9ExpectedLevel = Math.min(4, Math.floor((_r9EndNight - 1) / 2));
+    if (_r9ExpectedLevel > Number(state.protectedRoom.pressureLevel || 0)) {
+      state.protectedRoom.pressureLevel = _r9ExpectedLevel;
+    }
+  }
+  // Clear camera contamination marks at end of night
+  if (Array.isArray(state.cameras)) {
+    state.cameras.forEach(c => { if (c.contaminationMark) c.contaminationMark = false; });
+  }
+  // Surface Room 9 evidence at key pressure thresholds
+  const _r9Level = Number(state.protectedRoom.pressureLevel || 0);
+  const _r9Found = state.protectedRoom.evidenceFound || [];
+  if (_r9Level >= 2 && !_r9Found.includes('sealed-housekeeping-memo')) {
+    addEvidenceItem('sealed-housekeeping-memo', state.night);
+    state.protectedRoom.evidenceFound = [..._r9Found, 'sealed-housekeeping-memo'];
+  }
+  if (_r9Level >= 3 && !_r9Found.includes('old-room-ledger')) {
+    addEvidenceItem('old-room-ledger', state.night);
+    state.protectedRoom.evidenceFound = [...(state.protectedRoom.evidenceFound), 'old-room-ledger'];
+  }
 
   // Activate / escalate nemesis
   maybeActivateNemesis();
@@ -10714,6 +10978,11 @@ function nextNight() {
   if (state.vendingDropState) state.vendingDropState.offered = false;
   normalizeStaffV29();
   if (state.staffIntel) state.staffIntel.insideLeakFired = false;
+  normalizeProtectedRoom();
+  if (state.protectedRoom) {
+    state.protectedRoom.contaminationFired = false;
+    state.protectedRoom.room9EventFiredTonight = false;
+  }
   state = assignScenarioForNight(state);
   state = normalizePresentationState(state);
   state = normalizeSpecialEncounterState(state);

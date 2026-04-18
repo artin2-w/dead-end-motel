@@ -1,0 +1,278 @@
+/* v0.30 Contamination / Room 9 / Owner-Protected Space */
+
+:root {
+  --v30-room9-border: #5b21b6;
+  --v30-room9-bg: rgba(76, 29, 149, 0.07);
+  --v30-room9-text: #c4b5fd;
+  --v30-room9-accent: #8b5cf6;
+  --v30-contamination-border: #6d28d9;
+  --v30-contamination-text: #ddd6fe;
+  --v30-owner-border: #7c3aed;
+  --v30-owner-text: #ede9fe;
+  --v30-seal-border: #374151;
+  --v30-seal-text: #9ca3af;
+  --v30-taint-text: #a78bfa;
+  --v30-pressure-dot-active: #8b5cf6;
+  --v30-pressure-dot-inactive: rgba(139, 92, 246, 0.18);
+}
+
+/* ── Protected room card ─────────────────────────── */
+
+.v30-protected-room {
+  border-left: 3px solid var(--v30-room9-border);
+  background: var(--v30-room9-bg);
+  border-radius: 4px;
+  padding: 9px 11px;
+  margin-top: 6px;
+}
+
+.v30-protected-room-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.v30-protected-room-label {
+  font-size: 0.81rem;
+  font-weight: 700;
+  color: var(--v30-room9-text);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.v30-owner-badge {
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--v30-owner-text);
+  background: rgba(124, 58, 237, 0.18);
+  border: 1px solid var(--v30-owner-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  text-transform: uppercase;
+}
+
+.v30-seal-badge {
+  font-size: 0.67rem;
+  font-weight: 600;
+  color: var(--v30-seal-text);
+  background: rgba(55, 65, 81, 0.18);
+  border: 1px solid var(--v30-seal-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  text-transform: uppercase;
+}
+
+.v30-pressure-dots {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.v30-pressure-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--v30-pressure-dot-inactive);
+  border: 1px solid var(--v30-room9-border);
+  flex-shrink: 0;
+  transition: background 0.25s;
+}
+
+.v30-pressure-dot.is-active {
+  background: var(--v30-pressure-dot-active);
+  box-shadow: 0 0 4px rgba(139, 92, 246, 0.4);
+}
+
+.v30-protected-room-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 5px;
+}
+
+.v30-status-chip {
+  font-size: 0.69rem;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.v30-status-chip.is-sealed {
+  background: rgba(55, 65, 81, 0.15);
+  border: 1px solid var(--v30-seal-border);
+  color: var(--v30-seal-text);
+}
+
+.v30-status-chip.is-low {
+  background: rgba(91, 33, 182, 0.12);
+  border: 1px solid var(--v30-room9-border);
+  color: var(--v30-room9-text);
+}
+
+.v30-status-chip.is-medium {
+  background: rgba(109, 40, 217, 0.15);
+  border: 1px solid var(--v30-contamination-border);
+  color: var(--v30-contamination-text);
+  animation: v30-pulse 2.8s ease-in-out infinite;
+}
+
+.v30-status-chip.is-high {
+  background: rgba(124, 58, 237, 0.18);
+  border: 1px solid var(--v30-owner-border);
+  color: var(--v30-owner-text);
+  animation: v30-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes v30-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+.v30-protected-room-note {
+  font-size: 0.7rem;
+  color: var(--color-text-muted, #888);
+}
+
+.v30-contamination-note {
+  font-size: 0.7rem;
+  color: var(--v30-taint-text);
+  margin-top: 4px;
+  padding: 3px 7px;
+  background: rgba(139, 92, 246, 0.07);
+  border-radius: 3px;
+  border: 1px solid rgba(139, 92, 246, 0.18);
+}
+
+.v30-evidence-count {
+  font-size: 0.7rem;
+  color: var(--v30-room9-text);
+  margin-top: 4px;
+}
+
+.v30-owner-warning {
+  font-size: 0.7rem;
+  color: var(--v30-owner-text);
+  background: rgba(124, 58, 237, 0.1);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  border-radius: 3px;
+  padding: 3px 7px;
+  margin-top: 5px;
+}
+
+/* ── Night event card for room9-intrusion ────────── */
+
+.active-night-event-card[data-event-type="room9-intrusion"] {
+  border-color: var(--v30-room9-border) !important;
+  background: rgba(76, 29, 149, 0.06) !important;
+}
+
+.active-night-event-card[data-event-type="room9-intrusion"] .night-event-title {
+  color: var(--v30-room9-text);
+}
+
+/* ── Camera contamination mark ───────────────────── */
+
+.camera-card.v30-cam-contaminated .camera-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(139, 92, 246, 0.08);
+  pointer-events: none;
+}
+
+.v30-cam-taint-line {
+  font-size: 0.66rem;
+  color: var(--v30-taint-text);
+  margin-top: 4px;
+  opacity: 0.85;
+}
+
+/* ── Summary room9 section ───────────────────────── */
+
+.v30-summary-room9-section {
+  border-left: 3px solid var(--v30-room9-border);
+  background: rgba(76, 29, 149, 0.04);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-top: 4px;
+}
+
+.v30-summary-room9-header {
+  font-size: 0.77rem;
+  font-weight: 700;
+  color: var(--v30-room9-text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.v30-summary-room9-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.74rem;
+  padding: 2px 0;
+}
+
+.v30-summary-room9-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--v30-room9-text);
+  flex-shrink: 0;
+}
+
+.v30-summary-room9-dot.is-high {
+  background: var(--v30-owner-text);
+}
+
+.v30-summary-room9-dot.is-ok {
+  background: var(--v30-seal-text);
+}
+
+/* ── Ending elements ─────────────────────────────── */
+
+.v30-ending-room9-line {
+  font-size: 0.8rem;
+  margin-top: 6px;
+}
+
+.v30-ending-tag-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.v30-ending-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.69rem;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--v30-room9-border);
+  background: rgba(91, 33, 182, 0.10);
+  color: var(--v30-room9-text);
+}
+
+.v30-ending-tag.tag-owner {
+  border-color: var(--v30-owner-border);
+  background: rgba(124, 58, 237, 0.12);
+  color: var(--v30-owner-text);
+}
+
+.v30-ending-tag.tag-contained {
+  border-color: #065f46;
+  background: rgba(6, 95, 70, 0.10);
+  color: #6ee7b7;
+}
+
+/* ── Report section title ────────────────────────── */
+
+[data-section="contamination"] .report-section-title {
+  color: var(--v30-room9-text);
+}

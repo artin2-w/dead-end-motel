@@ -1876,7 +1876,7 @@ export function renderCameras(state) {
     const anomalyChipLabel = getAnomalyChipLabel();
 
     const card = document.createElement('article');
-    card.className = `camera-card ${getCameraStatusClass(camera.status)} ${actionable ? 'is-actionable' : ''} ${isBlind ? 'camera-card-blind' : ''} ${cameraInterference >= 2 ? 'camera-card-glitch' : ''} ${cameraInterference >= 3 ? 'camera-card-flicker' : ''}`.trim();
+    card.className = `camera-card ${getCameraStatusClass(camera.status)} ${actionable ? 'is-actionable' : ''} ${isBlind ? 'camera-card-blind' : ''} ${cameraInterference >= 2 ? 'camera-card-glitch' : ''} ${cameraInterference >= 3 ? 'camera-card-flicker' : ''} ${camera.contaminationMark ? 'v30-cam-contaminated' : ''}`.trim();
     card.dataset.camStatus = camStatusNorm;
     const sabotageType = camera.sabotageType || null;
     if (sabotageType) card.dataset.sabotageType = sabotageType;
@@ -1893,6 +1893,7 @@ export function renderCameras(state) {
       <h4>${camera.name}</h4>
       <p class="camera-meta">Status: <span class="camera-status-badge ${statusClass}">${displayStatus}</span>${anomalyChipLabel ? `<span class="camera-anomaly-chip">${anomalyChipLabel}</span>` : ''}${sabotageTypeChipHtml}</p>
       <p class="camera-meta">Zone: ${zoneStatusText} • ${containmentText}</p>
+      ${camera.contaminationMark ? '<p class="v30-cam-taint-line">◈ Area interference — sealed corridor</p>' : ''}
       ${isBlind ? '<p class="camera-alert-line">Feed offline. Zone dark.</p>' : (actionable ? '<p class="camera-alert-line">Anomaly requires response.</p>' : '')}
     `;
 
@@ -2219,6 +2220,7 @@ export function renderLogs(state) {
     if (/(room \d|guest.*room|occupant|lockdown|evict|service.*call|hallway check|maintenance sent|security sent)/.test(v)) return 'room';
     if (/(lobby|hallway|parking|utility|rear exit|shared space|zone.*pressure|spill)/.test(v)) return 'zone';
     if (/(power|electric|blackout|generator|restore|reroute|emergency power|outage)/.test(v)) return 'power';
+    if (/(room 9|sealed corridor|sealed room|contamination|owner.*authorization|owner.*protected|owner.*override|do not enter|heat.*sensor.*corridor|housekeeping.*sealed|maintenance.*room.*scratched|rear.*sealed|feed.*flicker.*sealed|key.*room.*(no|not).*registered|prior shift.*do not)/.test(v)) return 'contamination';
     if (/(staff.*refused|mutiny|inside.*job|inside.*leak|compromised.*staff|staff.*falsif|dispatch.*inconsistency|internal.*irregularity|staff walkout|forced back.*work|staff.*bonus|dismissed.*shift|log entry.*crossed|repair ticket exceeded|dispatch timing.*slow|zone clear.*camera|filed as resolved.*room pressure)/.test(v)) return 'staff';
     if (/(off-book|unlogged stay|hidden payment|walk-in|dead drop|vending drop|hunters.*desk|hunters arrived|sheltered|shadow reputation|dirty cash|off-book stay|torn ledger|stained cash|hidden guest)/.test(v)) return 'dirty';
     if (/(suspicious|forged|planted|fake|illegal|contraband|dirty|mismatch|forgery|flagged.*guest)/.test(v)) return 'suspicious';
@@ -2247,6 +2249,7 @@ export function renderLogs(state) {
     { key: 'zone',       title: 'Shared Space Escalations',   limit: 4,        collapsed: false },
     { key: 'power',      title: 'Power & Emergency',          limit: 4,        collapsed: false },
     { key: 'suspicious', title: 'Suspicious Activity',        limit: 6,        collapsed: false },
+    { key: 'contamination', title: 'Room 9 / Protected Space',  limit: 5,        collapsed: false },
     { key: 'staff',      title: 'Staff & Internal Activity',   limit: 5,        collapsed: false },
     { key: 'dirty',      title: 'Off-Book Activity',          limit: 5,        collapsed: false },
     { key: 'archive',    title: 'Full Night Log',             limit: Infinity, collapsed: true  }
@@ -2518,6 +2521,15 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
     }
   }
 
+  // v0.30 Room 9 summary
+  const summaryRoom9Slot = document.getElementById('summary-room9-section');
+  if (summaryRoom9Slot) {
+    const r9i = state?.room9Intel || {};
+    summaryRoom9Slot.innerHTML = r9i.active && (r9i.contaminationCount > 0 || r9i.pressureLevel > 0 || r9i.evidenceFoundCount > 0)
+      ? buildRoom9SummaryHtml(r9i)
+      : '';
+  }
+
   // v0.29 staff intel summary
   const summaryStaffSlot = document.getElementById('summary-staff-section');
   if (summaryStaffSlot) {
@@ -2663,6 +2675,54 @@ function buildStaffParanoiaHtml(paranoia = {}, callbacks = {}) {
     ${rows}
     ${warningHtml}
     ${actionsHtml}
+  </div>`;
+}
+
+function buildProtectedRoomHtml(model = {}) {
+  if (!model || !model.active) return '';
+  const levelDots = Array.from({ length: 4 }, (_, i) =>
+    `<span class="v30-pressure-dot${i < model.pressureLevel ? ' is-active' : ''}"></span>`
+  ).join('');
+  const accessBadge = model.ownerWarningFired
+    ? `<span class="v30-owner-badge">OWNER PROTECTED</span>`
+    : model.knownToPlayer
+      ? `<span class="v30-owner-badge">OWNER AUTH ONLY</span>`
+      : `<span class="v30-seal-badge">SEALED</span>`;
+  const evidenceLine = model.evidenceFoundCount > 0
+    ? `<div class="v30-evidence-count">${model.evidenceFoundCount} item${model.evidenceFoundCount !== 1 ? 's' : ''} documented from outside.</div>`
+    : '';
+  const contaminationLine = model.contaminationCount > 0
+    ? `<div class="v30-contamination-note">${model.contaminationCount} contamination event${model.contaminationCount !== 1 ? 's' : ''} logged. Adjacent rooms affected.</div>`
+    : '';
+  const ownerWarning = model.ownerWarningFired
+    ? `<div class="v30-owner-warning">Owner override on record. Access attempts logged.</div>`
+    : '';
+  return `<div class="v30-protected-room">
+    <div class="v30-protected-room-header">
+      <span class="v30-protected-room-label">Room 9</span>
+      ${accessBadge}
+      <div class="v30-pressure-dots">${levelDots}</div>
+    </div>
+    <div class="v30-protected-room-status">
+      <span class="v30-status-chip ${model.pressureClass}">${model.pressureLabel}</span>
+      <span class="v30-protected-room-note muted">No guest registered. Owner access only.</span>
+    </div>
+    ${evidenceLine}${contaminationLine}${ownerWarning}
+  </div>`;
+}
+
+function buildRoom9SummaryHtml(intel = {}) {
+  if (!intel || !intel.active) return '';
+  const rows = [];
+  const level = Number(intel.pressureLevel || 0);
+  const levelLabel = level === 0 ? 'Sealed — no events' : level === 1 ? 'Active — disturbances logged' : level === 2 ? 'Contaminating — adjacent pressure' : level === 3 ? 'Spreading — hallway affected' : 'Critical — full corridor bleed';
+  rows.push({ text: `Room 9 pressure: ${levelLabel}`, cls: level >= 3 ? 'is-high' : '' });
+  if (intel.contaminationCount > 0) rows.push({ text: `${intel.contaminationCount} contamination event${intel.contaminationCount !== 1 ? 's' : ''} this run`, cls: '' });
+  if (intel.investigateAttempts > 0) rows.push({ text: `${intel.investigateAttempts} blocked access attempt${intel.investigateAttempts !== 1 ? 's' : ''} — owner override`, cls: 'is-high' });
+  if (intel.evidenceFoundCount > 0) rows.push({ text: `${intel.evidenceFoundCount} item${intel.evidenceFoundCount !== 1 ? 's' : ''} documented from outside`, cls: 'is-ok' });
+  return `<div class="v30-summary-room9-section">
+    <div class="v30-summary-room9-header">Room 9 &amp; Protected Space</div>
+    ${rows.map(r => `<div class="v30-summary-room9-row"><span class="v30-summary-room9-dot${r.cls ? ' ' + r.cls : ''}"></span><span>${r.text}</span></div>`).join('')}
   </div>`;
 }
 
@@ -2972,6 +3032,13 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
         if (action === 'dismiss-staff' && typeof state?.onDismissSuspectedStaff === 'function') state.onDismissSuspectedStaff();
       });
     });
+  }
+
+  // v0.30 Room 9 / protected room in night prep
+  const room9Slot = document.getElementById('night-prep-room9');
+  if (room9Slot) {
+    const r9 = state?.room9Model || {};
+    room9Slot.innerHTML = buildProtectedRoomHtml(r9);
   }
 
   if (doctrine) {
@@ -3324,6 +3391,26 @@ export function renderRunEnding(ending = {}) {
       chip.className = `v28-ending-tag${cls ? ' ' + cls : ''}`;
       chip.textContent = label;
       v28Tags.appendChild(chip);
+    });
+  }
+
+  // v0.30 Room 9 / contamination ending lines
+  const room9Line = document.getElementById('run-ending-room9-line');
+  const v30Tags = document.getElementById('run-ending-v30-tags');
+  if (room9Line) room9Line.textContent = ending?.room9Line || '';
+  if (v30Tags) {
+    v30Tags.innerHTML = '';
+    const v30TagData = [
+      (ending?.room9PressureLevel || 0) >= 3 ? { label: 'The Motel Was Sick', cls: '' } : null,
+      ending?.room9Contained ? { label: 'Contained the Rot', cls: 'tag-contained' } : null,
+      (ending?.room9InvestigateAttempts || 0) >= 2 ? { label: "Owner's Machine", cls: 'tag-owner' } : null,
+      (ending?.room9PressureLevel || 0) >= 1 && !(ending?.room9Contained) ? { label: 'Lived Beside the Wrong Room', cls: '' } : null
+    ].filter(Boolean);
+    v30TagData.forEach(({ label, cls }) => {
+      const chip = document.createElement('span');
+      chip.className = `v30-ending-tag${cls ? ' ' + cls : ''}`;
+      chip.textContent = label;
+      v30Tags.appendChild(chip);
     });
   }
 
