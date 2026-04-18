@@ -116,6 +116,76 @@ const THREAD_TEMPLATES = [
     zone: 'Parking Lot',
     baseWeight: 5,
     minNight: 3
+  },
+  {
+    id: 'unknown-caller-interference',
+    title: 'Unknown Caller Pattern',
+    category: 'surveillance',
+    summary: 'An unknown caller keeps returning — each message a little more specific than the last.',
+    zone: 'Lobby',
+    baseWeight: 5,
+    minNight: 2
+  },
+  {
+    id: 'faction-sabotage-cycle',
+    title: 'Faction Sabotage Cycle',
+    category: 'surveillance',
+    summary: 'A faction network has been cycling sabotage attempts across camera zones.',
+    zone: 'Rear Exit',
+    baseWeight: 4,
+    minNight: 2
+  },
+  {
+    id: 'camera-trust-break',
+    title: 'Camera Trust Break',
+    category: 'surveillance',
+    summary: 'You can\'t be sure which feeds are clean anymore. Something is being hidden.',
+    zone: 'Hallway',
+    baseWeight: 4,
+    minNight: 3
+  }
+];
+
+const NAMED_RECURRING_CATALOG = [
+  {
+    id: 'the-adjuster',
+    label: 'The Adjuster',
+    archetypeKeys: ['contractor', 'service-worker', 'maintenance', 'inspector'],
+    factionId: 'service-ring',
+    recognition: 'Carries a clipboard. Too calm about delays. Never quite matches their stated job.',
+    escalationNote: 'Each return feels like an inspection — but for whom?'
+  },
+  {
+    id: 'caller-seven',
+    label: 'Caller 7',
+    archetypeKeys: ['drifter', 'traveler', 'observer', 'loner', 'quiet'],
+    factionId: 'watcher-circle',
+    recognition: 'Uses a new alias each time. The handwriting is the same. The eyes aren\'t.',
+    escalationNote: 'Third return — they know your shift pattern by now.'
+  },
+  {
+    id: 'r-vance',
+    label: 'R. Vance',
+    archetypeKeys: ['family', 'family-lead', 'cover', 'domestic'],
+    factionId: 'false-family-route',
+    recognition: 'Always part of a pair. The family story changes. The luggage tags don\'t match.',
+    escalationNote: 'The follow hasn\'t shown yet this time. That\'s new.'
+  },
+  {
+    id: 'night-surveyor',
+    label: 'The Night Surveyor',
+    archetypeKeys: ['observer', 'watcher', 'quiet-traveler', 'loner'],
+    factionId: 'watcher-circle',
+    recognition: 'Never causes trouble. You catch them in places they shouldn\'t be.',
+    escalationNote: 'Third appearance. They\'re not here for a room.'
+  },
+  {
+    id: 'county-runner',
+    label: 'The County Runner',
+    archetypeKeys: ['drifter', 'vagrant', 'transient', 'local'],
+    factionId: 'county-drifters',
+    recognition: 'Knows the lot layout better than guests should. Check-in pattern is too fast.',
+    escalationNote: 'Fourth appearance at this specific motel. That isn\'t coincidence.'
   }
 ];
 
@@ -169,6 +239,29 @@ function ensureHistoryRecord(history, guestName) {
     };
   }
   return history[guestName];
+}
+
+function checkForNamedPresence(guest, history) {
+  const archetypeKey = String(guest?.archetypeKey || guest?.archetypeLabel || '').toLowerCase();
+  const factionId = String(guest?.factionProfile?.id || '').toLowerCase();
+  const record = history[guest?.name] || null;
+  const encounters = Number(record?.encounters || 0);
+  if (encounters < 2) return null;
+  for (const entry of NAMED_RECURRING_CATALOG) {
+    const archetypeMatch = entry.archetypeKeys.some((k) => archetypeKey.includes(k));
+    const factionMatch = entry.factionId && factionId === entry.factionId;
+    const strongMatch = archetypeMatch && factionMatch;
+    const weakMatch = (factionMatch && encounters >= 3) || (archetypeMatch && encounters >= 4);
+    if (strongMatch || weakMatch) {
+      return {
+        id: entry.id,
+        label: entry.label,
+        recognition: entry.recognition,
+        escalationNote: encounters >= 3 ? entry.escalationNote : null
+      };
+    }
+  }
+  return null;
 }
 
 function buildThreadId(templateId, night) {
@@ -290,6 +383,48 @@ function buildReturningGuestVariant(baseGuest, history, activeStoryBeat) {
     variant.linkedArrivalMemoryLine
   ].filter(Boolean).join(' ');
 
+  // --- v0.26 extensions ---
+
+  // Retaliation risk: guest rejected harshly 2+ times or evicted and returning
+  const isEvictedReturn = history.returnModifier === 'hostile-return';
+  const isMultiReject = history.wasHarshlyRejected && Number(history.encounters || 0) >= 2;
+  variant.retaliationRisk = isEvictedReturn || isMultiReject;
+  if (variant.retaliationRisk) {
+    variant.retaliationNote = isEvictedReturn
+      ? 'Eviction history: previous forced removal. Increased escalation risk on any friction.'
+      : 'Multiple rejection history: old resentment is still active and may trigger faster.';
+    if (riskLevel !== 'High') {
+      variant.riskLevel = 'High';
+      variant.risk = 'High';
+      variant.riskNote = `${riskNote} Retaliation risk elevated from prior handling history.`.trim();
+    }
+  }
+
+  // Trust score: cleanly handled multiple times → deception signal softened
+  const cleanCount = (Array.isArray(history.storyFlags) ? history.storyFlags.filter((f) => f === 'was-housed').length : 0) +
+    (history.wasHandledCleanly ? 1 : 0);
+  variant.trustScore = clamp(cleanCount, 0, 3);
+  if (variant.trustScore >= 2) {
+    variant.trustNote = 'Multiple clean interactions: pattern suggests genuine low-risk profile.';
+    const currentDec = Number(variant.deceptionSignal || 0);
+    if (currentDec > 0) variant.deceptionSignal = Math.max(0, currentDec - 1);
+  }
+
+  // Watched/flagged → deception goes up
+  if (history.returnModifier === 'knows-you-watched') {
+    const currentDec = Number(variant.deceptionSignal || 0);
+    variant.deceptionSignal = Math.min(3, currentDec + 1);
+    variant.deceptionNote = 'Prior flag history: surface behavior may be more controlled than usual.';
+  }
+
+  // Named presence detection
+  variant.namedPresence = checkForNamedPresence(variant, { [variant.name]: history });
+
+  // Group memory: if they had a linked arrival last time and are back
+  if (history.lastLinkedArrivalKind) {
+    variant.groupMemoryLine = `Prior group pattern: ${history.lastLinkedArrivalKind}. Watch for a second arrival tonight.`;
+  }
+
   return variant;
 }
 
@@ -368,6 +503,14 @@ export function markThreadOutcome(state, payload = {}) {
     }
     record.storyFlags = record.storyFlags.slice(-6);
   }
+
+  // v0.26 social reputation tracking
+  if (!state.socialReputation) {
+    state.socialReputation = { harshHandlings: 0, cleanHandlings: 0, evictions: 0 };
+  }
+  if (action === 'reject' && record?.wasHarshlyRejected) state.socialReputation.harshHandlings += 1;
+  if (action === 'checkin') state.socialReputation.cleanHandlings += 1;
+  if (action === 'evicted') state.socialReputation.evictions += 1;
 
   const linked = safeArray(state.storyThreads).find(
     (thread) => thread.status !== 'contained' && (thread.linkedGuestName === guestName || thread.linkedZone === payload.linkedZone)
@@ -549,6 +692,26 @@ export function maybeGenerateReturningGuestVariant(baseGuest, state, night = 1) 
   picked.returns = Math.max(0, Number(picked.returns || 0)) + 1;
   picked.lastNight = Math.max(1, Number(night || 1));
   return buildReturningGuestVariant(baseGuest, picked, state.activeStoryBeat);
+}
+
+export function buildSocialMemoryNote(state) {
+  const rep = state?.socialReputation || {};
+  const harsh = Number(rep.harshHandlings || 0);
+  const clean = Number(rep.cleanHandlings || 0);
+  const evictions = Number(rep.evictions || 0);
+  const total = harsh + clean;
+  if (!total) return null;
+  const harshRatio = total > 0 ? harsh / total : 0;
+  if (evictions >= 2) {
+    return { tone: 'harsh', label: 'Tense', note: `${evictions} evictions on record — guests arrive with prior warnings. Expect faster escalation.` };
+  }
+  if (harshRatio >= 0.6) {
+    return { tone: 'harsh', label: 'Harsh', note: `High rejection rate (${harsh} harsh). Arrivals are reading you as difficult.` };
+  }
+  if (harshRatio <= 0.25 && clean >= 3) {
+    return { tone: 'fair', label: 'Fair', note: `Clean record (${clean} handled well). Guests arrive with reduced tension.` };
+  }
+  return { tone: 'balanced', label: 'Balanced', note: `Mixed handling history (${clean} clean, ${harsh} harsh). Reputation is neutral.` };
 }
 
 export function buildActiveRunThreadHighlights(state, limit = 3) {

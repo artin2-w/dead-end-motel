@@ -521,6 +521,22 @@ export function renderTopbar(state) {
     appShell.dataset.motelCondition = _topbarCondition.overall;
   }
 
+  const radioBtn = document.getElementById('radio-intercept-btn');
+  if (radioBtn) {
+    const scannerCount = Array.isArray(state?.localScannerFeed) ? state.localScannerFeed.length : 0;
+    const hasFactionGuest = Array.isArray(state?.guests) && state.guests.some((g) => g?.factionProfile?.id);
+    const pressure = state?.uiPressureLevel || 'calm';
+    const interceptEligible = scannerCount >= 2 || hasFactionGuest || pressure !== 'calm';
+    const interceptUsed = Boolean(state?.radioInterceptionUsed);
+    radioBtn.disabled = interceptUsed || !interceptEligible;
+    radioBtn.classList.toggle('is-used', interceptUsed);
+    radioBtn.hidden = false;
+    const hintEl = document.getElementById('radio-intercept-hint');
+    if (hintEl) {
+      hintEl.textContent = interceptUsed ? 'Used this shift' : interceptEligible ? '−5 power • once per shift' : 'Available when scanner is active';
+    }
+  }
+
   const warningFlags = state?.topbarWarningFlags || {};
   const powerStat = document.getElementById('power-stat-box');
   const repStat = document.getElementById('reputation-stat-box');
@@ -1059,6 +1075,37 @@ export function renderGuests(
     const contCount = contradictionLines.length;
     const decChipClass = decSig >= 2 ? 'dec-high' : decSig >= 1 ? 'dec-medium' : 'dec-low';
     const contChipClass = contCount >= 2 ? 'cont-high' : contCount >= 1 ? 'cont-low' : 'cont-none';
+    // v0.26 — named presence, memory echo, group role, faction tag
+    const namedPresence = guest?.namedPresence || null;
+    const linkedRole = guest?.linkedArrival?.role || null;
+    const linkedKind = guest?.linkedArrival?.kind || null;
+    const roleChipClass = linkedRole === 'lead' ? 'is-lead' : linkedRole === 'follow' ? 'is-follow' : linkedRole === 'lookout' ? 'is-lookout' : 'is-pair';
+    const roleChipLabel = linkedRole === 'lead' ? 'Lead Arrival' : linkedRole === 'follow' ? 'Follow' : linkedRole === 'lookout' ? 'Lookout' : linkedKind ? formatCaseLabel(linkedKind) : '';
+    const factionId = guest?.factionProfile?.id || '';
+    const factionFmtId = factionId.replace(/[^a-z0-9-]/g, '-');
+    const factionVisibleMark = guest?.factionProfile?.visibleMark || '';
+
+    const namedPresenceHtml = namedPresence
+      ? `<div class="v26-named-presence-strip">
+          <span class="v26-named-presence-badge">${namedPresence.label}</span>
+          <div>
+            <span class="v26-named-presence-recognition">${namedPresence.recognition}</span>
+            ${namedPresence.escalationNote ? `<div class="v26-named-escalation-note">${namedPresence.escalationNote}</div>` : ''}
+          </div>
+        </div>`
+      : '';
+
+    const memoryChips = [];
+    if (guest?.retaliationRisk) memoryChips.push(`<span class="v26-memory-chip is-retaliation" title="${guest.retaliationNote || ''}">Retaliation Risk</span>`);
+    if (guest?.trustScore >= 2) memoryChips.push(`<span class="v26-memory-chip is-trust" title="${guest.trustNote || ''}">Trust ×${guest.trustScore}</span>`);
+    if (guest?.returnModifier === 'hostile-return') memoryChips.push('<span class="v26-memory-chip is-hostile">Prior Eviction</span>');
+    if (guest?.returnModifier === 'resentful') memoryChips.push('<span class="v26-memory-chip is-hostile">Resentful Return</span>');
+    if (guest?.returnModifier === 'knows-you-watched') memoryChips.push('<span class="v26-memory-chip is-watched">Was Watched</span>');
+    if (guest?.groupMemoryLine) memoryChips.push('<span class="v26-memory-chip is-neutral">Group Pattern</span>');
+    const memoryEchoHtml = (guest?.isReturningGuest && memoryChips.length)
+      ? `<div class="v26-memory-echo-strip"><span class="v26-memory-echo-label">Memory</span>${memoryChips.join('')}</div>`
+      : '';
+
     card.innerHTML = `
       <div class="guest-card-header">
         <div class="guest-arch-avatar guest-arch-risk-${riskLower}" title="${guest.archetypeLabel || 'Unknown Pattern'}">${archetypeInitial}</div>
@@ -1071,6 +1118,8 @@ export function renderGuests(
             : ''}
         </div>
       </div>
+      ${namedPresenceHtml}
+      ${memoryEchoHtml}
       <div class="guest-chip-row guest-chip-row-primary">
         <span class="risk-badge ${getRiskBadgeClass(guest.riskLevel || 'Low')}" title="Risk estimates incident chance after check-in.">Risk: ${guest.riskLevel || 'Low'}</span>
         <span class="policy-badge ${getPolicyBadgeClass(guest.policyRecommendation || 'Approve')}" title="Policy is guidance, not a forced action.">${(guest.policyRecommendation || 'Approve').toUpperCase()}</span>
@@ -1090,8 +1139,8 @@ export function renderGuests(
         ${Number(guest?.expectedStayNights || 0) > 0 ? `<span class="guest-meta-chip guest-stay-chip" title="Expected stay length if approved.">Stay: ${guest.expectedStayNights}N</span>` : ''}
         ${guest?.scannerMatches?.length ? '<span class="guest-meta-chip guest-meta-chip-scanner">Scanner Link</span>' : ''}
         ${guest?.forgeryProfile?.isForged ? '<span class="guest-meta-chip guest-meta-chip-contradiction">Forgery Risk</span>' : ''}
-        ${guest?.factionProfile?.label ? `<span class="guest-meta-chip guest-meta-chip-scanner">${guest.factionProfile.label}</span>` : ''}
-        ${guest?.linkedArrival?.groupId ? '<span class="guest-meta-chip guest-meta-chip-verified">Linked Arrival</span>' : ''}
+        ${factionId ? `<span class="v26-faction-tag faction-${factionFmtId}" title="${factionVisibleMark}">${guest.factionProfile.label}${factionVisibleMark ? `<span class="v26-faction-mark"> • ${factionVisibleMark.slice(0, 28)}</span>` : ''}</span>` : ''}
+        ${(linkedRole || linkedKind) ? `<span class="v26-group-role-chip ${roleChipClass}">${roleChipLabel}</span>` : ''}
         ${guest?.vehicleProfile ? '<span class="guest-meta-chip guest-meta-chip-scanner">Vehicle Read</span>' : ''}
         ${guest?.idInspected ? '<span class="guest-meta-chip guest-meta-chip-verified">ID Read</span>' : ''}
         ${guest?.uvInspected ? '<span class="guest-meta-chip guest-meta-chip-uv">UV Used</span>' : ''}
@@ -1131,6 +1180,10 @@ export function renderGuests(
             : ''}
           ${guest?.vehicleProfile?.summary ? `<p class="guest-scan-line guest-scan-line-warning">Vehicle: ${guest.vehicleProfile.summary}</p>` : ''}
           ${guest?.linkedArrival?.note ? `<p class="guest-scan-line guest-scan-line-warning">${guest.linkedArrival.note}</p>` : ''}
+          ${guest?.groupMemoryLine ? `<p class="guest-scan-line guest-scan-line-warning">${guest.groupMemoryLine}</p>` : ''}
+          ${guest?.retaliationNote ? `<p class="guest-scan-line guest-scan-line-warning">${guest.retaliationNote}</p>` : ''}
+          ${guest?.deceptionNote ? `<p class="guest-scan-line">${guest.deceptionNote}</p>` : ''}
+          ${guest?.trustNote ? `<p class="guest-scan-line">${guest.trustNote}</p>` : ''}
           ${guest?.scannerMatches?.length
             ? `<p class="guest-scan-line guest-scan-line-warning${scannerFriction ? ' guest-scan-friction' : ''}">${guest.scannerMatches.join(' ')}</p>`
             : ''}
@@ -1825,12 +1878,20 @@ export function renderCameras(state) {
     const card = document.createElement('article');
     card.className = `camera-card ${getCameraStatusClass(camera.status)} ${actionable ? 'is-actionable' : ''} ${isBlind ? 'camera-card-blind' : ''} ${cameraInterference >= 2 ? 'camera-card-glitch' : ''} ${cameraInterference >= 3 ? 'camera-card-flicker' : ''}`.trim();
     card.dataset.camStatus = camStatusNorm;
+    const sabotageType = camera.sabotageType || null;
+    if (sabotageType) card.dataset.sabotageType = sabotageType;
+    const sabotageTypeChipHtml = (() => {
+      if (!isBlind || !sabotageType) return '';
+      const STYPE_LABELS = { 'feed-loop': 'Loop', 'planted-calm': 'Planted Calm', 'delayed-frame': 'Delayed', 'blind-zone': 'Blind Zone' };
+      const label = STYPE_LABELS[sabotageType] || 'Compromised';
+      return `<span class="camera-sabotage-type-chip type-${sabotageType}">${label}</span>`;
+    })();
     const statusClass = isBlind ? 'is-alert' : camera.status === 'Clear' ? 'is-clear' : 'is-alert';
     const displayStatus = blindLabel || camera.status;
     card.innerHTML = `
       <div class="camera-preview ${isBlind ? 'camera-preview-blind' : ''}" data-preview-text="${cameraPreviewText}"></div>
       <h4>${camera.name}</h4>
-      <p class="camera-meta">Status: <span class="camera-status-badge ${statusClass}">${displayStatus}</span>${anomalyChipLabel ? `<span class="camera-anomaly-chip">${anomalyChipLabel}</span>` : ''}</p>
+      <p class="camera-meta">Status: <span class="camera-status-badge ${statusClass}">${displayStatus}</span>${anomalyChipLabel ? `<span class="camera-anomaly-chip">${anomalyChipLabel}</span>` : ''}${sabotageTypeChipHtml}</p>
       <p class="camera-meta">Zone: ${zoneStatusText} • ${containmentText}</p>
       ${isBlind ? '<p class="camera-alert-line">Feed offline. Zone dark.</p>' : (actionable ? '<p class="camera-alert-line">Anomaly requires response.</p>' : '')}
     `;
@@ -2153,7 +2214,8 @@ export function renderLogs(state) {
     const v = String(line).toLowerCase();
     if (/(failed|collapse|critical|evict|breach|slipping|raid|sabotage|override.*active|system.*compromised)/.test(v)) return 'key';
     if (/(success|stabilized|resolved|restored|secured|back online|complete)/.test(v)) return 'success';
-    if (/(camera|feed|monitor|anomaly|signal.*lost|motion.*detect|blind|surveillance|cam\b)/.test(v)) return 'camera';
+    if (/(unknown caller|caller contact|anonymous contact|burner|radio intercept|interception|partial intercept)/.test(v)) return 'caller';
+    if (/(camera|feed|monitor|anomaly|signal.*lost|motion.*detect|blind|surveillance|cam\b|feed loop|planted calm|delayed frame|blind zone)/.test(v)) return 'camera';
     if (/(room \d|guest.*room|occupant|lockdown|evict|service.*call|hallway check|maintenance sent|security sent)/.test(v)) return 'room';
     if (/(lobby|hallway|parking|utility|rear exit|shared space|zone.*pressure|spill)/.test(v)) return 'zone';
     if (/(power|electric|blackout|generator|restore|reroute|emergency power|outage)/.test(v)) return 'power';
@@ -2177,6 +2239,7 @@ export function renderLogs(state) {
   const SECTIONS = [
     { key: 'key',        title: 'Key Events Tonight',         limit: 6,        collapsed: false },
     { key: 'success',    title: 'Resolved & Secured',         limit: 4,        collapsed: false },
+    { key: 'caller',     title: 'Caller & Intercept',         limit: 4,        collapsed: false },
     { key: 'room',       title: 'Room Incidents',             limit: 5,        collapsed: false },
     { key: 'camera',     title: 'Camera & Surveillance',      limit: 5,        collapsed: false },
     { key: 'zone',       title: 'Shared Space Escalations',   limit: 4,        collapsed: false },
@@ -2191,6 +2254,7 @@ export function renderLogs(state) {
 
     const section = document.createElement('div');
     section.className = `report-section report-section-${key}`;
+    section.dataset.section = key;
 
     const header = document.createElement('div');
     header.className = 'report-section-header';
@@ -2593,6 +2657,29 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
         ${upgradeItemsHtml}
       </div>`
     );
+  }
+
+  const socialMemSlot = document.getElementById('night-prep-social-memory');
+  if (socialMemSlot) {
+    const smn = state?.socialMemoryNote || null;
+    if (smn) {
+      const barWidth = smn.tone === 'fair' ? 75 : smn.tone === 'harsh' ? 80 : 50;
+      socialMemSlot.innerHTML = prepSurface(
+        'social-memory-v26',
+        'Motel Social Reputation',
+        `<div class="v26-social-rep-strip">
+          <div class="v26-social-rep-bar-wrap">
+            <div class="v26-social-rep-bar-track">
+              <div class="v26-social-rep-bar-fill is-${smn.tone}" style="width:${barWidth}%"></div>
+            </div>
+            <span class="v26-social-rep-label is-${smn.tone}">${smn.label}</span>
+          </div>
+          <div class="v26-social-rep-note">${smn.note}</div>
+        </div>`
+      );
+    } else {
+      socialMemSlot.innerHTML = '';
+    }
   }
 
   if (doctrine) {

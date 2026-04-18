@@ -1,0 +1,478 @@
+/* Dead End Motel v0.26 — Recurring Guests / Factions / Surveillance Horror / Sabotage Depth */
+
+/* ============================================================
+   CSS VARIABLES
+   ============================================================ */
+
+:root {
+  --v26-named-presence:   rgba(192, 132, 252, 0.85);
+  --v26-retaliation:      rgba(220, 38, 38, 0.9);
+  --v26-trust:            rgba(52, 211, 153, 0.85);
+  --v26-hostile-memory:   rgba(248, 113, 113, 0.85);
+  --v26-faction-watcher:  rgba(148, 163, 184, 0.8);
+  --v26-faction-drifter:  rgba(251, 191, 36, 0.8);
+  --v26-faction-service:  rgba(96, 165, 250, 0.8);
+  --v26-faction-lookout:  rgba(251, 146, 60, 0.8);
+  --v26-faction-family:   rgba(192, 132, 252, 0.75);
+  --v26-caller:           rgba(100, 116, 139, 0.85);
+  --v26-intercept:        rgba(52, 211, 153, 0.75);
+  --v26-sabotage-loop:    rgba(96, 165, 250, 0.8);
+  --v26-sabotage-calm:    rgba(52, 211, 153, 0.8);
+  --v26-sabotage-delay:   rgba(251, 191, 36, 0.8);
+  --v26-sabotage-blind:   rgba(220, 38, 38, 0.85);
+}
+
+/* ============================================================
+   NAMED RECURRING PRESENCE — Guest card distinguished strip
+   Applied when guest.namedPresence is set
+   ============================================================ */
+
+.v26-named-presence-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px 7px;
+  margin: 4px 0;
+  background: rgba(192, 132, 252, 0.06);
+  border: 1px solid rgba(192, 132, 252, 0.22);
+  border-left: 3px solid rgba(192, 132, 252, 0.6);
+  border-radius: 0 3px 3px 0;
+}
+
+.v26-named-presence-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(192, 132, 252, 0.12);
+  border: 1px solid rgba(192, 132, 252, 0.4);
+  color: rgba(192, 132, 252, 0.95);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.v26-named-presence-recognition {
+  font-size: 10px;
+  color: rgba(148, 163, 184, 0.85);
+  line-height: 1.4;
+  font-style: italic;
+}
+
+.v26-named-escalation-note {
+  font-size: 9.5px;
+  color: rgba(192, 132, 252, 0.8);
+  line-height: 1.35;
+  padding-top: 3px;
+  border-top: 1px solid rgba(192, 132, 252, 0.15);
+  margin-top: 3px;
+}
+
+/* ============================================================
+   MEMORY ECHO STRIP — Returns on recurring guest cards
+   ============================================================ */
+
+.v26-memory-echo-strip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 4px;
+  margin: 3px 0;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  flex-wrap: wrap;
+}
+
+.v26-memory-echo-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(100, 116, 139, 0.65);
+  margin-right: 2px;
+}
+
+.v26-memory-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.v26-memory-chip.is-hostile   { border-color: rgba(248,113,113,0.4); color: rgba(248,113,113,0.9); }
+.v26-memory-chip.is-trust     { border-color: rgba(52,211,153,0.4);  color: rgba(52,211,153,0.9); }
+.v26-memory-chip.is-retaliation {
+  border-color: rgba(220,38,38,0.55);
+  color: rgba(248,113,113,1.0);
+  background: rgba(220,38,38,0.08);
+  font-weight: 700;
+}
+.v26-memory-chip.is-watched   { border-color: rgba(251,191,36,0.4); color: rgba(251,191,36,0.9); }
+.v26-memory-chip.is-neutral   { border-color: rgba(100,116,139,0.3); color: rgba(100,116,139,0.75); }
+
+/* ============================================================
+   GROUP ROLE CHIP — Lead / Follow / Lookout
+   ============================================================ */
+
+.v26-group-role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.v26-group-role-chip.is-lead      { border-color: rgba(251,146,60,0.45); color: rgba(251,146,60,0.95); }
+.v26-group-role-chip.is-follow    { border-color: rgba(96,165,250,0.4);  color: rgba(147,197,253,0.9); }
+.v26-group-role-chip.is-lookout   { border-color: rgba(251,191,36,0.45); color: rgba(251,191,36,0.95); }
+.v26-group-role-chip.is-pair      { border-color: rgba(148,163,184,0.35); color: rgba(148,163,184,0.85); }
+
+/* ============================================================
+   FACTION NETWORK TAG — Stronger identity on guest card
+   ============================================================ */
+
+.v26-faction-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.v26-faction-tag.faction-watcher-circle   { border-color: rgba(148,163,184,0.4); color: rgba(148,163,184,0.9); }
+.v26-faction-tag.faction-county-drifters  { border-color: rgba(251,191,36,0.4);  color: rgba(251,191,36,0.9); }
+.v26-faction-tag.faction-service-ring     { border-color: rgba(96,165,250,0.4);  color: rgba(147,197,253,0.9); }
+.v26-faction-tag.faction-lookout-chain    { border-color: rgba(251,146,60,0.45); color: rgba(251,146,60,0.95); }
+.v26-faction-tag.faction-false-family-route { border-color: rgba(192,132,252,0.4); color: rgba(192,132,252,0.9); }
+
+.v26-faction-mark {
+  font-size: 8.5px;
+  opacity: 0.7;
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* ============================================================
+   CAMERA SABOTAGE DEPTH — per data-sabotage-type
+   ============================================================ */
+
+/* Feed Loop — blue cycling effect */
+.camera-card[data-sabotage-type="feed-loop"] {
+  border-color: rgba(96, 165, 250, 0.35);
+}
+.camera-card[data-sabotage-type="feed-loop"] .camera-preview {
+  filter: hue-rotate(180deg) contrast(0.85) brightness(0.88);
+}
+.camera-card[data-sabotage-type="feed-loop"] .camera-preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 5px,
+    rgba(96, 165, 250, 0.08) 5px,
+    rgba(96, 165, 250, 0.08) 6px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Planted Calm — suspiciously clear, green tint */
+.camera-card[data-sabotage-type="planted-calm"] {
+  border-color: rgba(52, 211, 153, 0.3);
+}
+.camera-card[data-sabotage-type="planted-calm"] .camera-preview {
+  filter: contrast(1.05) brightness(1.08) saturate(0.7) hue-rotate(-10deg);
+}
+.camera-card[data-sabotage-type="planted-calm"] .camera-status-badge {
+  color: rgba(52, 211, 153, 0.9);
+}
+
+/* Delayed Frame — amber static, frozen feel */
+.camera-card[data-sabotage-type="delayed-frame"] {
+  border-color: rgba(251, 191, 36, 0.35);
+}
+.camera-card[data-sabotage-type="delayed-frame"] .camera-preview {
+  filter: sepia(0.3) contrast(0.9) brightness(0.92);
+}
+.camera-card[data-sabotage-type="delayed-frame"] .camera-preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(251, 191, 36, 0.04);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Blind Zone / Cable Cut — hard red border, full dark */
+.camera-card[data-sabotage-type="blind-zone"] {
+  border-color: rgba(220, 38, 38, 0.45);
+  background: rgba(220, 38, 38, 0.04);
+}
+.camera-card[data-sabotage-type="blind-zone"] .camera-preview {
+  filter: brightness(0.3) saturate(0);
+}
+
+/* Sabotage type label chip in camera meta */
+.camera-sabotage-type-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-left: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.camera-sabotage-type-chip.type-feed-loop    { border-color: rgba(96,165,250,0.4);  color: rgba(147,197,253,0.9); }
+.camera-sabotage-type-chip.type-planted-calm { border-color: rgba(52,211,153,0.4);  color: rgba(52,211,153,0.95); }
+.camera-sabotage-type-chip.type-delayed-frame{ border-color: rgba(251,191,36,0.4);  color: rgba(251,191,36,0.9); }
+.camera-sabotage-type-chip.type-blind-zone   { border-color: rgba(220,38,38,0.5);   color: rgba(248,113,113,1.0); }
+.camera-sabotage-type-chip.type-generic      { border-color: rgba(248,113,113,0.4); color: rgba(248,113,113,0.9); }
+
+/* ============================================================
+   SURVEILLANCE STATUS / TRUST DILEMMA
+   ============================================================ */
+
+.v26-surv-note {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  margin-top: 3px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  font-size: 9px;
+  color: rgba(100, 116, 139, 0.7);
+  font-style: italic;
+}
+
+.v26-surv-note.is-suspicious { color: rgba(251, 191, 36, 0.85); border-color: rgba(251, 191, 36, 0.2); }
+.v26-surv-note.is-compromised { color: rgba(248, 113, 113, 0.85); border-color: rgba(248, 113, 113, 0.2); }
+
+/* App-shell hook: surveillance compromise atmosphere */
+[data-surv-compromise="high"] .camera-grid .camera-card:not([data-cam-status="clear"]) {
+  box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.12);
+}
+
+/* ============================================================
+   RADIO INTERCEPTION BUTTON STRIP
+   ============================================================ */
+
+.scanner-intercept-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0 2px;
+  margin-top: 4px;
+}
+
+.radio-intercept-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(52, 211, 153, 0.07);
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  color: rgba(52, 211, 153, 0.85);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.radio-intercept-btn:hover:not(:disabled) {
+  background: rgba(52, 211, 153, 0.13);
+  border-color: rgba(52, 211, 153, 0.45);
+}
+
+.radio-intercept-btn:disabled,
+.radio-intercept-btn.is-used {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(100, 116, 139, 0.45);
+  cursor: not-allowed;
+}
+
+.radio-intercept-hint {
+  font-size: 9px;
+  color: rgba(100, 116, 139, 0.6);
+  font-style: italic;
+}
+
+/* ============================================================
+   UNKNOWN CALLER EVENT — atmospheric overlay accent
+   ============================================================ */
+
+.night-event-overlay-inner[data-event-id="unknown-caller"] {
+  border-left: 3px solid rgba(100, 116, 139, 0.5);
+}
+
+.night-event-overlay-inner[data-event-id="unknown-caller"][data-call-type="threat"] {
+  border-left-color: rgba(220, 38, 38, 0.6);
+  background: rgba(220, 38, 38, 0.03);
+}
+
+.night-event-overlay-inner[data-event-id="unknown-caller"][data-call-type="warning"] {
+  border-left-color: rgba(251, 191, 36, 0.5);
+}
+
+/* Static effect on call description */
+.v26-caller-description {
+  font-style: italic;
+  color: rgba(148, 163, 184, 0.9);
+  line-height: 1.55;
+  padding: 4px 0;
+  border-left: 2px solid rgba(100, 116, 139, 0.25);
+  padding-left: 8px;
+  margin: 4px 0;
+}
+
+/* ============================================================
+   SOCIAL MEMORY / REPUTATION ECHO
+   ============================================================ */
+
+.v26-social-rep-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+}
+
+.v26-social-rep-header {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(100, 116, 139, 0.6);
+  margin-bottom: 2px;
+}
+
+.v26-social-rep-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.v26-social-rep-bar-track {
+  flex: 1;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.v26-social-rep-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.v26-social-rep-bar-fill.is-harsh      { background: rgba(248, 113, 113, 0.65); }
+.v26-social-rep-bar-fill.is-balanced   { background: rgba(148, 163, 184, 0.5); }
+.v26-social-rep-bar-fill.is-fair       { background: rgba(52, 211, 153, 0.65); }
+
+.v26-social-rep-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 60px;
+  text-align: right;
+}
+
+.v26-social-rep-label.is-harsh    { color: rgba(248, 113, 113, 0.9); }
+.v26-social-rep-label.is-balanced { color: rgba(148, 163, 184, 0.8); }
+.v26-social-rep-label.is-fair     { color: rgba(52, 211, 153, 0.9); }
+
+.v26-social-rep-note {
+  font-size: 10px;
+  color: rgba(148, 163, 184, 0.75);
+  line-height: 1.4;
+}
+
+/* ============================================================
+   SURVEILLANCE HORROR ATMOSPHERE
+   Applied via app-shell classes / data attributes
+   ============================================================ */
+
+/* Rare event: camera feed feels wrong */
+.atmosphere-feed-doubt .camera-card[data-cam-status="clear"] .camera-preview::after {
+  opacity: 0.6;
+}
+
+/* Scanner feels compromised */
+.atmosphere-scanner-cold .scanner-feed-item {
+  opacity: 0.82;
+  filter: contrast(0.9);
+}
+
+/* Rear-lane atmospheric hint */
+.camera-card[data-cam-id="6"] .camera-preview,
+.camera-card[data-cam-id="rear"] .camera-preview {
+  /* Slightly darker baseline for rear exit camera */
+  filter: brightness(0.95) contrast(0.97);
+}
+
+/* Named presence — subtle atmosphere shift when they're in the queue */
+.guest-queue:has(.v26-named-presence-strip) {
+  border-color: rgba(192, 132, 252, 0.08);
+}
+
+/* ============================================================
+   REPORT LOG — Caller / Intercept section accent
+   ============================================================ */
+
+.report-section[data-section="caller"] .report-section-header {
+  border-left-color: rgba(100, 116, 139, 0.55);
+}
+
+.report-section[data-section="caller"] .report-section-title {
+  color: rgba(100, 116, 139, 0.9);
+}
+
+.report-section[data-section="intercept"] .report-section-header {
+  border-left-color: rgba(52, 211, 153, 0.5);
+}
+
+.report-section[data-section="intercept"] .report-section-title {
+  color: rgba(52, 211, 153, 0.85);
+}

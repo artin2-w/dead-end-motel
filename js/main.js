@@ -159,7 +159,8 @@ import {
   maybeGenerateReturningGuestVariant,
   markThreadOutcome,
   advanceStoryThreadsAfterNight,
-  buildActiveRunThreadHighlights
+  buildActiveRunThreadHighlights,
+  buildSocialMemoryNote
 } from './storyThreads.js';
 import {
   normalizeCarryoverState,
@@ -5159,6 +5160,10 @@ function buildRenderState() {
     onNightEventChoice: handleNightEventChoice,
     onRepairBlindCamera: repairBlindCamera,
     onTriggerZoneBlackout: triggerZoneBlackout,
+    onPerformRadioInterception: performRadioInterception,
+    radioInterceptionUsed: Boolean(state.radioInterceptionUsed),
+    socialMemoryNote: buildSocialMemoryNote(state),
+    unknownCallerHistory: Array.isArray(state.unknownCallerHistory) ? state.unknownCallerHistory : [],
     onHandleSpecialEncounter: handleOpenSpecialEncounter,
     onCloseSpecialEncounter: handleCloseSpecialEncounter,
     onSpecialEncounterChoice: handleSpecialEncounterChoice,
@@ -6226,38 +6231,81 @@ function triggerCameraSabotageEvent() {
   const clearCameras = (state.cameras || []).filter((cam) => !cam.blindMode);
   if (!clearCameras.length) return;
   const target = clearCameras[Math.floor(Math.random() * clearCameras.length)];
+
+  // v0.26: multiple sabotage types
+  const SABOTAGE_TYPES = [
+    {
+      type: 'feed-loop',
+      blindMode: 'sabotage',
+      status: 'Looping',
+      label: 'Feed Loop Detected',
+      desc: `The ${target.name} camera is replaying an earlier segment. The feed looks active but the scene is static — you can\'t trust what you\'re seeing.`,
+      repairLabel: 'Force-restart feed (−8 power)',
+      ignoreLabel: 'Watch anyway — may miss real movement'
+    },
+    {
+      type: 'planted-calm',
+      blindMode: 'sabotage',
+      status: 'False-Calm',
+      label: 'Planted Calm Scene',
+      desc: `The ${target.name} feed looks suspiciously clear. No movement, no anomaly — but the zone is active. Someone replaced or looped the clean frame.`,
+      repairLabel: 'Dispatch check — reset the feed (−8 power)',
+      ignoreLabel: 'Trust the feed — accept the risk'
+    },
+    {
+      type: 'blind-zone',
+      blindMode: 'sabotage',
+      status: 'Blind',
+      label: 'Cable Cut — Blind Zone',
+      desc: `The ${target.name} camera feed is gone entirely. Physical cut — not a software issue. Zone is completely dark until maintenance restores the line.`,
+      repairLabel: 'Emergency maintenance — restore line (−8 power)',
+      ignoreLabel: 'Accept blind zone for the rest of the shift'
+    },
+    {
+      type: 'delayed-frame',
+      blindMode: 'sabotage',
+      status: 'Delayed',
+      label: 'Delayed Frame Feed',
+      desc: `The ${target.name} camera is showing footage from 3–4 minutes ago. You\'re watching history, not now. Zone activity is invisible in real time.`,
+      repairLabel: 'Force-sync feed (−8 power)',
+      ignoreLabel: 'Use the delayed feed — limited intel only'
+    }
+  ];
+  const sab = SABOTAGE_TYPES[Math.floor(Math.random() * SABOTAGE_TYPES.length)];
+
   state.cameras = (state.cameras || []).map((cam) =>
-    cam.id === target.id ? { ...cam, blindMode: 'sabotage', status: 'Blocked' } : cam
+    cam.id === target.id ? { ...cam, blindMode: sab.blindMode, sabotageType: sab.type, status: sab.status } : cam
   );
   state.activeNightEvent = {
     id: 'camera-sabotage',
-    title: 'Camera Sabotage — ' + target.name + ' Feed Lost',
-    description: 'The ' + target.name + ' camera has been deliberately blinded. A hostile faction guest has cut your visibility in that zone. You can dispatch maintenance to restore it.',
-    severity: 'medium',
+    title: `Camera Sabotage — ${target.name}: ${sab.label}`,
+    description: sab.desc,
+    sabotageType: sab.type,
+    severity: sab.type === 'blind-zone' ? 'high' : 'medium',
     options: [
       {
         id: 'sabotage-repair',
-        label: 'Dispatch Maintenance — Restore feed',
+        label: sab.repairLabel,
         preview: '−8 power, camera restored',
-        description: 'Send a technician to restore the camera feed. Costs power and time.',
+        description: 'Restore the camera feed now.',
         note: 'Zone will be dark until maintenance arrives.'
       },
       {
         id: 'sabotage-ignore',
-        label: 'Leave it — Work blind for now',
-        preview: 'Camera stays dark until dawn',
-        description: 'Accept the blind zone. One less camera for the remainder of the shift.',
-        note: 'Zone becomes harder to monitor. Hostile activity there goes undetected.'
+        label: sab.ignoreLabel,
+        preview: sab.type === 'planted-calm' ? 'Feed stays — but is it real?' : 'Camera compromised for shift',
+        description: 'Accept the current state and continue.',
+        note: sab.type === 'planted-calm' ? 'You may be watching a false scene.' : 'Zone monitoring is compromised.'
       }
     ]
   };
   state.nightEventOverlayOpen = true;
   pushLiveAlert(state, {
     type: 'warning',
-    message: 'Camera sabotage: ' + target.name + ' feed cut by hostile faction. Investigate or work blind.',
+    message: `Camera sabotage: ${target.name} — ${sab.label}. Review and respond.`,
     dedupeKey: 'camera-sabotage-night-' + state.night
   });
-  state.logs.push('Camera sabotage: ' + target.name + ' deliberately blinded. A hostile occupant compromised your surveillance.');
+  state.logs.push(`Camera sabotage: ${target.name} — ${sab.label}. A hostile faction compromised your surveillance.`);
   renderAll();
 }
 
@@ -6388,6 +6436,172 @@ function handleBurnerPhoneChoice(choiceId) {
     });
   }
   if (progressShift('burner-response', { timeScale: 0.15, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+function triggerUnknownCallerEvent() {
+  const hasHostileRoom = (state.rooms || []).some((r) => r.occupied && Number(r.serviceState?.hostility || 0) >= 2);
+  const hasFactionGuest = (state.guests || []).some((g) => g.factionProfile?.id);
+  const dirtyPressure = Number(state.dirtyPressure || 0);
+  const pressure = state?.uiPressureLevel || 'calm';
+  const priorClean = Number(state?.socialReputation?.cleanHandlings || 0);
+  const priorHarsh = Number(state?.socialReputation?.harshHandlings || 0);
+  const nightNum = Number(state?.night || 1);
+
+  let callType = 'warning';
+  let callTitle = 'Unknown Caller — Warning Signal';
+  let callDesc = '"Something is off tonight. You don\'t need to know who I am to believe what I\'m saying: check the rear exit before midnight." Silence.';
+
+  if (dirtyPressure >= 3 || pressure === 'emergency') {
+    callType = 'threat';
+    callTitle = 'Unknown Caller — Direct Threat';
+    callDesc = '"You know what you\'ve been doing. Don\'t think we haven\'t noticed. Tonight is your last chance to make the right call." The line goes dead.';
+  } else if (hasFactionGuest) {
+    callType = 'bait';
+    callTitle = 'Unknown Caller — Suspicious Offer';
+    callDesc = '"One of your guests tonight isn\'t a guest. We can tell you which room, for a price. $80 — check the parking lot drop point." Click.';
+  } else if (hasHostileRoom) {
+    callType = 'misdirect';
+    callTitle = 'Unknown Caller — False Lead';
+    callDesc = '"You\'re watching the wrong zone. The real problem isn\'t where you think it is." Before you can ask, the line cuts.';
+  } else if (priorHarsh >= 2 && nightNum >= 2) {
+    callType = 'reference';
+    callTitle = 'Unknown Caller — References Prior Night';
+    callDesc = '"You turned away three people last time. Word spreads quickly in this area. Tonight, someone will push back." Dial tone.';
+  } else if (priorClean >= 3) {
+    callType = 'warning';
+    callTitle = 'Unknown Caller — Unusual Warning';
+    callDesc = '"You\'ve been doing fine. But what happened in Room 3 two nights ago is still unresolved. Someone is coming back for it." Click.';
+  }
+
+  const options = [
+    {
+      id: 'caller-log',
+      label: 'Log the contact — note the number',
+      preview: 'Logged. Pattern on record.',
+      description: 'Document the call. Adds to overnight surveillance record.',
+      note: 'No cost. May be referenced in dawn summary.'
+    },
+    {
+      id: 'caller-dismiss',
+      label: 'Dismiss — hang up',
+      preview: 'No effect',
+      description: 'Put it out of your mind. Could be nothing.',
+      note: 'Neutral. No cost either way.'
+    }
+  ];
+  if (callType === 'bait') {
+    options.push({
+      id: 'caller-comply-bait',
+      label: 'Check the parking lot drop point',
+      preview: '50% chance: +$80, +1 dirty pressure',
+      description: 'Follow the instruction. The money might be there — or you might be walking into something.',
+      note: 'Risk: dirty pressure increase. Partial odds.'
+    });
+  }
+
+  state.activeNightEvent = {
+    id: 'unknown-caller',
+    title: callTitle,
+    description: callDesc,
+    callType,
+    severity: callType === 'threat' ? 'high' : 'medium',
+    options
+  };
+  state.nightEventOverlayOpen = true;
+  state.logs.push(`Unknown caller contact: ${callTitle.replace('Unknown Caller — ', '').toLowerCase()}.`);
+  pushLiveAlert(state, {
+    type: callType === 'threat' ? 'danger' : 'warning',
+    message: `Unknown caller made contact. ${callType === 'threat' ? 'Threatening tone.' : 'Review the message.'}`,
+    dedupeKey: 'unknown-caller-night-' + state.night
+  });
+  renderAll();
+}
+
+function handleUnknownCallerChoice(choiceId) {
+  state.nightEventOverlayOpen = false;
+  const callerEvent = state.activeNightEvent;
+  state.activeNightEvent = null;
+  const callType = callerEvent?.callType || 'warning';
+
+  if (choiceId === 'caller-log') {
+    state.logs.push('Unknown caller contact logged. Pattern added to surveillance record.');
+    state.unknownCallerLogged = true;
+    pushLiveAlert(state, { type: 'info', message: 'Anonymous contact logged. Pattern on record.', dedupeKey: 'caller-logged' });
+  } else if (choiceId === 'caller-dismiss') {
+    state.logs.push('Unknown caller dismissed. No action taken.');
+    pushLiveAlert(state, { type: 'info', message: 'Call dismissed.', dedupeKey: 'caller-dismissed' });
+  } else if (choiceId === 'caller-comply-bait') {
+    if (Math.random() < 0.5) {
+      state.money = (state.money || 0) + 80;
+      state.dirtyPressure = Math.min(10, (state.dirtyPressure || 0) + 1);
+      state.logs.push('Parking lot drop point found. +$80. Dirty pressure increased. This will be noted.');
+      pushLiveAlert(state, { type: 'warning', message: '+$80 from anonymous drop. Dirty pressure up.', dedupeKey: 'caller-bait-success' });
+    } else {
+      state.logs.push('Parking lot empty. No money. No one there. The call was misdirection.');
+      pushLiveAlert(state, { type: 'info', message: 'Lot empty. Caller was misdirecting.', dedupeKey: 'caller-bait-fail' });
+    }
+  }
+
+  if (!state.unknownCallerHistory) state.unknownCallerHistory = [];
+  state.unknownCallerHistory.push({ night: state.night, callType, choice: choiceId });
+
+  if (progressShift('unknown-caller-response', { timeScale: 0.15, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+function performRadioInterception() {
+  onMeaningfulAction();
+  audioController.playUiClick();
+  if (state.radioInterceptionUsed) {
+    pushLiveAlert(state, { type: 'warning', message: 'Radio interception already used this shift.', dedupeKey: 'intercept-used' });
+    renderAll();
+    return;
+  }
+  if (state.activeNightEvent) {
+    pushLiveAlert(state, { type: 'warning', message: 'Resolve the active event before intercepting.', dedupeKey: 'intercept-busy' });
+    renderAll();
+    return;
+  }
+  if ((state.power || 0) < 5) {
+    pushLiveAlert(state, { type: 'warning', message: 'Insufficient power for radio interception (−5 required).', dedupeKey: 'intercept-nopow' });
+    renderAll();
+    return;
+  }
+  state.power = Math.max(0, (state.power || 100) - 5);
+  state.radioInterceptionUsed = true;
+
+  const hasFactionGuest = (state.guests || []).some((g) => g.factionProfile?.id);
+  const pressure = state?.uiPressureLevel || 'calm';
+  const scannerCount = Array.isArray(state.localScannerFeed) ? state.localScannerFeed.length : 0;
+  const successChance = Math.max(0.3, Math.min(0.82,
+    0.48 + (hasFactionGuest ? 0.14 : 0) + (['tense','dire','emergency'].includes(pressure) ? 0.1 : 0) + (scannerCount >= 3 ? 0.08 : 0)
+  ));
+
+  const TRANSMISSIONS = [
+    { type: 'faction', text: 'Partial intercept: "...confirmed in that room... rear exit... after 2 AM..."', impact: 'warning' },
+    { type: 'faction', text: 'Partial intercept: "...watcher filed report... management watching lot... move now..."', impact: 'warning' },
+    { type: 'misdirect', text: 'Partial intercept: "...tell them nothing changed... if they check cam 3 just stay calm..."', impact: 'warning' },
+    { type: 'tip', text: 'Partial intercept: "...second car in lot is moving too early... they\'re not waiting for the contact..."', impact: 'info' },
+    { type: 'threat', text: 'Partial intercept: "...night manager is checking files. Problem. Handle it quietly."', impact: 'danger' },
+    { type: 'caller', text: 'Partial intercept: "...they don\'t know what we left in room 6. Keep them busy at the desk."', impact: 'warning' },
+    { type: 'faction', text: 'Partial intercept: "...third return this week... motel doesn\'t recognize the pattern yet..."', impact: 'info' }
+  ];
+  const t = TRANSMISSIONS[Math.floor(Math.random() * TRANSMISSIONS.length)];
+
+  if (Math.random() < successChance) {
+    state.logs.push(`Radio intercept (−5 power): ${t.text}`);
+    pushLiveAlert(state, {
+      type: t.impact,
+      message: `Intercept recovered: ${t.text}`,
+      dedupeKey: 'radio-intercept-' + state.night
+    });
+  } else {
+    state.logs.push('Radio intercept (−5 power): heavy static — no usable signal recovered.');
+    pushLiveAlert(state, { type: 'info', message: 'Radio intercept: static only. −5 power consumed.', dedupeKey: 'radio-intercept-fail-' + state.night });
+  }
+
+  if (progressShift('radio-intercept', { timeScale: 0.2, skipPassiveDrain: true })) return;
   renderAll();
 }
 
@@ -6670,6 +6884,22 @@ function progressShift(actionKey, options = {}) {
     if (elapsed >= 180 && dirty >= 2 && hasHostileRoom && Math.random() < 0.04) {
       state.cameraSabotageTriggered = true;
       triggerCameraSabotageEvent();
+      return false;
+    }
+  }
+
+  // Unknown caller — rare, context-aware, once per night
+  if (!state.unknownCallerFired && !state.activeNightEvent) {
+    const _elapsed = Number(state.shiftElapsedMinutes || 0);
+    const _hasFaction = (state.guests || []).some((g) => g.factionProfile?.id);
+    const _hasHostile = (state.rooms || []).some((r) => r.occupied && Number(r.serviceState?.hostility || 0) >= 2);
+    const _pres = state?.uiPressureLevel || 'calm';
+    const _callerChance = Math.max(0.01, Math.min(0.055,
+      0.018 + (_hasFaction ? 0.01 : 0) + (_hasHostile ? 0.008 : 0) + (_pres === 'dire' || _pres === 'emergency' ? 0.012 : 0)
+    ));
+    if (_elapsed >= 120 && _elapsed < 440 && Math.random() < _callerChance) {
+      state.unknownCallerFired = true;
+      triggerUnknownCallerEvent();
       return false;
     }
   }
@@ -8028,6 +8258,10 @@ function handleNightEventChoice(optionId) {
     handleBurnerPhoneChoice(optionId);
     return;
   }
+  if (activeEventId === 'unknown-caller') {
+    handleUnknownCallerChoice(optionId);
+    return;
+  }
 
   const actionKey = `night-event-choice-${activeEventId}`;
   if (!acquireActionLock(actionKey)) return;
@@ -9253,6 +9487,7 @@ function bindEvents() {
   document.getElementById('back-menu-btn').addEventListener('click', moveToMainMenuSafely);
   document.getElementById('run-ending-menu-btn').addEventListener('click', moveToMainMenuSafely);
   document.getElementById('run-ending-new-run-btn').addEventListener('click', startFreshCampaignRun);
+  document.getElementById('radio-intercept-btn')?.addEventListener('click', performRadioInterception);
   document.getElementById('restart-night-btn').addEventListener('click', restartCurrentNight);
   document.getElementById('restart-campaign-btn').addEventListener('click', restartCampaignFromFailure);
   document.getElementById('failure-menu-btn').addEventListener('click', moveToMainMenuSafely);
