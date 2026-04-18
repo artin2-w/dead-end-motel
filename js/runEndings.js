@@ -98,6 +98,24 @@ function evaluateCategory(snapshot) {
   const offBookStays = n(snapshot.offBookStays, 0);
   const deadDrops = n(snapshot.deadDrops, 0);
   const shadowRep = n(snapshot.shadowRep, 0);
+  const staffCompromised = Boolean(snapshot.staffCompromised);
+  const mutinyFired = Boolean(snapshot.mutinyFired);
+  const staffDismissed = Boolean(snapshot.staffDismissed);
+  const avgStaffMorale = n(snapshot.avgStaffMorale, 0.56);
+
+  // v0.29 staff endings — checked before v0.28 dirty endings
+  if (staffDismissed && !staffCompromised && rep >= 46) {
+    return { key: 'last-honest-shift', title: 'Last Honest Shift', subtitle: 'The Rot Was Found and Removed' };
+  }
+  if (mutinyFired && avgStaffMorale < 0.30 && rep >= 36) {
+    return { key: 'held-together-by-fear', title: 'Held Together by Fear', subtitle: 'The Team Stayed — At a Cost' };
+  }
+  if (avgStaffMorale < 0.25 && staffCompromised && rep < 44) {
+    return { key: 'broken-team', title: 'Broken Team', subtitle: 'The Staff Fractured Before the Shift Ended' };
+  }
+  if (mutinyFired && dirtyScore < 3 && rep >= 42) {
+    return { key: 'bought-loyalty', title: 'Bought Loyalty (Staff)', subtitle: 'The Crisis Was Resolved With a Payout' };
+  }
 
   // v0.28 dirty endings — checked before v0.27
   if (offBookStays >= 2 && shadowRep >= 2 && rep >= 38) {
@@ -177,6 +195,10 @@ function evaluateCategory(snapshot) {
 
 function resolveEndingFamilyFromKey(key = '') {
   const value = String(key || '').toLowerCase();
+  if (value.includes('last-honest-shift')) return 'stable';
+  if (value.includes('held-together-by-fear')) return 'fragile';
+  if (value.includes('broken-team')) return 'hostile';
+  if (value.includes('bought-loyalty') && value.includes('staff')) return 'cold';
   if (value.includes('protector-in-dark')) return 'stable';
   if (value.includes('motel-of-secrets') || value.includes('bought-quiet')) return 'cold';
   if (value.includes('compromised-operator')) return 'hostile';
@@ -245,6 +267,10 @@ function evaluateGrade(snapshot) {
   score -= Math.min(12, snapshot.policyBreaks * 2);
   score += Math.min(10, snapshot.cleanResolutions);
   score += snapshot.finaleSurvived ? 6 : 0;
+  // v0.29 staff factors
+  score -= Boolean(snapshot.mutinyFired) && n(snapshot.avgStaffMorale, 0.56) < 0.30 ? 4 : 0;
+  score += Boolean(snapshot.staffDismissed) && !Boolean(snapshot.staffCompromised) ? 3 : 0;
+  score -= Boolean(snapshot.staffCompromised) && !Boolean(snapshot.staffDismissed) ? 3 : 0;
   // v0.28 dirty score factors
   score -= Math.min(6, n(snapshot.offBookStays, 0) * 2);
   score += Math.min(3, n(snapshot.deadDrops, 0));
@@ -302,6 +328,15 @@ export function buildRunEndingPackage(state) {
     finalePerformanceLabel: String(state?.finalePerformance?.label || ''),
     finalePerformanceLine: String(state?.finalePerformance?.line || ''),
     endingMood: Array.isArray(state?.summaryIdentityLines) ? String(state.summaryIdentityLines[0] || '') : '',
+    // v0.29
+    staffCompromised: Boolean(state?.staffIntel?.compromisedId || state?.staffIntel?.dismissedId),
+    mutinyFired: Boolean(state?.staffIntel?.mutinyFired),
+    staffDismissed: Boolean(state?.staffIntel?.dismissedId),
+    avgStaffMorale: (() => {
+      const roster = Array.isArray(state?.dayShift?.staff?.roster) ? state.dayShift.staff.roster : [];
+      const active = roster.filter(m => m.active !== false);
+      return active.length ? active.reduce((s, m) => s + Number(m.morale || 0.56), 0) / active.length : 0.56;
+    })(),
     // v0.28
     dirtyScore: Math.min(10, n(dirtyLedger.totalDirtyMoney, 0) / 20),
     offBookStays: n(dirtyLedger.offBookStays, 0),
@@ -398,7 +433,11 @@ export function buildRunEndingPackage(state) {
     // v0.28 tags
     snapshot.totalDirtyMoney >= 100 ? 'Off-Book Cash' : '',
     snapshot.shadowRep >= 4 ? 'Network Standing' : '',
-    snapshot.offBookStays >= 2 ? 'Unlogged Stays' : ''
+    snapshot.offBookStays >= 2 ? 'Unlogged Stays' : '',
+    // v0.29 tags
+    snapshot.staffCompromised && !snapshot.staffDismissed ? 'Compromised Operator' : '',
+    snapshot.staffDismissed && !snapshot.staffCompromised ? 'Last Honest Shift' : '',
+    snapshot.mutinyFired && snapshot.avgStaffMorale < 0.30 ? 'Fear Management' : ''
   ].filter(Boolean).slice(0, 6);
 
   return {
@@ -429,6 +468,16 @@ export function buildRunEndingPackage(state) {
       unresolved: snapshot.unresolved,
       milestoneNights: n(campaign?.milestoneNightsSurvived, 0)
     },
+    // v0.29
+    staffLine: snapshot.staffCompromised
+      ? `Staff: ${snapshot.staffDismissed ? 'compromised member identified and dismissed' : 'compromised member active at close'}.${snapshot.mutinyFired ? ' Mutiny occurred this run.' : ''}`
+      : snapshot.mutinyFired
+        ? 'Staff: mutiny event occurred and was resolved.'
+        : '',
+    staffCompromised: snapshot.staffCompromised,
+    staffDismissed: snapshot.staffDismissed,
+    mutinyFired: snapshot.mutinyFired,
+    avgStaffMorale: snapshot.avgStaffMorale,
     // v0.28
     dirtyLine: dirtyLine || '',
     dirtyScore: snapshot.dirtyScore,

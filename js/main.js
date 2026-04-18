@@ -165,7 +165,8 @@ import {
   checkMysteryFragmentUnlock,
   buildEvidenceLockerSummary,
   buildDirtyLedgerSummary,
-  buildShadowRepNote
+  buildShadowRepNote,
+  buildStaffIntelSummary
 } from './storyThreads.js';
 import {
   normalizeCarryoverState,
@@ -5178,6 +5179,10 @@ function buildRenderState() {
     dirtyLedgerSummary: buildDirtyLedgerSummary(state),
     shadowRepNote: buildShadowRepNote(state),
     bleedingWalkInState: state.bleedingWalkInState || {},
+    staffIntelSummary: buildStaffIntelSummary(state),
+    staffParanoiaModel: buildStaffParanoiaModel(state),
+    onPayStaffBonus: payStaffBonus,
+    onDismissSuspectedStaff: dismissSuspectedStaff,
     onHandleSpecialEncounter: handleOpenSpecialEncounter,
     onCloseSpecialEncounter: handleCloseSpecialEncounter,
     onSpecialEncounterChoice: handleSpecialEncounterChoice,
@@ -7258,6 +7263,471 @@ function handleVendingDeadDropChoice(choiceId) {
 
 // ─── end v0.28 ────────────────────────────────────────────────
 
+// ─── v0.29 Staff Paranoia / Traitor / Mutiny ─────────────────
+
+function normalizeStaffV29(targetState = state) {
+  if (!targetState || typeof targetState !== 'object') return;
+  if (!targetState.staffIntel || typeof targetState.staffIntel !== 'object') {
+    targetState.staffIntel = {
+      compromisedId: null,
+      compromisedNight: 0,
+      compromisedSource: '',
+      mutinyFired: false,
+      insideLeakFired: false,
+      dismissedId: null,
+      suspicionHints: []
+    };
+  }
+  if (!Array.isArray(targetState.staffIntel.suspicionHints)) {
+    targetState.staffIntel.suspicionHints = [];
+  }
+  const roster = Array.isArray(targetState?.dayShift?.staff?.roster)
+    ? targetState.dayShift.staff.roster : [];
+  roster.forEach((member) => {
+    if (typeof member.fear !== 'number') member.fear = 0;
+    if (typeof member.loyalty !== 'number') member.loyalty = 0.70;
+    if (typeof member.corrupted !== 'boolean') member.corrupted = false;
+    if (typeof member.suspicionScore !== 'number') member.suspicionScore = 0;
+    if (typeof member.badOutcomeCount !== 'number') member.badOutcomeCount = 0;
+  });
+}
+
+function applyStaffFearDelta(role, delta) {
+  normalizeStaffV29();
+  const roster = Array.isArray(state?.dayShift?.staff?.roster) ? state.dayShift.staff.roster : [];
+  const target = roster.find(
+    (m) => String(getStaffCatalogEntry(m.id)?.role || '').toLowerCase() === String(role || '').toLowerCase() && m.active
+  );
+  if (!target) return;
+  target.fear = Math.max(0, Math.min(1, Number(target.fear || 0) + Number(delta || 0)));
+}
+
+function applyStaffLoyaltyDelta(role, delta) {
+  normalizeStaffV29();
+  const roster = Array.isArray(state?.dayShift?.staff?.roster) ? state.dayShift.staff.roster : [];
+  const target = roster.find(
+    (m) => String(getStaffCatalogEntry(m.id)?.role || '').toLowerCase() === String(role || '').toLowerCase() && m.active
+  );
+  if (!target) return;
+  target.loyalty = Math.max(0, Math.min(1, Number(target.loyalty || 0.70) + Number(delta || 0)));
+}
+
+function getCompromisedStaff(targetState = state) {
+  normalizeStaffV29(targetState);
+  const id = targetState.staffIntel?.compromisedId;
+  if (!id) return null;
+  return (targetState?.dayShift?.staff?.roster || []).find((m) => m.id === id) || null;
+}
+
+function maybeCompromiseStaff(targetState = state) {
+  normalizeStaffV29(targetState);
+  if (targetState.staffIntel.compromisedId || targetState.staffIntel.dismissedId) return;
+  const night = Math.max(1, Number(targetState.night || 1));
+  if (night < 2) return;
+
+  const dirtyPressure = Number(targetState.dirtyPressure || 0);
+  const dirtyTotal = Number(targetState.dirtyLedger?.totalDirtyMoney || 0);
+  const factionGuestCount = (targetState.guests || []).filter((g) => g.factionProfile?.id).length;
+  const nemesisActive = Boolean(targetState.nemesis?.active);
+  const roster = Array.isArray(targetState?.dayShift?.staff?.roster) ? targetState.dayShift.staff.roster : [];
+  const activeRoster = roster.filter((m) => m.active);
+  const avgMorale = activeRoster.length
+    ? activeRoster.reduce((s, m) => s + Number(m.morale || 0.56), 0) / activeRoster.length : 0.56;
+
+  const conditions = [
+    dirtyPressure >= 4 || dirtyTotal >= 80,
+    factionGuestCount >= 2,
+    nemesisActive && night >= 3,
+    avgMorale < 0.28
+  ];
+  const conditionsMet = conditions.filter(Boolean).length;
+  if (conditionsMet < 1) return;
+
+  const baseChance = 0.10 + conditionsMet * 0.05;
+  if (Math.random() > baseChance) return;
+
+  const eligible = activeRoster.filter((m) => !m.corrupted && Number(m.loyalty || 0.70) < 0.80);
+  if (!eligible.length) return;
+  eligible.sort((a, b) => Number(a.loyalty || 0.70) - Number(b.loyalty || 0.70));
+  const target = eligible[0];
+
+  target.corrupted = true;
+  const source = (dirtyPressure >= 4 || dirtyTotal >= 80) ? 'dirty'
+    : factionGuestCount >= 2 ? 'faction'
+    : nemesisActive ? 'nemesis'
+    : 'morale';
+
+  targetState.staffIntel.compromisedId = target.id;
+  targetState.staffIntel.compromisedNight = night;
+  targetState.staffIntel.compromisedSource = source;
+
+  const base = getStaffCatalogEntry(target.id);
+  const name = base?.name || 'staff';
+  const role = base?.role || 'Staff';
+  targetState.logs.push(`Internal irregularity: ${name} (${role}) — cross-check log shows dispatch inconsistency pattern.`);
+  pushLiveAlert(targetState, {
+    type: 'warning',
+    message: `Staff irregularity flagged: ${name}'s recent dispatch logs don't fully add up.`,
+    dedupeKey: `staff-compromised-n${night}`
+  });
+}
+
+function buildStaffParanoiaModel(targetState = state) {
+  normalizeStaffV29(targetState);
+  const roster = Array.isArray(targetState?.dayShift?.staff?.roster) ? targetState.dayShift.staff.roster : [];
+  const active = roster.filter((m) => m.active);
+  const avgMorale = active.length
+    ? active.reduce((s, m) => s + Number(m.morale || 0.56), 0) / active.length : 0.56;
+  const avgFear = active.length
+    ? active.reduce((s, m) => s + Number(m.fear || 0), 0) / active.length : 0;
+  const avgLoyalty = active.length
+    ? active.reduce((s, m) => s + Number(m.loyalty || 0.70), 0) / active.length : 0.70;
+  const compId = targetState.staffIntel?.compromisedId;
+  const dismissedId = targetState.staffIntel?.dismissedId;
+  const mutinyFired = Boolean(targetState.staffIntel?.mutinyFired);
+
+  const members = active.map((m) => {
+    const base = getStaffCatalogEntry(m.id);
+    const effectiveRel = clampStaffGauge(
+      Number(base?.reliability || 0.65)
+      - Number(m.fatigue || 0) * Number(base?.fatigueBias || 0.15)
+      + (Number(m.morale || 0.56) - 0.5) * 0.18
+      + (Number(m.loyalty || 0.70) - 0.5) * 0.10
+      - Number(m.fear || 0) * 0.08,
+      0.15, 0.95
+    );
+    const suspicious = compId === m.id;
+    const moraleClass = Number(m.morale || 0.56) < 0.30 ? 'suspect'
+      : Number(m.morale || 0.56) < 0.45 ? 'strained' : 'reliable';
+    return {
+      id: m.id,
+      name: base?.name || 'Unknown',
+      role: base?.role || 'Staff',
+      morale: Math.round(Number(m.morale || 0.56) * 100),
+      fear: Math.round(Number(m.fear || 0) * 100),
+      loyalty: Math.round(Number(m.loyalty || 0.70) * 100),
+      effectiveReliability: Math.round(effectiveRel * 100),
+      suspicious,
+      suspicionScore: Number(m.suspicionScore || 0),
+      moraleClass,
+      badOutcomeCount: Number(m.badOutcomeCount || 0)
+    };
+  });
+
+  const avgMoralePct = Math.round(avgMorale * 100);
+  const moodLabel = avgMoralePct < 28 ? 'Critical'
+    : avgMoralePct < 40 ? 'Strained'
+    : avgMoralePct < 60 ? 'Tense'
+    : 'Stable';
+  const moodClass = avgMoralePct < 28 ? 'is-suspect'
+    : avgMoralePct < 42 ? 'is-strained'
+    : 'is-reliable';
+
+  return {
+    members,
+    avgMorale: avgMoralePct,
+    avgFear: Math.round(avgFear * 100),
+    avgLoyalty: Math.round(avgLoyalty * 100),
+    moodLabel,
+    moodClass,
+    hasSuspect: Boolean(compId),
+    hasDismissed: Boolean(dismissedId),
+    mutinyFired,
+    compromisedId: compId || null,
+    dismissedId: dismissedId || null
+  };
+}
+
+// ── Staff Mutiny / Refusal Event ──────────────
+
+function triggerStaffMutinyEvent() {
+  if (state.activeNightEvent) return;
+  normalizeStaffV29();
+  if (state.staffIntel.mutinyFired) return;
+  state.staffIntel.mutinyFired = true;
+
+  const roster = Array.isArray(state?.dayShift?.staff?.roster) ? state.dayShift.staff.roster : [];
+  const active = roster.filter((m) => m.active).slice();
+  active.sort((a, b) => Number(a.morale || 0.56) - Number(b.morale || 0.56));
+  const worstMember = active[0];
+  const base = worstMember ? getStaffCatalogEntry(worstMember.id) : null;
+  const spokesperson = base?.name || 'A staff member';
+  const role = base?.role || 'Staff';
+
+  state.activeNightEvent = {
+    id: 'staff-mutiny',
+    title: 'Staff Walkout Warning',
+    description: `${spokesperson} (${role}) stopped at the desk. Eyes down. "We need to talk about tonight. The pressure has been too high for too long. If things don't change right now, we're not going back out there." The hallway behind them is quiet. You can hear it in their voice — they mean it.`,
+    severity: 'high',
+    options: [
+      {
+        id: 'mutiny-pay-bonus',
+        label: 'Pay the team a shift bonus — $30',
+        preview: '+0.12 morale all active staff, −$30',
+        description: 'Pull the emergency wage float. It buys goodwill and gets them moving again.',
+        note: 'Costs $30. Morale and loyalty improve. Immediate resolution.'
+      },
+      {
+        id: 'mutiny-stand-down',
+        label: 'Stand them down — let them recover an hour',
+        preview: 'Staff recover, morale +0.08, moderate pressure gap',
+        description: 'Let them step back. The motel covers itself. They come back steadier.',
+        note: 'No cost. Morale improves. Moderate pressure window during gap.'
+      },
+      {
+        id: 'mutiny-force-deployment',
+        label: 'Order them back — not optional',
+        preview: 'Morale −0.12, loyalty −0.10, fear +0.10 — they comply but remember',
+        description: 'You need the motel covered. They go. But this will leave a mark on the team.',
+        note: 'Risk: morale and loyalty drop. Works short-term only.'
+      },
+      {
+        id: 'mutiny-negotiate',
+        label: 'Listen and negotiate — find a middle ground',
+        preview: 'Morale +0.05, loyalty +0.05, no cost',
+        description: 'Hear them out. Acknowledge what tonight has been. Work out something fair.',
+        note: 'No money cost. Partial recovery. Builds longer-term team loyalty.'
+      }
+    ]
+  };
+  state.nightEventOverlayOpen = true;
+  state.logs.push(`Staff walkout warning: ${spokesperson} (${role}) threatened to refuse deployment — team morale critical.`);
+  pushLiveAlert(state, {
+    type: 'danger',
+    message: `Staff refusal: ${spokesperson} is refusing to deploy. Respond immediately.`,
+    dedupeKey: `staff-mutiny-${state.night}`
+  });
+  audioController.playEmergencyPulse('high');
+  renderAll();
+}
+
+function handleStaffMutinyChoice(choiceId) {
+  state.nightEventOverlayOpen = false;
+  state.activeNightEvent = null;
+  normalizeStaffV29();
+
+  const roster = Array.isArray(state?.dayShift?.staff?.roster) ? state.dayShift.staff.roster : [];
+  const active = roster.filter((m) => m.active);
+
+  if (choiceId === 'mutiny-pay-bonus') {
+    const cost = 30;
+    if ((state.money || 0) >= cost) {
+      state.money = Math.max(0, state.money - cost);
+      addBudgetCost('emergencies', cost, 'Emergency staff bonus — mutiny prevented.');
+    }
+    active.forEach((m) => {
+      m.morale = clampStaffGauge(Number(m.morale || 0.56) + 0.12, 0.15, 1);
+      m.loyalty = Math.min(1, Number(m.loyalty || 0.70) + 0.06);
+      m.fear = Math.max(0, Number(m.fear || 0) - 0.06);
+    });
+    addEvidenceItem('staff-loyalty-record', state.night);
+    state.logs.push(`Staff refusal resolved: emergency bonus paid. Team morale stabilized. −$${cost}.`);
+    pushLiveAlert(state, { type: 'info', message: `Staff bonus paid. Mutiny resolved. −$${cost}.`, dedupeKey: 'mutiny-paid' });
+    applyIdentityImpact({ doctrine: { compassion: 2, stability: 1 }, factions: { staff: 2, ownership: -1 }, reason: 'staff mutiny resolved with bonus' });
+
+  } else if (choiceId === 'mutiny-stand-down') {
+    active.forEach((m) => {
+      m.morale = clampStaffGauge(Number(m.morale || 0.56) + 0.08, 0.15, 1);
+      m.fear = Math.max(0, Number(m.fear || 0) - 0.08);
+    });
+    state.logs.push('Staff stood down for recovery: team pressure relieved. Motel runs lighter during the window.');
+    pushLiveAlert(state, { type: 'info', message: 'Staff stood down. Morale recovering. Watch for pressure gaps.', dedupeKey: 'mutiny-standdown' });
+    applyIdentityImpact({ doctrine: { compassion: 1, stability: -1 }, factions: { staff: 1 }, reason: 'staff stood down after mutiny warning' });
+
+  } else if (choiceId === 'mutiny-force-deployment') {
+    active.forEach((m) => {
+      m.morale = clampStaffGauge(Number(m.morale || 0.56) - 0.12, 0.15, 1);
+      m.loyalty = Math.max(0, Number(m.loyalty || 0.70) - 0.10);
+      m.fear = Math.min(1, Number(m.fear || 0) + 0.10);
+    });
+    state.logs.push('Staff forced back to work: compliance obtained under pressure. Team condition now fragile and resentful.');
+    pushLiveAlert(state, { type: 'warning', message: 'Staff forced back. Morale and loyalty dropped. Team is now fragile.', dedupeKey: 'mutiny-forced' });
+    applyIdentityImpact({ doctrine: { control: 2, force: 1, compassion: -2 }, factions: { staff: -2, ownership: 1 }, reason: 'forced staff back after mutiny warning' });
+
+  } else if (choiceId === 'mutiny-negotiate') {
+    active.forEach((m) => {
+      m.morale = clampStaffGauge(Number(m.morale || 0.56) + 0.05, 0.15, 1);
+      m.loyalty = Math.min(1, Number(m.loyalty || 0.70) + 0.05);
+      m.fear = Math.max(0, Number(m.fear || 0) - 0.04);
+    });
+    state.logs.push('Staff mutiny negotiated: honest conversation held. Night acknowledged. Partial morale recovery.');
+    pushLiveAlert(state, { type: 'info', message: 'Negotiated with staff. Partial morale recovery. Long-term loyalty improved.', dedupeKey: 'mutiny-negotiated' });
+    applyIdentityImpact({ doctrine: { compassion: 2, stability: 1 }, factions: { staff: 1 }, reason: 'staff mutiny resolved through negotiation' });
+  }
+
+  if (progressShift('staff-response', { timeScale: 0.2, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+// ── Inside Leak / Internal Breach Event ───────
+
+function triggerInsideLeakEvent() {
+  if (state.activeNightEvent) return;
+  normalizeStaffV29();
+  if (state.staffIntel.insideLeakFired) return;
+  const comp = getCompromisedStaff();
+  if (!comp) return;
+  state.staffIntel.insideLeakFired = true;
+
+  const base = getStaffCatalogEntry(comp.id);
+  const name = base?.name || 'a staff member';
+  const role = base?.role || 'Staff';
+
+  state.activeNightEvent = {
+    id: 'inside-leak',
+    title: 'Inside Access Suspected',
+    description: `Camera 2 caught ${name} (${role}) at the rear hallway door at 1:40 AM — no dispatch was logged. Then you notice: a folded note tucked under Room 4. The scanner caught a transmission fragment that matches the desk log. Someone on your team may be feeding information outside.`,
+    severity: 'high',
+    suspectId: comp.id,
+    suspectName: name,
+    options: [
+      {
+        id: 'leak-confront',
+        label: `Confront ${name} directly — right now`,
+        preview: '60% confirm and remove, 40% denial — suspicion either cleared or confirmed',
+        description: 'Pull them aside. Ask directly. Their reaction tells you something either way.',
+        note: '60%: confession — dismissed, reliability gap, +2 rep. 40%: denial, suspicion stays.'
+      },
+      {
+        id: 'leak-ignore',
+        label: 'Ignore it — too disruptive to act tonight',
+        preview: 'Suspicion persists, compromised staff continues operating, bad outcomes continue',
+        description: 'You need everyone on shift. Deal with it after dawn.',
+        note: 'Risk: irregular outcomes continue. Suspicion compounds over nights.'
+      },
+      {
+        id: 'leak-report',
+        label: 'Report it to ownership — their call to make',
+        preview: '+3 reputation, +1 ownership faction, staff morale −0.08',
+        description: 'You escalate through official channels. Ownership notices the transparency. The team atmosphere sours.',
+        note: 'Clears your liability. Morale cost. Ownership trust improves.'
+      }
+    ]
+  };
+  state.nightEventOverlayOpen = true;
+  state.logs.push(`Inside access suspected: ${name} (${role}) logged at rear door off-shift — no dispatch record. Possible internal leak.`);
+  pushLiveAlert(state, {
+    type: 'danger',
+    message: `Inside job suspected: ${name} may be feeding information outside the motel.`,
+    dedupeKey: `inside-leak-${state.night}`
+  });
+  addEvidenceItem('inside-job-note', state.night);
+  audioController.playEmergencyPulse('high');
+  renderAll();
+}
+
+function handleInsideLeakChoice(choiceId) {
+  state.nightEventOverlayOpen = false;
+  const event = state.activeNightEvent;
+  state.activeNightEvent = null;
+  normalizeStaffV29();
+
+  const suspectId = event?.suspectId || state.staffIntel.compromisedId;
+  const suspectName = event?.suspectName || 'the staff member';
+  const comp = suspectId ? (state?.dayShift?.staff?.roster || []).find((m) => m.id === suspectId) : null;
+
+  if (choiceId === 'leak-confront') {
+    const success = Math.random() < 0.60;
+    if (success) {
+      if (comp) { comp.active = false; comp.corrupted = false; }
+      state.staffIntel.dismissedId = suspectId;
+      state.staffIntel.compromisedId = null;
+      state.reputation = Math.max(0, (state.reputation || 50) + 2);
+      addEvidenceItem('staff-loyalty-record', state.night);
+      addEvidenceItem('overwritten-dispatch-note', state.night);
+      state.logs.push(`Confrontation successful: ${suspectName} confessed and was removed from shift. +2 reputation. Reliability gap until dawn.`);
+      pushLiveAlert(state, { type: 'warning', message: `${suspectName} removed. Leak contained. Reliability reduced for the night.`, dedupeKey: 'leak-confronted-success' });
+      applyIdentityImpact({ doctrine: { control: 2, stability: 1 }, factions: { staff: -1, ownership: 2 }, reason: 'confronted and removed inside leak' });
+    } else {
+      if (comp) comp.suspicionScore = Math.min(10, (comp.suspicionScore || 0) + 2);
+      state.logs.push(`Confrontation inconclusive: ${suspectName} denied involvement. Suspicion remains. They know you are watching.`);
+      pushLiveAlert(state, { type: 'warning', message: `${suspectName} denied it. Suspicion persists.`, dedupeKey: 'leak-confronted-fail' });
+      applyIdentityImpact({ doctrine: { control: 1 }, factions: {}, reason: 'inside leak confrontation inconclusive' });
+    }
+
+  } else if (choiceId === 'leak-ignore') {
+    if (comp) comp.suspicionScore = Math.min(10, (comp.suspicionScore || 0) + 2);
+    state.logs.push(`Inside access deferred: ${suspectName} remains on shift. Decision deferred until dawn review.`);
+    pushLiveAlert(state, { type: 'info', message: 'Leak ignored for now. Compromised staff continues on shift.', dedupeKey: 'leak-ignored' });
+
+  } else if (choiceId === 'leak-report') {
+    state.reputation = Math.max(0, (state.reputation || 50) + 3);
+    const active = (state?.dayShift?.staff?.roster || []).filter((m) => m.active);
+    active.forEach((m) => { m.morale = clampStaffGauge(Number(m.morale || 0.56) - 0.08, 0.15, 1); });
+    addEvidenceItem('payroll-discrepancy', state.night);
+    state.logs.push(`Inside access reported to ownership: ${suspectName} flagged for investigation. +3 reputation. Staff atmosphere strained.`);
+    pushLiveAlert(state, { type: 'info', message: `Ownership notified. +3 reputation. Staff morale dipped.`, dedupeKey: 'leak-reported' });
+    applyIdentityImpact({ doctrine: { control: 1, stability: 1 }, factions: { ownership: 2, staff: -2 }, reason: 'reported inside leak to ownership' });
+  }
+
+  if (progressShift('leak-response', { timeScale: 0.2, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+// ── Staff Trust Actions (player-initiated) ────
+
+function payStaffBonus() {
+  onMeaningfulAction();
+  audioController.playUiClick();
+  normalizeStaffV29();
+  const cost = 20;
+  if ((state.money || 0) < cost) {
+    pushLiveAlert(state, { type: 'warning', message: 'Insufficient funds for staff bonus ($20 required).', dedupeKey: 'staff-bonus-funds' });
+    renderAll();
+    return;
+  }
+  state.money = Math.max(0, state.money - cost);
+  addBudgetCost('emergencies', cost, 'Voluntary staff bonus: morale investment.');
+  const roster = (state?.dayShift?.staff?.roster || []).filter((m) => m.active);
+  roster.forEach((m) => {
+    m.morale = clampStaffGauge(Number(m.morale || 0.56) + 0.08, 0.15, 1);
+    m.loyalty = Math.min(1, Number(m.loyalty || 0.70) + 0.04);
+  });
+  applyIdentityImpact({ doctrine: { compassion: 1 }, factions: { staff: 1, ownership: -1 }, reason: 'voluntary staff bonus paid' });
+  state.logs.push(`Staff bonus paid voluntarily: −$${cost}. Morale and loyalty improved across active roster.`);
+  pushLiveAlert(state, { type: 'info', message: `Staff bonus: −$${cost}. Team morale improved.`, dedupeKey: 'staff-bonus-voluntary' });
+  renderAll();
+}
+
+function dismissSuspectedStaff() {
+  onMeaningfulAction();
+  audioController.playUiClick();
+  normalizeStaffV29();
+  const compId = state.staffIntel?.compromisedId;
+  if (!compId) {
+    pushLiveAlert(state, { type: 'warning', message: 'No staff member is currently flagged for dismissal.', dedupeKey: 'dismiss-no-suspect' });
+    renderAll();
+    return;
+  }
+  const member = (state?.dayShift?.staff?.roster || []).find((m) => m.id === compId);
+  if (!member) return;
+  const base = getStaffCatalogEntry(compId);
+  const name = base?.name || 'staff member';
+  const role = base?.role || 'Staff';
+
+  const cost = 30;
+  state.money = Math.max(0, (state.money || 0) - cost);
+  addBudgetCost('emergencies', cost, `Severance: ${name} dismissed mid-shift.`);
+  member.active = false;
+  member.corrupted = false;
+  state.staffIntel.dismissedId = compId;
+  state.staffIntel.compromisedId = null;
+
+  addEvidenceItem('overwritten-dispatch-note', state.night);
+  state.reputation = Math.max(0, (state.reputation || 50) + 1);
+  const rest = (state?.dayShift?.staff?.roster || []).filter((m) => m.active);
+  rest.forEach((m) => {
+    m.morale = clampStaffGauge(Number(m.morale || 0.56) - 0.05, 0.15, 1);
+    m.fear = Math.min(1, Number(m.fear || 0) + 0.06);
+  });
+  state.logs.push(`${name} (${role}) dismissed mid-shift: severance paid ($${cost}). Reliability gap until dawn. Remaining team is tense.`);
+  pushLiveAlert(state, { type: 'warning', message: `${name} dismissed. Reliability reduced tonight. −$${cost}.`, dedupeKey: `staff-dismissed-${compId}` });
+  applyIdentityImpact({ doctrine: { control: 2, stability: -1 }, factions: { staff: -1, ownership: 1 }, reason: 'suspected staff dismissed mid-shift' });
+  renderAll();
+}
+
+// ─── end v0.29 ────────────────────────────────────────────────
+
 // ============================================================
 
 function checkFailureState() {
@@ -7582,6 +8052,63 @@ function progressShift(actionKey, options = {}) {
       state.breachEventFired = true;
       triggerFrontDeskBreachEvent();
       return false;
+    }
+  }
+
+  // v0.29 staff mutiny — once per run, critical morale, mid-shift
+  if (!state.staffIntel?.mutinyFired && !state.activeNightEvent) {
+    const _s29r = (state?.dayShift?.staff?.roster || []).filter(m => m.active);
+    const _avgM = _s29r.reduce((s, m) => s + Number(m.morale || 0.56), 0) / Math.max(1, _s29r.length);
+    const _minM = _s29r.length ? Math.min(..._s29r.map(m => Number(m.morale || 0.56))) : 1;
+    const _s29El = Number(state.shiftElapsedMinutes || 0);
+    if ((_avgM < 0.30 || _minM < 0.18) && _s29El >= 120 && _s29El < 400 && Math.random() < 0.025) {
+      normalizeStaffV29();
+      triggerStaffMutinyEvent();
+      return false;
+    }
+  }
+
+  // v0.29 inside leak — once per night, compromised + faction/nemesis context
+  if (!state.staffIntel?.insideLeakFired && !state.activeNightEvent) {
+    const _ilComp = getCompromisedStaff();
+    const _ilFaction = (state.guests || []).some(g => g.factionProfile?.id);
+    const _ilNem = Boolean(state.nemesis?.active);
+    if (_ilComp && (_ilFaction || _ilNem)) {
+      const _ilEl = Number(state.shiftElapsedMinutes || 0);
+      if (_ilEl >= 200 && _ilEl < 450 && Math.random() < 0.018) {
+        triggerInsideLeakEvent();
+        return false;
+      }
+    }
+  }
+
+  // v0.29 compromised staff passive suspicious log
+  const _v29comp = getCompromisedStaff();
+  if (_v29comp && !state.activeNightEvent) {
+    const _v29base = getStaffCatalogEntry(_v29comp.id);
+    const _v29name = _v29base?.name || 'staff';
+    const _v29role = _v29base?.role || 'Staff';
+    const _v29chance = Math.max(0.06, Math.min(0.14, 0.08 + Number(_v29comp.badOutcomeCount || 0) * 0.01));
+    if (Math.random() < _v29chance) {
+      const V29_MISLEAD = [
+        `${_v29name} (${_v29role}) reported zone clear — camera feed showed continued activity in the sector.`,
+        `${_v29role} response filed as resolved by ${_v29name} — room pressure remained elevated at next check.`,
+        `${_v29name}'s dispatch timing on this action is unusually slow. No explanation logged.`,
+        `Cost on ${_v29name}'s last repair ticket exceeded standard rate by $8. No documentation on file.`,
+        `${_v29role} log entry by ${_v29name} was crossed out and rewritten post-filing. Original shows a different room.`
+      ];
+      state.logs.push(V29_MISLEAD[Math.floor(Math.random() * V29_MISLEAD.length)]);
+      _v29comp.badOutcomeCount = (_v29comp.badOutcomeCount || 0) + 1;
+      _v29comp.suspicionScore = Math.min(10, (_v29comp.suspicionScore || 0) + 1);
+      if (_v29comp.suspicionScore >= 3 && !(state.staffIntel.suspicionHints || []).includes(_v29comp.id)) {
+        if (!Array.isArray(state.staffIntel.suspicionHints)) state.staffIntel.suspicionHints = [];
+        state.staffIntel.suspicionHints.push(_v29comp.id);
+        pushLiveAlert(state, {
+          type: 'warning',
+          message: `Staff pattern: ${_v29name}'s recent logs show repeated inconsistencies. Review recommended.`,
+          dedupeKey: `staff-suspicion-${_v29comp.id}-${state.night}`
+        });
+      }
     }
   }
 
@@ -8949,6 +9476,14 @@ function handleNightEventChoice(optionId) {
     handleVendingDeadDropChoice(optionId);
     return;
   }
+  if (activeEventId === 'staff-mutiny') {
+    handleStaffMutinyChoice(optionId);
+    return;
+  }
+  if (activeEventId === 'inside-leak') {
+    handleInsideLeakChoice(optionId);
+    return;
+  }
 
   const actionKey = `night-event-choice-${activeEventId}`;
   if (!acquireActionLock(actionKey)) return;
@@ -9405,6 +9940,16 @@ function endNight(options = {}) {
   if (Number(state.shadowRep || 0) <= -4 && state.nemesis) {
     escalateNemesisPressure();
   }
+
+  // v0.29 staff paranoia end-of-night
+  normalizeStaffV29();
+  maybeCompromiseStaff();
+  const _s29Roster = state?.dayShift?.staff?.roster || [];
+  _s29Roster.forEach(m => { if (typeof m.fear === 'number') m.fear = Math.max(0, m.fear - 0.05); });
+  const _s29comp = getCompromisedStaff();
+  if (_s29comp && Number(_s29comp.badOutcomeCount || 0) >= 2) addEvidenceItem('staff-falsified-report', state.night);
+  if (_s29comp && (state.dirtyLedger?.totalDirtyMoney || 0) > 0) addEvidenceItem('payroll-discrepancy', state.night);
+  if (_s29comp && state.staffIntel?.mutinyFired) addEvidenceItem('altered-repair-slip', state.night);
 
   // Activate / escalate nemesis
   maybeActivateNemesis();
@@ -10167,6 +10712,8 @@ function nextNight() {
   // Reset per-night dirty flags but keep cross-night state
   if (state.bleedingWalkInState) state.bleedingWalkInState.offered = false;
   if (state.vendingDropState) state.vendingDropState.offered = false;
+  normalizeStaffV29();
+  if (state.staffIntel) state.staffIntel.insideLeakFired = false;
   state = assignScenarioForNight(state);
   state = normalizePresentationState(state);
   state = normalizeSpecialEncounterState(state);

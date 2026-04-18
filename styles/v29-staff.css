@@ -1,0 +1,333 @@
+/* v0.29 Staff Paranoia / Traitor / Mutiny System */
+
+:root {
+  --v29-paranoia-border: #78350f;
+  --v29-paranoia-text: #fbbf24;
+  --v29-compromised-border: #991b1b;
+  --v29-compromised-text: #fca5a5;
+  --v29-safe-border: #065f46;
+  --v29-safe-text: #6ee7b7;
+  --v29-loyalty-fill: #3b82f6;
+  --v29-fear-fill: #ef4444;
+  --v29-mutiny-border: #c2410c;
+  --v29-mutiny-bg: rgba(194, 65, 12, 0.06);
+}
+
+/* ── Staff paranoia prep strip ─────────────── */
+
+.v29-staff-paranoia {
+  border-left: 3px solid var(--v29-paranoia-border);
+  background: rgba(120, 53, 15, 0.05);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-top: 6px;
+}
+
+.v29-staff-paranoia-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.v29-staff-paranoia-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--v29-paranoia-text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.v29-staff-paranoia-chip {
+  font-size: 0.7rem;
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-weight: 600;
+}
+
+.v29-staff-paranoia-chip.is-reliable {
+  background: rgba(6, 95, 70, 0.15);
+  border: 1px solid var(--v29-safe-border);
+  color: var(--v29-safe-text);
+}
+
+.v29-staff-paranoia-chip.is-strained {
+  background: rgba(120, 53, 15, 0.15);
+  border: 1px solid var(--v29-paranoia-border);
+  color: var(--v29-paranoia-text);
+}
+
+.v29-staff-paranoia-chip.is-suspect {
+  background: rgba(153, 27, 27, 0.15);
+  border: 1px solid var(--v29-compromised-border);
+  color: var(--v29-compromised-text);
+}
+
+/* Staff rows */
+
+.v29-staff-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(120, 53, 15, 0.12);
+}
+
+.v29-staff-row:last-child {
+  border-bottom: none;
+}
+
+.v29-staff-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 46px;
+}
+
+.v29-staff-role {
+  font-size: 0.68rem;
+  color: var(--color-text-muted, #888);
+  min-width: 62px;
+}
+
+/* Reliability chip */
+
+.v29-reliability-chip {
+  font-size: 0.67rem;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.v29-reliability-chip.is-reliable {
+  background: rgba(6, 95, 70, 0.14);
+  border: 1px solid var(--v29-safe-border);
+  color: var(--v29-safe-text);
+}
+
+.v29-reliability-chip.is-strained {
+  background: rgba(120, 53, 15, 0.12);
+  border: 1px solid var(--v29-paranoia-border);
+  color: var(--v29-paranoia-text);
+}
+
+.v29-reliability-chip.is-suspect {
+  background: rgba(153, 27, 27, 0.12);
+  border: 1px solid var(--v29-compromised-border);
+  color: var(--v29-compromised-text);
+}
+
+/* Suspicion marker pulsing */
+
+.v29-suspicion-marker {
+  font-size: 0.64rem;
+  color: var(--v29-compromised-text);
+  background: rgba(153, 27, 27, 0.10);
+  border: 1px solid var(--v29-compromised-border);
+  border-radius: 2px;
+  padding: 1px 4px;
+  animation: v29-pulse 2.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes v29-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+
+/* Morale / fear mini gauges */
+
+.v29-staff-gauges {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex: 1;
+}
+
+.v29-gauge-track {
+  width: 32px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.v29-gauge-fill.is-morale {
+  height: 100%;
+  background: var(--v29-loyalty-fill);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.v29-gauge-fill.is-fear {
+  height: 100%;
+  background: var(--v29-fear-fill);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.v29-gauge-label {
+  font-size: 0.59rem;
+  color: var(--color-text-muted, #888);
+  flex-shrink: 0;
+}
+
+/* Warning / note strips */
+
+.v29-paranoia-warning {
+  font-size: 0.71rem;
+  color: var(--v29-compromised-text);
+  background: rgba(153, 27, 27, 0.08);
+  border: 1px solid rgba(153, 27, 27, 0.28);
+  border-radius: 3px;
+  padding: 4px 8px;
+  margin-top: 7px;
+}
+
+.v29-paranoia-note {
+  font-size: 0.71rem;
+  color: var(--color-text-muted, #888);
+  margin-top: 5px;
+  line-height: 1.4;
+}
+
+/* Staff quick-action buttons */
+
+.v29-staff-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 9px;
+  flex-wrap: wrap;
+}
+
+.v29-staff-action-btn {
+  font-size: 0.69rem;
+  padding: 3px 9px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.v29-staff-action-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.v29-staff-action-btn.is-bonus {
+  border-color: var(--v29-safe-border);
+  color: var(--v29-safe-text);
+}
+
+.v29-staff-action-btn.is-dismiss {
+  border-color: var(--v29-compromised-border);
+  color: var(--v29-compromised-text);
+}
+
+/* ── Night event card variants ─────────────── */
+
+.active-night-event-card[data-event-type="staff-mutiny"] {
+  border-color: var(--v29-mutiny-border) !important;
+  background: var(--v29-mutiny-bg) !important;
+}
+
+.active-night-event-card[data-event-type="staff-mutiny"] .night-event-title {
+  color: var(--v29-paranoia-text);
+}
+
+.active-night-event-card[data-event-type="inside-leak"] {
+  border-color: var(--v29-compromised-border) !important;
+  background: rgba(153, 27, 27, 0.05) !important;
+}
+
+.active-night-event-card[data-event-type="inside-leak"] .night-event-title {
+  color: var(--v29-compromised-text);
+}
+
+/* ── Summary staff section ─────────────────── */
+
+.v29-summary-staff-section {
+  border-left: 3px solid var(--v29-paranoia-border);
+  background: rgba(120, 53, 15, 0.04);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-top: 4px;
+}
+
+.v29-summary-staff-header {
+  font-size: 0.77rem;
+  font-weight: 700;
+  color: var(--v29-paranoia-text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.v29-summary-staff-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.74rem;
+  padding: 2px 0;
+}
+
+.v29-summary-staff-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--v29-paranoia-text);
+  flex-shrink: 0;
+}
+
+.v29-summary-staff-dot.is-compromised {
+  background: var(--v29-compromised-text);
+}
+
+.v29-summary-staff-dot.is-ok {
+  background: var(--v29-safe-text);
+}
+
+/* ── Run ending staff elements ─────────────── */
+
+.v29-ending-staff-line {
+  font-size: 0.8rem;
+  margin-top: 6px;
+}
+
+.v29-ending-tag-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.v29-ending-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.69rem;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--v29-paranoia-border);
+  background: rgba(120, 53, 15, 0.12);
+  color: var(--v29-paranoia-text);
+}
+
+.v29-ending-tag.tag-fear {
+  border-color: var(--v29-compromised-border);
+  background: rgba(153, 27, 27, 0.12);
+  color: var(--v29-compromised-text);
+}
+
+.v29-ending-tag.tag-loyalty {
+  border-color: var(--v29-safe-border);
+  background: rgba(6, 95, 70, 0.10);
+  color: var(--v29-safe-text);
+}
+
+/* ── Report section staff header ───────────── */
+
+[data-section="staff"] .report-section-title {
+  color: var(--v29-paranoia-text);
+}

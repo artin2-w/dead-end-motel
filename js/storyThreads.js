@@ -173,7 +173,14 @@ const EVIDENCE_CATALOG = [
   { id: 'hunter-vehicle-note',     type: 'dirty',   category: 'security', label: 'Hunter Vehicle Note',         desc: 'Partial plate and description of the vehicle that stopped at the lot asking questions.' },
   { id: 'burner-instruction-slip', type: 'dirty',   category: 'dirty',    label: 'Burner Instruction Slip',     desc: 'A small folded paper. Dead drop instructions for the machine slot. Already used.' },
   { id: 'torn-ledger-fragment',    type: 'dirty',   category: 'dirty',    label: 'Torn Ledger Fragment',        desc: 'Part of an off-book log. More than one hand wrote on it.' },
-  { id: 'hidden-guest-entry',      type: 'dirty',   category: 'dirty',    label: 'Hidden Guest Entry',          desc: 'An unlogged stay. Someone was here and the system has no record.' }
+  { id: 'hidden-guest-entry',      type: 'dirty',   category: 'dirty',    label: 'Hidden Guest Entry',          desc: 'An unlogged stay. Someone was here and the system has no record.' },
+  // v0.29 staff paranoia evidence
+  { id: 'staff-falsified-report',    type: 'staff', category: 'staff', label: 'Falsified Staff Report',    desc: 'A room marked clear by staff showed continued activity on camera within minutes of the log entry.' },
+  { id: 'altered-repair-slip',       type: 'staff', category: 'staff', label: 'Altered Repair Slip',       desc: 'A maintenance ticket shows a cost higher than the work logged. The initials don\'t match shift records.' },
+  { id: 'payroll-discrepancy',       type: 'staff', category: 'staff', label: 'Payroll Discrepancy',       desc: 'A staff ledger entry doesn\'t align with the hours logged. Small, deliberate.' },
+  { id: 'overwritten-dispatch-note', type: 'staff', category: 'staff', label: 'Overwritten Dispatch Note', desc: 'A response log entry was crossed out and rewritten after it was filed. The original text shows a different room number.' },
+  { id: 'staff-loyalty-record',      type: 'staff', category: 'staff', label: 'Staff Loyalty Record',      desc: 'Someone kept a private written note about what was said at the desk on a specific night. Not yours.' },
+  { id: 'inside-job-note',           type: 'staff', category: 'staff', label: 'Inside Job Note',           desc: 'A folded slip found behind the desk board. A handwritten list of rooms with current guest names.' }
 ];
 
 const MYSTERY_FRAGMENTS = [
@@ -826,6 +833,33 @@ export function buildShadowRepNote(state) {
   if (rep <= -5) return { level: 'high', polarity: 'negative', label: 'Marked', note: 'You betrayed the network at least once. Expect pressure, not cooperation. Hunt nights are targeting you.' };
   if (rep <= -2) return { level: 'low', polarity: 'negative', label: 'Mistrusted', note: 'Prior betrayal is on record. Dangerous contacts are less forgiving and more aggressive.' };
   return null;
+}
+
+// --- v0.29 Staff Intel export ---
+
+export function buildStaffIntelSummary(state) {
+  const intel = state?.staffIntel;
+  const roster = Array.isArray(state?.dayShift?.staff?.roster) ? state.dayShift.staff.roster : [];
+  const active = roster.filter((m) => m.active);
+  const avgMorale = active.length
+    ? active.reduce((s, m) => s + Number(m.morale || 0.56), 0) / active.length
+    : 0.56;
+  const avgFear = active.length
+    ? active.reduce((s, m) => s + Number(m.fear || 0), 0) / active.length
+    : 0;
+  const compromisedId = intel?.compromisedId || null;
+  const mutinyFired = Boolean(intel?.mutinyFired);
+  const hasDismissed = Boolean(intel?.dismissedId);
+  const suspectCount = roster.filter((m) => Number(m.suspicionScore || 0) >= 3).length;
+  return {
+    hasIntel: compromisedId !== null || mutinyFired || suspectCount > 0,
+    compromisedId,
+    mutinyFired,
+    hasDismissed,
+    avgMorale,
+    avgFear,
+    suspectCount
+  };
 }
 
 export function buildActiveRunThreadHighlights(state, limit = 3) {

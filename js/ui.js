@@ -2219,6 +2219,7 @@ export function renderLogs(state) {
     if (/(room \d|guest.*room|occupant|lockdown|evict|service.*call|hallway check|maintenance sent|security sent)/.test(v)) return 'room';
     if (/(lobby|hallway|parking|utility|rear exit|shared space|zone.*pressure|spill)/.test(v)) return 'zone';
     if (/(power|electric|blackout|generator|restore|reroute|emergency power|outage)/.test(v)) return 'power';
+    if (/(staff.*refused|mutiny|inside.*job|inside.*leak|compromised.*staff|staff.*falsif|dispatch.*inconsistency|internal.*irregularity|staff walkout|forced back.*work|staff.*bonus|dismissed.*shift|log entry.*crossed|repair ticket exceeded|dispatch timing.*slow|zone clear.*camera|filed as resolved.*room pressure)/.test(v)) return 'staff';
     if (/(off-book|unlogged stay|hidden payment|walk-in|dead drop|vending drop|hunters.*desk|hunters arrived|sheltered|shadow reputation|dirty cash|off-book stay|torn ledger|stained cash|hidden guest)/.test(v)) return 'dirty';
     if (/(suspicious|forged|planted|fake|illegal|contraband|dirty|mismatch|forgery|flagged.*guest)/.test(v)) return 'suspicious';
     return 'archive';
@@ -2246,6 +2247,7 @@ export function renderLogs(state) {
     { key: 'zone',       title: 'Shared Space Escalations',   limit: 4,        collapsed: false },
     { key: 'power',      title: 'Power & Emergency',          limit: 4,        collapsed: false },
     { key: 'suspicious', title: 'Suspicious Activity',        limit: 6,        collapsed: false },
+    { key: 'staff',      title: 'Staff & Internal Activity',   limit: 5,        collapsed: false },
     { key: 'dirty',      title: 'Off-Book Activity',          limit: 5,        collapsed: false },
     { key: 'archive',    title: 'Full Night Log',             limit: Infinity, collapsed: true  }
   ];
@@ -2516,6 +2518,27 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
     }
   }
 
+  // v0.29 staff intel summary
+  const summaryStaffSlot = document.getElementById('summary-staff-section');
+  if (summaryStaffSlot) {
+    const si = state?.staffIntelSummary || {};
+    if (si.hasIntel || si.suspectCount > 0 || si.mutinyFired || si.hasDismissed) {
+      const rows = [];
+      if (si.compromisedId) rows.push({ label: `Compromised staff identified (${si.compromisedId})`, cls: 'is-compromised' });
+      if (si.mutinyFired) rows.push({ label: 'Staff mutiny occurred this run', cls: 'is-compromised' });
+      if (si.hasDismissed) rows.push({ label: 'Suspected staff dismissed', cls: 'is-ok' });
+      if (si.suspectCount > 0) rows.push({ label: `${si.suspectCount} staff member${si.suspectCount !== 1 ? 's' : ''} flagged with inconsistencies`, cls: '' });
+      const moraleLabel = si.avgMorale < 0.30 ? 'Critical' : si.avgMorale < 0.45 ? 'Low' : si.avgMorale < 0.65 ? 'Moderate' : 'Stable';
+      rows.push({ label: `Average staff morale: ${moraleLabel} (${Math.round(si.avgMorale * 100)}%)`, cls: si.avgMorale < 0.30 ? 'is-compromised' : '' });
+      summaryStaffSlot.innerHTML = `<div class="v29-summary-staff-section">
+        <div class="v29-summary-staff-header">Staff & Internal State</div>
+        ${rows.map(r => `<div class="v29-summary-staff-row"><span class="v29-summary-staff-dot${r.cls ? ' ' + r.cls : ''}"></span><span>${r.label}</span></div>`).join('')}
+      </div>`;
+    } else {
+      summaryStaffSlot.innerHTML = '';
+    }
+  }
+
   // v0.27 evidence section in summary
   const summaryEvidenceSlot = document.getElementById('summary-evidence-section');
   if (summaryEvidenceSlot) {
@@ -2591,6 +2614,55 @@ function buildShadowRepHtml(rep = 0) {
     </div>
     <div class="v28-shadow-rep-track"><div class="v28-shadow-rep-fill is-${polarity}" ${fillStyle}></div></div>
     <p class="v28-shadow-rep-note">${note}</p>
+  </div>`;
+}
+
+function buildStaffParanoiaHtml(paranoia = {}, callbacks = {}) {
+  if (!paranoia || !Array.isArray(paranoia.members) || paranoia.members.length === 0) return '';
+  const moodClass = paranoia.moodClass || 'stable';
+  const moodLabel = paranoia.moodLabel || 'Stable';
+  const chipClass = moodClass === 'critical' || moodClass === 'tense' ? 'is-suspect' : moodClass === 'strained' ? 'is-strained' : 'is-reliable';
+
+  const rows = paranoia.members.map((m) => {
+    const relClass = m.reliability === 'suspect' ? 'is-suspect' : m.reliability === 'strained' ? 'is-strained' : 'is-reliable';
+    const relLabel = m.reliability === 'suspect' ? 'SUSPECT' : m.reliability === 'strained' ? 'Strained' : 'Reliable';
+    const moraleW = Math.round(Number(m.morale || 0) * 100);
+    const fearW    = Math.round(Number(m.fear || 0) * 100);
+    const suspMarker = m.suspicionScore >= 3
+      ? `<span class="v29-suspicion-marker">⚠ ${m.suspicionScore} flags</span>`
+      : '';
+    return `<div class="v29-staff-row">
+      <span class="v29-staff-name">${m.name}</span>
+      <span class="v29-staff-role">${m.role}</span>
+      <div class="v29-staff-gauges">
+        <span class="v29-gauge-label">MOR</span>
+        <div class="v29-gauge-track"><div class="v29-gauge-fill is-morale" style="width:${moraleW}%"></div></div>
+        <span class="v29-gauge-label">FEAR</span>
+        <div class="v29-gauge-track"><div class="v29-gauge-fill is-fear" style="width:${fearW}%"></div></div>
+      </div>
+      <span class="v29-reliability-chip ${relClass}">${relLabel}</span>
+      ${suspMarker}
+    </div>`;
+  }).join('');
+
+  const warningHtml = paranoia.hasSuspect
+    ? `<div class="v29-paranoia-warning">One or more staff members show repeated inconsistencies. Dismiss or confront before conditions worsen.</div>`
+    : '';
+
+  const hasSuspectMember = paranoia.members.some(m => m.suspicionScore >= 3 && m.active !== false);
+  const actionsHtml = `<div class="v29-staff-actions">
+    <button class="v29-staff-action-btn is-bonus" data-action="pay-staff-bonus">Pay Bonus ($20)</button>
+    ${hasSuspectMember ? `<button class="v29-staff-action-btn is-dismiss" data-action="dismiss-staff">Dismiss Suspect ($30)</button>` : ''}
+  </div>`;
+
+  return `<div class="v29-staff-paranoia">
+    <div class="v29-staff-paranoia-header">
+      <span class="v29-staff-paranoia-title">Staff Reliability</span>
+      <span class="v29-staff-paranoia-chip ${chipClass}">${moodLabel}</span>
+    </div>
+    ${rows}
+    ${warningHtml}
+    ${actionsHtml}
   </div>`;
 }
 
@@ -2886,6 +2958,20 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
   if (dirtySlot) {
     const dls = state?.dirtyLedgerSummary || {};
     dirtySlot.innerHTML = dls.hasDirty ? buildDirtyLedgerHtml(dls) : '';
+  }
+
+  // v0.29 staff paranoia in night prep
+  const staffParanoiaSlot = document.getElementById('night-prep-staff-paranoia');
+  if (staffParanoiaSlot) {
+    const sp = state?.staffParanoiaModel || {};
+    staffParanoiaSlot.innerHTML = buildStaffParanoiaHtml(sp);
+    staffParanoiaSlot.querySelectorAll('[data-action]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        if (action === 'pay-staff-bonus' && typeof state?.onPayStaffBonus === 'function') state.onPayStaffBonus();
+        if (action === 'dismiss-staff' && typeof state?.onDismissSuspectedStaff === 'function') state.onDismissSuspectedStaff();
+      });
+    });
   }
 
   if (doctrine) {
@@ -3238,6 +3324,26 @@ export function renderRunEnding(ending = {}) {
       chip.className = `v28-ending-tag${cls ? ' ' + cls : ''}`;
       chip.textContent = label;
       v28Tags.appendChild(chip);
+    });
+  }
+
+  // v0.29 staff ending lines
+  const staffLine = document.getElementById('run-ending-staff-line');
+  const v29Tags = document.getElementById('run-ending-v29-tags');
+  if (staffLine) staffLine.textContent = ending?.staffLine || '';
+  if (v29Tags) {
+    v29Tags.innerHTML = '';
+    const v29TagData = [
+      ending?.staffCompromised ? { label: 'Compromised Operator', cls: 'tag-fear' } : null,
+      ending?.staffDismissed && !ending?.staffCompromised ? { label: 'Last Honest Shift', cls: 'tag-loyalty' } : null,
+      ending?.mutinyFired && ending?.avgStaffMorale < 0.30 ? { label: 'Fear Management', cls: 'tag-fear' } : null,
+      ending?.mutinyFired && !ending?.staffCompromised ? { label: 'Held Together', cls: 'tag-loyalty' } : null
+    ].filter(Boolean);
+    v29TagData.forEach(({ label, cls }) => {
+      const chip = document.createElement('span');
+      chip.className = `v29-ending-tag${cls ? ' ' + cls : ''}`;
+      chip.textContent = label;
+      v29Tags.appendChild(chip);
     });
   }
 
