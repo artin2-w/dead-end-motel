@@ -105,6 +105,21 @@ function evaluateCategory(snapshot) {
   const room9Level = n(snapshot.room9PressureLevel, 0);
   const room9Contained = Boolean(snapshot.room9Contained);
   const room9Attempts = n(snapshot.room9InvestigateAttempts, 0);
+  const townSuspicion = n(snapshot.townSuspicion, 0);
+  const bagmanPayoffs = n(snapshot.bagmanPayoffs, 0);
+  const corruption = n(snapshot.corruption, 0);
+  const bagmanFired = Boolean(snapshot.bagmanFired);
+
+  // v0.31 town endings — checked first
+  if (bagmanPayoffs >= 2 && dirtyScore >= 3) {
+    return { key: 'bought-the-law', title: 'Bought the Law', subtitle: 'The Arrangement Was Made and Kept' };
+  }
+  if (townSuspicion <= 2 && corruption >= 3) {
+    return { key: 'town-saw-nothing', title: 'Town Saw Nothing', subtitle: 'The Outside World Was Managed and Maintained' };
+  }
+  if (townSuspicion >= 6 && rep < 44) {
+    return { key: 'notorious-motel', title: 'Notorious Motel', subtitle: 'The Town Remembers What Happened Here' };
+  }
 
   // v0.30 Room 9 / contamination endings — checked first
   if (room9Level >= 3 && !room9Contained && rep >= 38) {
@@ -212,6 +227,9 @@ function evaluateCategory(snapshot) {
 
 function resolveEndingFamilyFromKey(key = '') {
   const value = String(key || '').toLowerCase();
+  if (value.includes('bought-the-law')) return 'cold';
+  if (value.includes('town-saw-nothing')) return 'cold';
+  if (value.includes('notorious-motel')) return 'hostile';
   if (value.includes('motel-was-sick')) return 'hostile';
   if (value.includes('contained-the-rot')) return 'stable';
   if (value.includes('owners-machine')) return 'hostile';
@@ -288,6 +306,10 @@ function evaluateGrade(snapshot) {
   score -= Math.min(12, snapshot.policyBreaks * 2);
   score += Math.min(10, snapshot.cleanResolutions);
   score += snapshot.finaleSurvived ? 6 : 0;
+  // v0.31 town / corruption factors
+  score -= Math.min(5, n(snapshot.townSuspicion, 0));
+  score += Boolean(snapshot.policeCompromised) && n(snapshot.bagmanPayoffs, 0) === 0 ? 2 : 0;
+  score -= n(snapshot.bagmanPayoffs, 0) >= 2 ? 3 : 0;
   // v0.30 Room 9 / contamination factors
   score -= Math.min(8, n(snapshot.room9PressureLevel, 0) * 2);
   score += Boolean(snapshot.room9Contained) ? 5 : 0;
@@ -353,6 +375,13 @@ export function buildRunEndingPackage(state) {
     finalePerformanceLabel: String(state?.finalePerformance?.label || ''),
     finalePerformanceLine: String(state?.finalePerformance?.line || ''),
     endingMood: Array.isArray(state?.summaryIdentityLines) ? String(state.summaryIdentityLines[0] || '') : '',
+    // v0.31
+    townSuspicion: n(state?.townState?.townSuspicion, 0),
+    corruption: n(state?.townState?.corruption, 0),
+    bagmanFired: Boolean(state?.townState?.bagmanFired),
+    bagmanPayoffs: n(state?.townState?.bagmanPayoffs, 0),
+    policeCompromised: Boolean(state?.townState?.policeCompromised),
+    bagmanName: state?.townState?.bagmanName || 'Carver',
     // v0.30
     room9PressureLevel: n(state?.protectedRoom?.pressureLevel, 0),
     room9Contained: Boolean(state?.protectedRoom?.investigateAttempts >= 2 && !state?.protectedRoom?.ownerWarningFired),
@@ -465,6 +494,10 @@ export function buildRunEndingPackage(state) {
     snapshot.totalDirtyMoney >= 100 ? 'Off-Book Cash' : '',
     snapshot.shadowRep >= 4 ? 'Network Standing' : '',
     snapshot.offBookStays >= 2 ? 'Unlogged Stays' : '',
+    // v0.31 tags
+    snapshot.bagmanPayoffs >= 2 ? 'Bought the Law' : '',
+    snapshot.townSuspicion >= 6 ? 'Town Heat' : '',
+    snapshot.policeCompromised && !snapshot.bagmanPayoffs ? 'Silent Arrangement' : '',
     // v0.30 tags
     snapshot.room9PressureLevel >= 3 ? 'Spatial Contamination' : '',
     snapshot.room9Contained ? 'Rot Contained' : '',
@@ -503,6 +536,16 @@ export function buildRunEndingPackage(state) {
       unresolved: snapshot.unresolved,
       milestoneNights: n(campaign?.milestoneNightsSurvived, 0)
     },
+    // v0.31
+    townLine: snapshot.bagmanFired
+      ? `Town: Officer ${snapshot.bagmanName} made contact.${snapshot.bagmanPayoffs > 0 ? ` ${snapshot.bagmanPayoffs} payoff${snapshot.bagmanPayoffs !== 1 ? 's' : ''} accepted.` : ' Turned away.'}${snapshot.townSuspicion >= 4 ? ` Town heat: ${snapshot.townSuspicion}/10.` : ''}`
+      : snapshot.townSuspicion >= 3
+        ? `Town: suspicion at ${snapshot.townSuspicion}/10 without direct police contact.`
+        : '',
+    townSuspicion: snapshot.townSuspicion,
+    bagmanFired: snapshot.bagmanFired,
+    bagmanPayoffs: snapshot.bagmanPayoffs,
+    policeCompromised: snapshot.policeCompromised,
     // v0.30
     room9Line: snapshot.room9PressureLevel >= 1
       ? `Room 9: pressure level ${snapshot.room9PressureLevel}/4, ${snapshot.room9ContaminationCount} contamination event${snapshot.room9ContaminationCount !== 1 ? 's' : ''}${snapshot.room9EvidenceFound > 0 ? `, ${snapshot.room9EvidenceFound} item${snapshot.room9EvidenceFound !== 1 ? 's' : ''} documented` : ''}.${snapshot.room9Contained ? ' Contained.' : ''}`

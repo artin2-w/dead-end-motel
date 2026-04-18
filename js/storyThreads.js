@@ -187,7 +187,12 @@ const EVIDENCE_CATALOG = [
   { id: 'stained-maintenance-note', type: 'contamination', category: 'owner', label: 'Stained Maintenance Note',      desc: 'Work order for a plumbing issue in a rear room. The room number in the header was scratched out and replaced. The stain on the corner is not coffee.' },
   { id: 'unsigned-expense-form',    type: 'contamination', category: 'owner', label: 'Unsigned Expense Form',         desc: 'A requisition for "specialized cleaning materials." No signatory. The room number field is blank but the amount is $340.' },
   { id: 'old-room-ledger',          type: 'contamination', category: 'owner', label: 'Old Room Ledger Fragment',      desc: 'A page from a prior-season log. One room entry spans 94 consecutive nights — under the same reservation name. No checkout was ever recorded.' },
-  { id: 'do-not-enter-copy',        type: 'contamination', category: 'owner', label: '"Do Not Enter" Notice Copy',    desc: 'A duplicate of an internal management notice. Handwritten at the bottom: "Previous manager was told the same thing. He looked anyway."' }
+  { id: 'do-not-enter-copy',        type: 'contamination', category: 'owner', label: '"Do Not Enter" Notice Copy',    desc: 'A duplicate of an internal management notice. Handwritten at the bottom: "Previous manager was told the same thing. He looked anyway."' },
+  // v0.31 town corruption / bagman cop
+  { id: 'police-payoff-receipt',  type: 'corruption', category: 'town', label: 'Police Payoff Receipt',    desc: 'A carbon-copy receipt folded into a desk drawer. A dollar amount. No signature, but the badge number in the memo field is real.' },
+  { id: 'false-police-log',       type: 'corruption', category: 'town', label: 'False Police Log',         desc: 'A dispatch record that skips a 40-minute window during a night when you know something happened. The log shows a patrol car on the opposite end of town.' },
+  { id: 'informant-record',       type: 'corruption', category: 'town', label: 'Informant Record',         desc: 'A typed list of names, amounts, and dates. The motel appears twice. Someone has been reporting activity here for longer than you\'ve been working nights.' },
+  { id: 'bagman-visit-note',      type: 'corruption', category: 'town', label: 'Bagman Visit Note',        desc: 'A single index card in the back of the desk. Two words: a name and a room number. Circled. Dated last Thursday.' }
 ];
 
 const MYSTERY_FRAGMENTS = [
@@ -881,6 +886,27 @@ export function buildRoom9IntelSummary(state) {
     investigateAttempts: Number(pr.investigateAttempts || 0),
     ownerWarningFired: Boolean(pr.ownerWarningFired),
     evidenceFoundCount: Array.isArray(pr.evidenceFound) ? pr.evidenceFound.length : 0
+  };
+}
+
+// --- v0.31 Town Pressure export ---
+
+export function buildTownPressureSummary(state) {
+  const t = state?.townState;
+  if (!t) return { active: false };
+  return {
+    active: true,
+    townSuspicion: Number(t.townSuspicion || 0),
+    corruption: Number(t.corruption || 0),
+    bagmanFired: Boolean(t.bagmanFired),
+    bagmanPayoffs: Number(t.bagmanPayoffs || 0),
+    bagmanName: t.bagmanName || 'Carver',
+    policeCompromised: Boolean(t.policeCompromised),
+    lastHeadline: t.headlineArchive?.length
+      ? t.headlineArchive[t.headlineArchive.length - 1]
+      : null,
+    headlineCount: Array.isArray(t.headlineArchive) ? t.headlineArchive.length : 0,
+    lastDjBroadcast: t.lastDjBroadcast || null
   };
 }
 

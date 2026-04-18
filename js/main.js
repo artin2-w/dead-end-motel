@@ -167,7 +167,8 @@ import {
   buildDirtyLedgerSummary,
   buildShadowRepNote,
   buildStaffIntelSummary,
-  buildRoom9IntelSummary
+  buildRoom9IntelSummary,
+  buildTownPressureSummary
 } from './storyThreads.js';
 import {
   normalizeCarryoverState,
@@ -5186,6 +5187,11 @@ function buildRenderState() {
     onDismissSuspectedStaff: dismissSuspectedStaff,
     room9Intel: buildRoom9IntelSummary(state),
     room9Model: buildRoom9Model(state),
+    townModel: buildTownModel(state),
+    townPressureSummary: buildTownPressureSummary(state),
+    currentDayShiftNote: (state.dayShiftNotes || []).length ? state.dayShiftNotes[state.dayShiftNotes.length - 1] : null,
+    latestHeadline: state.townState?.headlineArchive?.length ? state.townState.headlineArchive[state.townState.headlineArchive.length - 1] : null,
+    onRespondToNote: respondToDayShiftNote,
     onHandleSpecialEncounter: handleOpenSpecialEncounter,
     onCloseSpecialEncounter: handleCloseSpecialEncounter,
     onSpecialEncounterChoice: handleSpecialEncounterChoice,
@@ -7934,6 +7940,268 @@ function buildRoom9Model(targetState = state) {
 
 // ─── end v0.30 ────────────────────────────────────────────────
 
+// ─── v0.31 The Town Is Rotten ─────────────────────────────────
+
+const DAY_SHIFT_NOTE_POOL = [
+  // stage 0 — early, quiet
+  [
+    { text: 'Quiet morning. Guest in 3 asked about the corner room. Told him it was unavailable. He didn\'t ask why.', tone: 'quiet' },
+    { text: 'Coffee machine is broken again. Called the repair line. Nobody picked up. Left a note on the board.', tone: 'quiet' },
+    { text: 'Checked rooms after checkout. 4 left cigarettes on the mattress. Disposed of them. Did not log it.', tone: 'quiet' },
+    { text: 'Someone called at 7 AM asking if we had vacancies "for a few weeks." I said we\'d see. Didn\'t take a name.', tone: 'quiet' }
+  ],
+  // stage 1 — noticing
+  [
+    { text: 'A man sat in the lot for 45 minutes, engine off. Didn\'t come inside. Left before I could get a plate.', tone: 'uneasy' },
+    { text: 'The back corridor light is out again. Third time this week. I wrote it up. Nobody fixed it last time either.', tone: 'uneasy' },
+    { text: 'Two guests in 6 and 7 both checked out early. Neither gave a reason. Room 6 left the TV on.', tone: 'uneasy' },
+    { text: 'I found a receipt from the vending alcove jammed behind the desk. Dated three nights ago. Not mine.', tone: 'uneasy' }
+  ],
+  // stage 2 — pressure
+  [
+    { text: 'A police car parked across the street for about 20 minutes this morning. Didn\'t come in. Just watched.', tone: 'tense' },
+    { text: 'Guest in 2 told me the room "smelled wrong." I changed the towels. She left anyway. Didn\'t ask for a refund.', tone: 'tense' },
+    { text: 'Someone called the desk twice, hung up both times. Third time I picked up fast — breathing, then the line dropped.', tone: 'tense' },
+    { text: 'The owner left a voicemail. Something about "access logs for the rear wing." I didn\'t return the call.', tone: 'tense' }
+  ],
+  // stage 3 — critical
+  [
+    { text: 'A man showed a badge at the door before I opened. He asked about recent guests. I said I wasn\'t authorized to discuss records. He left a card. I haven\'t touched it.', tone: 'critical' },
+    { text: 'Something happened last night. I can tell from the lot. Two cars were moved. Someone cleaned the ice machine bay. I didn\'t schedule that.', tone: 'critical' },
+    { text: 'I found the back door unlocked when I opened. It wasn\'t forced. Whoever had a key. That narrows it to about four people.', tone: 'critical' },
+    { text: 'I\'m not asking what you\'re doing at night. I just need you to know that people are starting to notice the motel. That\'s all this is.', tone: 'critical' }
+  ]
+];
+
+const HEADLINE_POOL = {
+  quiet:       [ '"Local Motel Maintains Quiet Season"', '"Highway 9 Sees Drop in Late Traffic"', '"Town Council Tables Road Budget Amendment"' ],
+  disturbance: [ '"Noise Complaint Filed Near Highway Rest Area"', '"Late-Night Incident Under Review by Dispatch"', '"Residents Report Unusual Activity on Route 9 Corridor"' ],
+  police:      [ '"Officer Carver Cited for Community Safety Initiative"', '"Department Denies Coverage Gap in Night Patrols"', '"Sheriff\'s Office: No Ongoing Investigations in Area"' ],
+  dirty:       [ '"Unverified Cash Transactions Draw Scrutiny"', '"Anonymous Tip Prompts Review of Local Business Records"', '"Board: No Comment on Reported \'Off-Book\' Payments"' ],
+  room9:       [ '"Former Tenant Files Complaint Over Extended-Stay Dispute"', '"Health Inspector Visit to Roadside Properties Delayed"', '"Owner Dispute Over Sealed Wing Enters Second Month"' ],
+  nemesis:     [ '"Fugitive Suspected in Highway Corridor"', '"State Police Expand Search Radius Toward County Line"', '"Tip Line Active: Public Urged Not to Approach Suspects"' ],
+  raid:        [ '"Multi-Agency Operation Targets Highway Corridor Properties"', '"Motel Under Investigation, Owner Not Available for Comment"', '"Three Arrested in Overnight Operation; Details Withheld"' ]
+};
+
+const DJ_BROADCAST_POOL = [
+  'This is your highway companion, broadcasting from somewhere you can\'t see. Keep moving. The town doesn\'t sleep — it just pretends.',
+  'Another night on Route 9. You know who\'s out there. Some of them are looking for something. Most of them just want to keep moving.',
+  'Weather is clear through the county. Roads are empty. If you\'re hearing this, you\'re either working or you can\'t sleep. Probably both.',
+  'Dedicated to whoever\'s behind the desk tonight. You know what you\'re holding onto. You know what it costs.',
+  'Highway advisory: avoid the rest stop south of the interchange. No specifics. Just a suggestion from a friend.',
+  'It\'s late. The kind of late where the only people still moving have reasons. I\'m not judging. Neither should you.',
+  'For the night shift, always the night shift. You keep the lights on while everyone else forgets the dark exists.',
+  'Town\'s quiet. That\'s not the same as safe. Remember that.',
+  'Roadside observation: a motel with the lights on is either doing well or doing something. Hard to tell from the road.',
+  'This next song is for everyone who knows something they can\'t say out loud. You know who you are.'
+];
+
+const DJ_BROADCAST_CONTEXTUAL = {
+  dirty:   'Someone out there is keeping two sets of books. Metaphorically speaking. The road doesn\'t care — it just keeps going.',
+  room9:   'There are rooms in every building that don\'t belong on the map. Some managers know. Most don\'t ask.',
+  nemesis: 'A word of advice: when the city comes to the country, it brings its problems with it. Plan accordingly.',
+  staff:   'The people working for you are people too. They have eyes. They remember things. Just a thought.'
+};
+
+function pickBagmanName(targetState) {
+  if (targetState.townState?.bagmanName) return targetState.townState.bagmanName;
+  const names = ['Carver', 'Dunn', 'Ressa'];
+  return names[Math.floor(Math.random() * names.length)];
+}
+
+function normalizeTownState(targetState = state) {
+  if (!targetState.townState) {
+    targetState.townState = {
+      bagmanName: pickBagmanName(targetState),
+      bagmanFired: false,
+      bagmanPayoffs: 0,
+      policeCompromised: false,
+      corruption: 0,
+      townSuspicion: 0,
+      headlineArchive: [],
+      lastDjBroadcast: null,
+      djBroadcastFiredTonight: false
+    };
+  }
+  if (!targetState.townState.bagmanName) targetState.townState.bagmanName = pickBagmanName(targetState);
+  if (!Array.isArray(targetState.townState.headlineArchive)) targetState.townState.headlineArchive = [];
+  targetState.townState.townSuspicion = Math.max(0, Math.min(10, Number(targetState.townState.townSuspicion || 0)));
+  targetState.townState.corruption    = Math.max(0, Math.min(10, Number(targetState.townState.corruption || 0)));
+}
+
+function normalizeDayShiftNotes(targetState = state) {
+  if (!Array.isArray(targetState.dayShiftNotes)) targetState.dayShiftNotes = [];
+}
+
+function getDayShiftStage(targetState = state) {
+  const night = Number(targetState.night || 1);
+  if (night >= 7) return 3;
+  if (night >= 5) return 2;
+  if (night >= 3) return 1;
+  return 0;
+}
+
+function generateDayShiftNote(targetState = state) {
+  normalizeDayShiftNotes(targetState);
+  const stage = getDayShiftStage(targetState);
+  const pool = DAY_SHIFT_NOTE_POOL[stage];
+  const used = new Set((targetState.dayShiftNotes || []).map((n) => n.text));
+  const available = pool.filter((n) => !used.has(n.text));
+  const pick = available.length ? available[Math.floor(Math.random() * available.length)] : pool[Math.floor(Math.random() * pool.length)];
+  const note = { text: pick.text, tone: pick.tone, stage, night: Number(targetState.night || 1), playerResponse: null };
+  targetState.dayShiftNotes.push(note);
+  return note;
+}
+
+function buildDailyHeadline(targetState = state) {
+  normalizeTownState(targetState);
+  const t = targetState.townState;
+  const dirty = targetState.dirtyLedger;
+  const pr = targetState.protectedRoom;
+  const nemesis = targetState.nemesis;
+
+  let category = 'quiet';
+  if (nemesis?.active && Number(nemesis.heat || 0) >= 7) category = 'nemesis';
+  else if (t.townSuspicion >= 7) category = 'raid';
+  else if (t.corruption >= 4 || (dirty && Number(dirty.dirtyScore || 0) >= 5)) category = 'dirty';
+  else if (pr?.knownToPlayer && Number(pr.pressureLevel || 0) >= 3) category = 'room9';
+  else if (t.bagmanFired && t.policeCompromised) category = 'police';
+  else if (t.townSuspicion >= 3) category = 'disturbance';
+
+  const pool = HEADLINE_POOL[category] || HEADLINE_POOL.quiet;
+  const headline = pool[Math.floor(Math.random() * pool.length)];
+  const entry = { headline, category, night: Number(targetState.night || 1) };
+  t.headlineArchive.push(entry);
+  return entry;
+}
+
+function triggerBagmanCopEvent() {
+  normalizeTownState();
+  const cop = state.townState.bagmanName;
+  state.townState.bagmanFired = true;
+  state.activeNightEvent = {
+    id: 'bagman-cop',
+    type: 'bagman-cop',
+    title: `Officer ${cop} — Unofficial Visit`,
+    description: `Officer ${cop} isn't here on duty. He came around back, didn't knock, just waited. He wants to talk about a "mutual arrangement." He's done this before. The last manager paid. You can see the line of his envelope through his jacket.`,
+    severity: 'high',
+    options: [
+      { id: 'cop-pay',       label: 'Pay the arrangement ($120)',      hint: 'Clean exit. He leaves satisfied.' },
+      { id: 'cop-refuse',    label: 'Turn him away',                   hint: 'Risky. He won\'t forget it.' },
+      { id: 'cop-cooperate', label: 'Ask what he actually wants',       hint: 'He might let something slip.' },
+      { id: 'cop-document',  label: 'Agree but photograph the exchange', hint: 'Evidence, but you still pay.' }
+    ]
+  };
+  pushLiveAlert(state, { type: 'warning', message: `Officer ${cop} is waiting outside — unofficial visit.`, dedupeKey: `bagman-arrive-${state.night}` });
+  renderNightEvent();
+}
+
+function handleBagmanCopChoice(choiceId) {
+  normalizeTownState();
+  const t = state.townState;
+  const cop = t.bagmanName;
+  state.activeNightEvent = null;
+
+  if (choiceId === 'cop-pay') {
+    const cost = 120;
+    state.money = Math.max(0, (state.money || 0) - cost);
+    t.bagmanPayoffs = (t.bagmanPayoffs || 0) + 1;
+    t.policeCompromised = true;
+    t.townSuspicion = Math.max(0, (t.townSuspicion || 0) - 1);
+    addToLog(`[Police] Officer ${cop} left after a brief exchange. No incident logged. The arrangement stands.`);
+    applyIdentityImpact({ doctrine: { compliance: 1 }, factions: { ownership: -1 }, reason: 'police payoff accepted' });
+  } else if (choiceId === 'cop-refuse') {
+    t.townSuspicion = Math.min(10, (t.townSuspicion || 0) + 2);
+    t.corruption = Math.min(10, (t.corruption || 0) + 1);
+    addToLog(`[Police] Officer ${cop} took his time leaving. He said nothing. That's worse.`);
+    addToLog(`[Town] Word travels. Someone will notice Officer ${cop} was turned away.`);
+    applyIdentityImpact({ doctrine: { resistance: 1 }, factions: { ownership: -1 }, stats: { pressure: 2 }, reason: 'refused police payoff' });
+    pushLiveAlert(state, { type: 'danger', message: `Officer ${cop} turned away — heat incoming.`, dedupeKey: `bagman-refuse-${state.night}` });
+  } else if (choiceId === 'cop-cooperate') {
+    t.townSuspicion = Math.min(10, (t.townSuspicion || 0) + 1);
+    t.corruption = Math.min(10, (t.corruption || 0) + 1);
+    addToLog(`[Police] Officer ${cop} let something drop: there's a review coming. He said it like a favor. He still expects payment next time.`);
+    addEvidenceItem('false-police-log', state.night);
+    applyIdentityImpact({ doctrine: { knowledge: 1 }, reason: 'extracted info from bagman cop' });
+    pushLiveAlert(state, { type: 'info', message: `Intel from Officer ${cop} — evidence logged.`, dedupeKey: `bagman-coop-${state.night}` });
+  } else if (choiceId === 'cop-document') {
+    const cost = 120;
+    state.money = Math.max(0, (state.money || 0) - cost);
+    t.bagmanPayoffs = (t.bagmanPayoffs || 0) + 1;
+    t.policeCompromised = true;
+    addToLog(`[Police] Paid Officer ${cop}. Got documentation. He doesn't know that.`);
+    addEvidenceItem('police-payoff-receipt', state.night);
+    addEvidenceItem('bagman-visit-note', state.night);
+    applyIdentityImpact({ doctrine: { compliance: 1, documentation: 1 }, factions: { ownership: -1 }, reason: 'documented police payoff' });
+    pushLiveAlert(state, { type: 'success', message: `Payoff documented — evidence secured.`, dedupeKey: `bagman-doc-${state.night}` });
+  }
+
+  renderAll();
+}
+
+function fireMidnightDJBroadcast() {
+  normalizeTownState();
+  const t = state.townState;
+  t.djBroadcastFiredTonight = true;
+
+  let broadcast = null;
+  const pr = state.protectedRoom;
+  const nemesis = state.nemesis;
+  const dirty = state.dirtyLedger;
+  const staffIntel = state.staffIntel;
+
+  if (nemesis?.active && Number(nemesis.heat || 0) >= 6) broadcast = DJ_BROADCAST_CONTEXTUAL.nemesis;
+  else if (pr?.knownToPlayer && Number(pr.pressureLevel || 0) >= 2) broadcast = DJ_BROADCAST_CONTEXTUAL.room9;
+  else if (dirty && Number(dirty.dirtyScore || 0) >= 3) broadcast = DJ_BROADCAST_CONTEXTUAL.dirty;
+  else if (staffIntel?.compromisedId) broadcast = DJ_BROADCAST_CONTEXTUAL.staff;
+  else broadcast = DJ_BROADCAST_POOL[Math.floor(Math.random() * DJ_BROADCAST_POOL.length)];
+
+  t.lastDjBroadcast = broadcast;
+  addToLog(`[Highway Radio] ${broadcast}`);
+}
+
+function respondToDayShiftNote(response) {
+  normalizeDayShiftNotes();
+  const notes = state.dayShiftNotes || [];
+  if (!notes.length) return;
+  const current = notes[notes.length - 1];
+  if (current && current.playerResponse === null) {
+    current.playerResponse = response;
+    addToLog(`[Day Shift] You left a response to the morning note.`);
+    if (response === 'acknowledge') {
+      applyIdentityImpact({ doctrine: { stability: 1 }, reason: 'acknowledged day shift concerns' });
+    } else if (response === 'deflect') {
+      applyIdentityImpact({ doctrine: { control: 1 }, reason: 'deflected day shift concerns' });
+    }
+    renderAll();
+  }
+}
+
+function buildTownModel(targetState = state) {
+  normalizeTownState(targetState);
+  normalizeDayShiftNotes(targetState);
+  const t = targetState.townState;
+  const notes = targetState.dayShiftNotes || [];
+  const currentNote = notes.length ? notes[notes.length - 1] : null;
+  const lastHeadline = t.headlineArchive?.length
+    ? t.headlineArchive[t.headlineArchive.length - 1]
+    : null;
+  return {
+    townSuspicion: t.townSuspicion,
+    corruption: t.corruption,
+    bagmanFired: t.bagmanFired,
+    bagmanPayoffs: t.bagmanPayoffs,
+    bagmanName: t.bagmanName,
+    policeCompromised: t.policeCompromised,
+    lastHeadline,
+    lastDjBroadcast: t.lastDjBroadcast,
+    currentNote,
+    noteCount: notes.length
+  };
+}
+
+// ─── end v0.31 ────────────────────────────────────────────────
+
 // ============================================================
 
 function checkFailureState() {
@@ -8344,6 +8612,27 @@ function progressShift(actionKey, options = {}) {
           dedupeKey: `staff-suspicion-${_v29comp.id}-${state.night}`
         });
       }
+    }
+  }
+
+  // v0.31 bagman cop — once per run, night ≥ 2, dirty score > 0, elapsed 100–350 min
+  if (!state.townState?.bagmanFired && !state.activeNightEvent) {
+    const _bmNight = Number(state.night || 1);
+    const _bmEl    = Number(state.shiftElapsedMinutes || 0);
+    const _bmDirty = Number(state.dirtyLedger?.dirtyScore || 0);
+    if (_bmNight >= 2 && _bmDirty > 0 && _bmEl >= 100 && _bmEl < 350 && Math.random() < 0.02) {
+      normalizeTownState();
+      triggerBagmanCopEvent();
+      return false;
+    }
+  }
+
+  // v0.31 midnight DJ — once per night, elapsed ≥ 180 min
+  if (!state.townState?.djBroadcastFiredTonight) {
+    const _djEl = Number(state.shiftElapsedMinutes || 0);
+    if (_djEl >= 180 && Math.random() < 0.35) {
+      normalizeTownState();
+      fireMidnightDJBroadcast();
     }
   }
 
@@ -9723,6 +10012,10 @@ function handleNightEventChoice(optionId) {
     handleRoom9Choice(optionId);
     return;
   }
+  if (activeEventId === 'bagman-cop') {
+    handleBagmanCopChoice(optionId);
+    return;
+  }
 
   const actionKey = `night-event-choice-${activeEventId}`;
   if (!acquireActionLock(actionKey)) return;
@@ -10213,6 +10506,18 @@ function endNight(options = {}) {
   if (_r9Level >= 3 && !_r9Found.includes('old-room-ledger')) {
     addEvidenceItem('old-room-ledger', state.night);
     state.protectedRoom.evidenceFound = [...(state.protectedRoom.evidenceFound), 'old-room-ledger'];
+  }
+
+  // v0.31 town end-of-night
+  normalizeTownState();
+  buildDailyHeadline();
+  const _t31 = state.townState;
+  // Passive suspicion: escalates when dirty or cop refused
+  if (Number(state.dirtyLedger?.dirtyScore || 0) >= 2) {
+    _t31.townSuspicion = Math.min(10, (_t31.townSuspicion || 0) + 1);
+  }
+  if (Number(state.dirtyLedger?.shadowRep || 0) >= 4) {
+    _t31.corruption = Math.min(10, (_t31.corruption || 0) + 1);
   }
 
   // Activate / escalate nemesis
@@ -10983,6 +11288,10 @@ function nextNight() {
     state.protectedRoom.contaminationFired = false;
     state.protectedRoom.room9EventFiredTonight = false;
   }
+  normalizeTownState();
+  normalizeDayShiftNotes();
+  if (state.townState) state.townState.djBroadcastFiredTonight = false;
+  generateDayShiftNote();
   state = assignScenarioForNight(state);
   state = normalizePresentationState(state);
   state = normalizeSpecialEncounterState(state);

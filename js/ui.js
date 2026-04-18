@@ -2220,6 +2220,8 @@ export function renderLogs(state) {
     if (/(room \d|guest.*room|occupant|lockdown|evict|service.*call|hallway check|maintenance sent|security sent)/.test(v)) return 'room';
     if (/(lobby|hallway|parking|utility|rear exit|shared space|zone.*pressure|spill)/.test(v)) return 'zone';
     if (/(power|electric|blackout|generator|restore|reroute|emergency power|outage)/.test(v)) return 'power';
+    if (/(\[highway radio\]|\[midnight dj\]|highway companion|route 9|roadside|night shift.*dj|broadcasting from)/.test(v)) return 'radio';
+    if (/(\[police\]|\[town\]|officer [a-z]+.*visit|bagman|town.*suspicion|corrupt.*law|police.*payoff|false.*police|informant.*record|town.*saw|bought.*law)/.test(v)) return 'town';
     if (/(room 9|sealed corridor|sealed room|contamination|owner.*authorization|owner.*protected|owner.*override|do not enter|heat.*sensor.*corridor|housekeeping.*sealed|maintenance.*room.*scratched|rear.*sealed|feed.*flicker.*sealed|key.*room.*(no|not).*registered|prior shift.*do not)/.test(v)) return 'contamination';
     if (/(staff.*refused|mutiny|inside.*job|inside.*leak|compromised.*staff|staff.*falsif|dispatch.*inconsistency|internal.*irregularity|staff walkout|forced back.*work|staff.*bonus|dismissed.*shift|log entry.*crossed|repair ticket exceeded|dispatch timing.*slow|zone clear.*camera|filed as resolved.*room pressure)/.test(v)) return 'staff';
     if (/(off-book|unlogged stay|hidden payment|walk-in|dead drop|vending drop|hunters.*desk|hunters arrived|sheltered|shadow reputation|dirty cash|off-book stay|torn ledger|stained cash|hidden guest)/.test(v)) return 'dirty';
@@ -2252,6 +2254,8 @@ export function renderLogs(state) {
     { key: 'contamination', title: 'Room 9 / Protected Space',  limit: 5,        collapsed: false },
     { key: 'staff',      title: 'Staff & Internal Activity',   limit: 5,        collapsed: false },
     { key: 'dirty',      title: 'Off-Book Activity',          limit: 5,        collapsed: false },
+    { key: 'radio',      title: 'Highway Radio',              limit: 3,        collapsed: false },
+    { key: 'town',       title: 'Town & Local Pressure',      limit: 5,        collapsed: false },
     { key: 'archive',    title: 'Full Night Log',             limit: Infinity, collapsed: true  }
   ];
 
@@ -2551,6 +2555,26 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
     }
   }
 
+  // v0.31 town summary
+  const summaryTownSlot = document.getElementById('summary-town-section');
+  if (summaryTownSlot) {
+    const tp = state?.townPressureSummary || {};
+    if (tp.active && (tp.townSuspicion > 0 || tp.corruption > 0 || tp.bagmanFired || tp.headlineCount > 0)) {
+      const rows = [];
+      if (tp.bagmanFired) rows.push({ label: `Officer ${tp.bagmanName} made contact — unofficial visit`, cls: tp.bagmanPayoffs > 0 ? 'is-corrupt' : '' });
+      if (tp.bagmanPayoffs > 0) rows.push({ label: `${tp.bagmanPayoffs} payoff${tp.bagmanPayoffs !== 1 ? 's' : ''} accepted`, cls: 'is-corrupt' });
+      if (tp.policeCompromised) rows.push({ label: 'Local law enforcement arrangement active', cls: 'is-corrupt' });
+      if (tp.townSuspicion > 0) rows.push({ label: `Town heat: ${tp.townSuspicion}/10`, cls: tp.townSuspicion >= 6 ? 'is-corrupt' : '' });
+      if (tp.headlineCount > 0 && tp.lastHeadline) rows.push({ label: `Press coverage: ${tp.lastHeadline.headline}`, cls: '' });
+      summaryTownSlot.innerHTML = `<div class="v31-summary-town-section">
+        <div class="v31-summary-town-header">Town & Outside Pressure</div>
+        ${rows.map(r => `<div class="v31-summary-town-row"><span class="v31-summary-town-dot${r.cls ? ' ' + r.cls : ''}"></span><span>${r.label}</span></div>`).join('')}
+      </div>`;
+    } else {
+      summaryTownSlot.innerHTML = '';
+    }
+  }
+
   // v0.27 evidence section in summary
   const summaryEvidenceSlot = document.getElementById('summary-evidence-section');
   if (summaryEvidenceSlot) {
@@ -2723,6 +2747,64 @@ function buildRoom9SummaryHtml(intel = {}) {
   return `<div class="v30-summary-room9-section">
     <div class="v30-summary-room9-header">Room 9 &amp; Protected Space</div>
     ${rows.map(r => `<div class="v30-summary-room9-row"><span class="v30-summary-room9-dot${r.cls ? ' ' + r.cls : ''}"></span><span>${r.text}</span></div>`).join('')}
+  </div>`;
+}
+
+// ── v0.31 town builders ──────────────────────────────────────
+
+function buildNewspaperClipHtml(headline = {}) {
+  if (!headline?.headline) return '';
+  const cat = headline.category || 'quiet';
+  return `<div class="v31-newspaper-clip">
+    <div class="v31-newspaper-header">
+      <span class="v31-newspaper-label">Local Paper</span>
+      <span class="v31-newspaper-night">Night ${headline.night || '?'}</span>
+    </div>
+    <div class="v31-newspaper-headline">${headline.headline}</div>
+    <div class="v31-newspaper-tagline">${cat === 'raid' ? 'Multi-agency activity reported in the area.' : cat === 'police' ? 'Sheriff\'s office statement reported.' : cat === 'dirty' ? 'Financial irregularities under scrutiny.' : cat === 'room9' ? 'Extended tenancy dispute ongoing.' : cat === 'nemesis' ? 'Law enforcement expand area search.' : cat === 'disturbance' ? 'Incident under local review.' : 'No major incidents reported overnight.'}</div>
+  </div>`;
+}
+
+function buildDJStripHtml(broadcast = '') {
+  if (!broadcast) return '';
+  return `<div class="v31-dj-strip">
+    <div class="v31-dj-header">
+      <span class="v31-dj-label">Highway Radio</span>
+    </div>
+    <div class="v31-dj-text">${broadcast}</div>
+  </div>`;
+}
+
+function buildDayShiftNoteHtml(note = {}, onRespond = null) {
+  if (!note?.text) return '';
+  const stage = Number(note.stage || 0);
+  const stageClass = stage === 0 ? 'stage-early' : stage === 1 ? 'stage-early' : stage === 2 ? 'stage-mid' : 'stage-critical';
+  const stageLabel = stage === 0 ? 'Early' : stage === 1 ? 'Mid' : stage === 2 ? 'Late' : 'Critical';
+  const responded = note.playerResponse !== null;
+  const responseHtml = responded
+    ? `<div class="v31-note-responded">You responded: ${note.playerResponse}.</div>`
+    : `<div class="v31-note-response-strip">
+        <button class="v31-note-response-btn" data-response="acknowledge">Acknowledge</button>
+        <button class="v31-note-response-btn" data-response="deflect">Deflect</button>
+        <button class="v31-note-response-btn" data-response="ignore">Ignore</button>
+      </div>`;
+  return `<div class="v31-dayshift-note">
+    <div class="v31-note-header">
+      <span class="v31-note-label">Day Shift Note</span>
+      <span class="v31-note-stage-chip ${stageClass}">${stageLabel}</span>
+    </div>
+    <div class="v31-note-text">"${note.text}"</div>
+    ${responseHtml}
+  </div>`;
+}
+
+function buildTownSuspicionHtml(town = {}) {
+  const suspicion = Math.max(0, Math.min(10, Number(town.townSuspicion || 0)));
+  const pct = Math.round(suspicion * 10);
+  return `<div class="v31-town-suspicion">
+    <span class="v31-suspicion-label">Town Heat</span>
+    <div class="v31-suspicion-track"><div class="v31-suspicion-fill" style="width:${pct}%"></div></div>
+    <span class="v31-suspicion-value">${suspicion}/10</span>
   </div>`;
 }
 
@@ -3039,6 +3121,30 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
   if (room9Slot) {
     const r9 = state?.room9Model || {};
     room9Slot.innerHTML = buildProtectedRoomHtml(r9);
+  }
+
+  // v0.31 town signals in night prep
+  const townSignalsSlot = document.getElementById('night-prep-town-signals');
+  if (townSignalsSlot) {
+    const tm = state?.townModel || {};
+    const parts = [];
+    if (tm.lastHeadline) parts.push(buildNewspaperClipHtml(tm.lastHeadline));
+    if (tm.lastDjBroadcast) parts.push(buildDJStripHtml(tm.lastDjBroadcast));
+    if (tm.townSuspicion > 0 || tm.corruption > 0) parts.push(buildTownSuspicionHtml(tm));
+    townSignalsSlot.innerHTML = parts.join('') || '';
+  }
+
+  // v0.31 day shift note in night prep
+  const dayshiftSlot = document.getElementById('night-prep-dayshift-note');
+  if (dayshiftSlot) {
+    const note = state?.currentDayShiftNote || null;
+    dayshiftSlot.innerHTML = note ? buildDayShiftNoteHtml(note) : '';
+    dayshiftSlot.querySelectorAll('.v31-note-response-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const response = btn.dataset.response;
+        if (response && typeof state?.onRespondToNote === 'function') state.onRespondToNote(response);
+      });
+    });
   }
 
   if (doctrine) {
@@ -3431,6 +3537,26 @@ export function renderRunEnding(ending = {}) {
       chip.className = `v29-ending-tag${cls ? ' ' + cls : ''}`;
       chip.textContent = label;
       v29Tags.appendChild(chip);
+    });
+  }
+
+  // v0.31 town ending lines
+  const townLine = document.getElementById('run-ending-town-line');
+  const v31Tags = document.getElementById('run-ending-v31-tags');
+  if (townLine) townLine.textContent = ending?.townLine || '';
+  if (v31Tags) {
+    v31Tags.innerHTML = '';
+    const v31TagData = [
+      (ending?.bagmanPayoffs || 0) >= 2 ? { label: 'Bought the Law', cls: 'tag-corrupt' } : null,
+      ending?.policeCompromised && !(ending?.bagmanPayoffs) ? { label: 'Town Saw Nothing', cls: 'tag-clean' } : null,
+      (ending?.townSuspicion || 0) >= 6 ? { label: 'Notorious Motel', cls: 'tag-corrupt' } : null,
+      ending?.bagmanFired && !(ending?.bagmanPayoffs) ? { label: 'Turned Away the Law', cls: 'tag-clean' } : null
+    ].filter(Boolean);
+    v31TagData.forEach(({ label, cls }) => {
+      const chip = document.createElement('span');
+      chip.className = `v31-ending-tag${cls ? ' ' + cls : ''}`;
+      chip.textContent = label;
+      v31Tags.appendChild(chip);
     });
   }
 

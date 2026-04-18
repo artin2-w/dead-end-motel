@@ -1,0 +1,355 @@
+/* v0.31 Town Is Rotten / Bagman Cop / Newspaper / Midnight DJ / Day-Shift Notes */
+
+:root {
+  --v31-cop-border: #b45309;
+  --v31-cop-text: #fcd34d;
+  --v31-cop-bg: rgba(180, 83, 9, 0.06);
+  --v31-paper-border: #92400e;
+  --v31-paper-bg: rgba(120, 53, 15, 0.08);
+  --v31-paper-text: #d97706;
+  --v31-paper-headline: #fbbf24;
+  --v31-radio-border: #1e3a5f;
+  --v31-radio-bg: rgba(30, 58, 95, 0.10);
+  --v31-radio-text: #93c5fd;
+  --v31-note-border: #78716c;
+  --v31-note-bg: rgba(120, 113, 108, 0.07);
+  --v31-note-text: #d6d3d1;
+  --v31-suspicion-fill: #ef4444;
+  --v31-suspicion-track: rgba(255, 255, 255, 0.08);
+  --v31-town-border: #44403c;
+  --v31-town-bg: rgba(68, 64, 60, 0.06);
+}
+
+/* ── Bagman cop night event card ─────────────────── */
+
+.active-night-event-card[data-event-type="bagman-cop"] {
+  border-color: var(--v31-cop-border) !important;
+  background: var(--v31-cop-bg) !important;
+}
+
+.active-night-event-card[data-event-type="bagman-cop"] .night-event-title {
+  color: var(--v31-cop-text);
+}
+
+/* ── Newspaper clipping ──────────────────────────── */
+
+.v31-newspaper-clip {
+  border-left: 3px solid var(--v31-paper-border);
+  background: var(--v31-paper-bg);
+  border-radius: 4px;
+  padding: 8px 11px;
+  margin-top: 6px;
+}
+
+.v31-newspaper-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.v31-newspaper-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--v31-paper-text);
+  opacity: 0.8;
+}
+
+.v31-newspaper-night {
+  font-size: 0.63rem;
+  color: var(--color-text-muted, #888);
+  margin-left: auto;
+}
+
+.v31-newspaper-headline {
+  font-size: 0.79rem;
+  font-weight: 600;
+  color: var(--v31-paper-headline);
+  line-height: 1.35;
+  font-style: italic;
+}
+
+.v31-newspaper-tagline {
+  font-size: 0.67rem;
+  color: var(--color-text-muted, #888);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+/* ── Midnight DJ / Highway Radio ─────────────────── */
+
+.v31-dj-strip {
+  border-left: 3px solid var(--v31-radio-border);
+  background: var(--v31-radio-bg);
+  border-radius: 4px;
+  padding: 7px 11px;
+  margin-top: 6px;
+}
+
+.v31-dj-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 3px;
+}
+
+.v31-dj-label {
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--v31-radio-text);
+  opacity: 0.75;
+}
+
+.v31-dj-text {
+  font-size: 0.74rem;
+  color: var(--v31-radio-text);
+  line-height: 1.4;
+  opacity: 0.9;
+}
+
+.v31-dj-warning {
+  font-size: 0.68rem;
+  color: #fca5a5;
+  margin-top: 3px;
+  border-top: 1px solid rgba(30, 58, 95, 0.3);
+  padding-top: 3px;
+}
+
+/* ── Town suspicion gauge ────────────────────────── */
+
+.v31-town-suspicion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  padding: 5px 11px;
+  background: var(--v31-town-bg);
+  border-radius: 3px;
+  border: 1px solid var(--v31-town-border);
+}
+
+.v31-suspicion-label {
+  font-size: 0.66rem;
+  color: var(--color-text-muted, #888);
+  min-width: 80px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.v31-suspicion-track {
+  flex: 1;
+  height: 4px;
+  background: var(--v31-suspicion-track);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.v31-suspicion-fill {
+  height: 100%;
+  background: var(--v31-suspicion-fill);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.v31-suspicion-value {
+  font-size: 0.65rem;
+  color: var(--color-text-muted, #888);
+  min-width: 28px;
+  text-align: right;
+}
+
+/* ── Day-shift note card ─────────────────────────── */
+
+.v31-dayshift-note {
+  border-left: 3px solid var(--v31-note-border);
+  background: var(--v31-note-bg);
+  border-radius: 4px;
+  padding: 9px 11px;
+  margin-top: 6px;
+}
+
+.v31-note-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.v31-note-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--v31-note-text);
+  opacity: 0.7;
+}
+
+.v31-note-stage-chip {
+  font-size: 0.62rem;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.v31-note-stage-chip.stage-early {
+  background: rgba(120, 113, 108, 0.14);
+  border: 1px solid var(--v31-note-border);
+  color: var(--v31-note-text);
+}
+
+.v31-note-stage-chip.stage-mid {
+  background: rgba(180, 83, 9, 0.10);
+  border: 1px solid var(--v31-cop-border);
+  color: var(--v31-cop-text);
+}
+
+.v31-note-stage-chip.stage-late {
+  background: rgba(153, 27, 27, 0.10);
+  border: 1px solid #991b1b;
+  color: #fca5a5;
+}
+
+.v31-note-stage-chip.stage-critical {
+  background: rgba(91, 33, 182, 0.12);
+  border: 1px solid #5b21b6;
+  color: #c4b5fd;
+  animation: v31-flicker 3s ease-in-out infinite;
+}
+
+@keyframes v31-flicker {
+  0%, 100% { opacity: 1; }
+  48%       { opacity: 0.7; }
+  52%       { opacity: 0.4; }
+}
+
+.v31-note-text {
+  font-size: 0.77rem;
+  color: var(--v31-note-text);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+.v31-note-response-strip {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.v31-note-response-btn {
+  font-size: 0.66rem;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-muted, #888);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.v31-note-response-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.v31-note-responded {
+  font-size: 0.66rem;
+  color: var(--color-text-muted, #888);
+  margin-top: 6px;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* ── Summary town section ────────────────────────── */
+
+.v31-summary-town-section {
+  border-left: 3px solid var(--v31-paper-border);
+  background: rgba(120, 53, 15, 0.04);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-top: 4px;
+}
+
+.v31-summary-town-header {
+  font-size: 0.77rem;
+  font-weight: 700;
+  color: var(--v31-paper-headline);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.v31-summary-town-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.74rem;
+  padding: 2px 0;
+}
+
+.v31-summary-town-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--v31-paper-text);
+  flex-shrink: 0;
+}
+
+.v31-summary-town-dot.is-corrupt {
+  background: #fca5a5;
+}
+
+.v31-summary-town-dot.is-ok {
+  background: #6ee7b7;
+}
+
+/* ── Ending elements ─────────────────────────────── */
+
+.v31-ending-town-line {
+  font-size: 0.8rem;
+  margin-top: 6px;
+}
+
+.v31-ending-tag-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.v31-ending-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.69rem;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--v31-paper-border);
+  background: rgba(120, 53, 15, 0.10);
+  color: var(--v31-paper-headline);
+}
+
+.v31-ending-tag.tag-corrupt {
+  border-color: #b45309;
+  background: rgba(180, 83, 9, 0.10);
+  color: var(--v31-cop-text);
+}
+
+.v31-ending-tag.tag-clean {
+  border-color: #065f46;
+  background: rgba(6, 95, 70, 0.10);
+  color: #6ee7b7;
+}
+
+/* ── Report section title ────────────────────────── */
+
+[data-section="radio"] .report-section-title {
+  color: var(--v31-radio-text);
+}
+
+[data-section="town"] .report-section-title {
+  color: var(--v31-paper-headline);
+}
