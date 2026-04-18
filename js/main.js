@@ -163,7 +163,9 @@ import {
   buildSocialMemoryNote,
   buildEvidenceItem,
   checkMysteryFragmentUnlock,
-  buildEvidenceLockerSummary
+  buildEvidenceLockerSummary,
+  buildDirtyLedgerSummary,
+  buildShadowRepNote
 } from './storyThreads.js';
 import {
   normalizeCarryoverState,
@@ -5173,6 +5175,9 @@ function buildRenderState() {
     unknownCallerHistory: Array.isArray(state.unknownCallerHistory) ? state.unknownCallerHistory : [],
     evidenceLockerSummary: buildEvidenceLockerSummary(state),
     nemesis: state.nemesis || {},
+    dirtyLedgerSummary: buildDirtyLedgerSummary(state),
+    shadowRepNote: buildShadowRepNote(state),
+    bleedingWalkInState: state.bleedingWalkInState || {},
     onHandleSpecialEncounter: handleOpenSpecialEncounter,
     onCloseSpecialEncounter: handleCloseSpecialEncounter,
     onSpecialEncounterChoice: handleSpecialEncounterChoice,
@@ -6869,6 +6874,390 @@ function triggerZoneBlackout(cameraId) {
   renderAll();
 }
 
+// ─── v0.28 Dirty Business / Shadow Systems ───────────────────
+
+function normalizeDirtyState(targetState = state) {
+  if (!targetState) return;
+  if (!targetState.dirtyLedger || typeof targetState.dirtyLedger !== 'object') {
+    targetState.dirtyLedger = { hiddenPayments: 0, offBookStays: 0, favorsAccepted: 0, deadDrops: 0, totalDirtyMoney: 0, lastActionNight: 0 };
+  }
+  if (typeof targetState.shadowRep !== 'number') targetState.shadowRep = 0;
+  if (!targetState.bleedingWalkInState || typeof targetState.bleedingWalkInState !== 'object') {
+    targetState.bleedingWalkInState = { offered: false, sheltered: false, rejected: false, huntersExpected: false, huntersFired: false, huntersNight: null, guestName: null };
+  }
+  if (!targetState.vendingDropState || typeof targetState.vendingDropState !== 'object') {
+    targetState.vendingDropState = { available: false, offered: false, completed: false, paybackPending: false, paybackNight: null };
+  }
+}
+
+function addDirtyCash(amount, reason = '') {
+  normalizeDirtyState();
+  const amt = Math.max(0, Number(amount || 0));
+  if (!amt) return;
+  state.money = Math.max(0, (state.money || 0) + amt);
+  state.dirtyLedger.totalDirtyMoney += amt;
+  state.dirtyLedger.hiddenPayments += 1;
+  state.dirtyLedger.lastActionNight = state.night || 1;
+  state.dirtyPressure = Math.min(10, (state.dirtyPressure || 0) + 1);
+  addEvidenceItem('stained-cash-band', state.night);
+  state.logs.push(`Hidden payment received: +$${amt}${reason ? ` (${reason})` : ''}. Off-book. Dirty pressure up.`);
+}
+
+function addToShadowRep(delta, reason = '') {
+  normalizeDirtyState();
+  const prev = Number(state.shadowRep || 0);
+  state.shadowRep = Math.max(-10, Math.min(10, prev + Number(delta || 0)));
+  if (Math.abs(delta) >= 1) {
+    const dir = delta > 0 ? 'improved' : 'declined';
+    state.logs.push(`Shadow reputation ${dir}: ${reason || 'off-book action recorded'} (${state.shadowRep > 0 ? '+' : ''}${state.shadowRep}).`);
+  }
+  // Ripple into nemesis and caller systems
+  if (state.shadowRep <= -3 && state.nemesis?.active) {
+    escalateNemesisPressure();
+  }
+}
+
+function recordDirtyAction(type = 'generic', contextLabel = '') {
+  normalizeDirtyState();
+  state.dirtyLedger.lastActionNight = state.night || 1;
+  if (type === 'off-book-stay') {
+    state.dirtyLedger.offBookStays += 1;
+    addEvidenceItem('off-book-register-note', state.night);
+  } else if (type === 'favor-accepted') {
+    state.dirtyLedger.favorsAccepted += 1;
+    addEvidenceItem('burner-instruction-slip', state.night);
+  } else if (type === 'dead-drop') {
+    state.dirtyLedger.deadDrops += 1;
+    addEvidenceItem('dead-drop-token', state.night);
+  } else if (type === 'betrayal') {
+    addEvidenceItem('hunter-vehicle-note', state.night);
+  }
+  // Torn ledger fragment when dirty actions accumulate
+  const totalActions = state.dirtyLedger.offBookStays + state.dirtyLedger.favorsAccepted + state.dirtyLedger.deadDrops;
+  if (totalActions >= 3) {
+    addEvidenceItem('torn-ledger-fragment', state.night);
+  }
+}
+
+// ── Bleeding Walk-In Event ─────────────────────
+
+function triggerBleedingWalkInEvent() {
+  if (state.activeNightEvent) return;
+  normalizeDirtyState();
+  if (state.bleedingWalkInState.offered) return;
+  state.bleedingWalkInState.offered = true;
+
+  const night = Math.max(1, Number(state.night || 1));
+  const cashOffer = night >= 5 ? 160 : night >= 3 ? 120 : 80;
+  const guestNames = ['A. Marsh', 'R. Selby', 'M. Croft', 'T. Hane', 'E. Pryce'];
+  const guestName = guestNames[night % guestNames.length];
+  state.bleedingWalkInState.guestName = guestName;
+
+  state.activeNightEvent = {
+    id: 'bleeding-walk-in',
+    title: 'Walk-In — No ID, Needs Help',
+    description: `Someone came through the rear entrance. Injured — not badly, but enough to notice. No reservation. No valid ID. They slid $${cashOffer} in cash across the desk. "Please. No receipt. I just need a room. No one needs to know." Their hands are shaking. Something outside is wrong.`,
+    severity: 'high',
+    cashOffer,
+    guestName,
+    options: [
+      {
+        id: 'walkin-shelter-paid',
+        label: `Take the $${cashOffer} — put them in a room off-book`,
+        preview: `+$${cashOffer} dirty, off-book stay, hunters in 1–2 nights`,
+        description: 'No log entry. They get a room. The money is yours. But someone is looking for them.',
+        note: 'Dirty cash. Shadow rep +1. Hunters expected next night.'
+      },
+      {
+        id: 'walkin-log',
+        label: 'Log them properly despite the missing ID',
+        preview: '−3 reputation, legitimate record',
+        description: 'Record it officially. The situation makes the paperwork uncomfortable, but it\'s clean.',
+        note: 'Small rep cost. No dirty pressure. No hunters.'
+      },
+      {
+        id: 'walkin-reject',
+        label: 'Turn them away — cannot help',
+        preview: '−1 reputation, no further consequence',
+        description: 'You cannot take responsibility for this. They leave.',
+        note: 'Clean exit. Minor rep cost.'
+      },
+      {
+        id: 'walkin-route-risky',
+        label: `Take the $${cashOffer} — route them to the lot annex`,
+        preview: `+$${cashOffer} dirty, +2 dirty pressure, shadow rep −1`,
+        description: 'The money is yours. You send them somewhere that isn\'t your problem — but should be.',
+        note: 'Dirty cash. Betrayal read. Evidence risk.'
+      }
+    ]
+  };
+  state.nightEventOverlayOpen = true;
+  state.logs.push(`Walk-in arrival: unregistered guest, no valid ID, $${cashOffer} cash offer. Midnight.`);
+  pushLiveAlert(state, {
+    type: 'danger',
+    message: `Walk-in: someone needs a room, no ID, offering $${cashOffer} cash. Decide now.`,
+    dedupeKey: `walkin-${night}`
+  });
+  audioController.playRedPhone();
+  renderAll();
+}
+
+function handleBleedingWalkInChoice(choiceId) {
+  state.nightEventOverlayOpen = false;
+  const event = state.activeNightEvent;
+  state.activeNightEvent = null;
+  const cashOffer = event?.cashOffer || 80;
+  const guestName = event?.guestName || 'Unknown';
+  normalizeDirtyState();
+
+  if (choiceId === 'walkin-shelter-paid') {
+    addDirtyCash(cashOffer, 'walk-in shelter');
+    addToShadowRep(1, 'sheltered a desperate walk-in');
+    recordDirtyAction('off-book-stay', guestName);
+    addEvidenceItem('hidden-guest-entry', state.night);
+    state.bleedingWalkInState.sheltered = true;
+    state.bleedingWalkInState.huntersExpected = true;
+    const huntersIn = Math.random() < 0.55 ? 1 : 2;
+    state.bleedingWalkInState.huntersNight = state.night + huntersIn;
+    state.logs.push(`Off-book stay accepted: ${guestName} placed in room with no log. $${cashOffer} taken. Hunters expected Night ${state.bleedingWalkInState.huntersNight}.`);
+    pushLiveAlert(state, { type: 'warning', message: `${guestName} housed off-book. Someone will come looking. +$${cashOffer} dirty.`, dedupeKey: 'walkin-shelter-done' });
+    applyIdentityImpact({ doctrine: { secrecy: 2, compassion: 1, stability: -1 }, factions: { guests: 1, locals: -1 }, reason: 'walk-in sheltered off-book' });
+
+  } else if (choiceId === 'walkin-log') {
+    state.reputation = Math.max(0, (state.reputation || 50) - 3);
+    state.bleedingWalkInState.sheltered = true;
+    state.logs.push(`Walk-in logged officially: ${guestName}. No ID but full entry made. Reputation impact recorded.`);
+    pushLiveAlert(state, { type: 'info', message: `${guestName} logged properly. −3 reputation.`, dedupeKey: 'walkin-logged' });
+    applyIdentityImpact({ doctrine: { compassion: 2, control: -1 }, factions: { guests: 1 }, reason: 'walk-in logged despite no ID' });
+
+  } else if (choiceId === 'walkin-reject') {
+    state.reputation = Math.max(0, (state.reputation || 50) - 1);
+    state.bleedingWalkInState.rejected = true;
+    state.logs.push(`Walk-in turned away: ${guestName}. Guest left without incident. Small reputation cost.`);
+    pushLiveAlert(state, { type: 'info', message: 'Walk-in turned away. −1 reputation.', dedupeKey: 'walkin-rejected' });
+    applyIdentityImpact({ doctrine: { control: 1 }, factions: {}, reason: 'walk-in rejected at desk' });
+
+  } else if (choiceId === 'walkin-route-risky') {
+    addDirtyCash(cashOffer, 'walk-in rerouted');
+    addToShadowRep(-1, 'rerouted a desperate person to a risky location');
+    state.dirtyPressure = Math.min(10, (state.dirtyPressure || 0) + 1);
+    addEvidenceItem('stained-cash-band', state.night);
+    state.bleedingWalkInState.rejected = true;
+    state.logs.push(`Walk-in rerouted: ${guestName} sent to lot annex. $${cashOffer} taken. Dirty pressure spiked. Betrayal logged.`);
+    pushLiveAlert(state, { type: 'warning', message: `+$${cashOffer} dirty. ${guestName} rerouted to lot. +2 dirty pressure.`, dedupeKey: 'walkin-routed' });
+    applyIdentityImpact({ doctrine: { secrecy: 1, force: 1, compassion: -2 }, factions: { locals: -1 }, reason: 'walk-in betrayed for cash' });
+  }
+
+  if (progressShift('walk-in-response', { timeScale: 0.2, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+// ── Hunters Follow-Up ──────────────────────────
+
+function triggerHuntersEvent() {
+  if (state.activeNightEvent) return;
+  normalizeDirtyState();
+  if (state.bleedingWalkInState.huntersFired) return;
+  state.bleedingWalkInState.huntersFired = true;
+
+  const sheltered = state.bleedingWalkInState.sheltered;
+  const guestName = state.bleedingWalkInState.guestName || 'the person';
+  const shadowRep = Number(state.shadowRep || 0);
+
+  state.activeNightEvent = {
+    id: 'hunters',
+    title: 'Hunters at the Desk',
+    description: `Two people in civilian clothes. One slides a photo across the counter — poor quality, but it's ${guestName} from that night. "We're looking for someone. They may have passed through here recently. We'd like to see your registration log." Their posture says this isn't routine.`,
+    severity: 'high',
+    options: [
+      {
+        id: 'hunters-lie',
+        label: 'Deny — no record of that person',
+        preview: '+1 dirty pressure, shadow rep +1',
+        description: 'You hold the line. No one by that description. They study you, then leave — for now.',
+        note: shadowRep >= 2 ? 'Shadow rep helps — they half believe you.' : 'They may not fully believe you.'
+      },
+      {
+        id: 'hunters-show-log',
+        label: 'Show them the registration log',
+        preview: sheltered ? '+2 dirty pressure (unlogged stay exposed)' : 'Clean — no issue',
+        description: sheltered
+          ? 'The log has no entry. They notice the gap. This creates a different kind of problem.'
+          : 'The log is clean. They see the record, nod, and leave.',
+        note: sheltered ? 'Risk: off-book stay exposed via absence.' : 'Safe if logged legitimately.'
+      },
+      {
+        id: 'hunters-stall',
+        label: 'Stall — give me a moment to check my records',
+        preview: 'Moderate outcome, time pressure',
+        description: 'Buy time. Check slowly. They\'re impatient. Something may slip.',
+        note: 'Random outcome — may escalate or defuse.'
+      },
+      {
+        id: 'hunters-call-police',
+        label: 'Call the police — this feels wrong',
+        preview: '+2 reputation, dirty pressure may surface',
+        description: 'You flag the situation officially. They leave fast. But an audit could follow.',
+        note: 'Clean outcome but potential dirty exposure if ledger is dirty.'
+      }
+    ]
+  };
+  state.nightEventOverlayOpen = true;
+  state.logs.push(`Hunters arrived: two individuals asking about ${guestName}. Desk confrontation in progress.`);
+  pushLiveAlert(state, {
+    type: 'danger',
+    message: `Hunters at the desk — asking about ${guestName}. Respond carefully.`,
+    dedupeKey: `hunters-${state.night}`
+  });
+  audioController.playEmergencyPulse('high');
+  renderAll();
+}
+
+function handleHuntersChoice(choiceId) {
+  state.nightEventOverlayOpen = false;
+  const event = state.activeNightEvent;
+  state.activeNightEvent = null;
+  const guestName = state.bleedingWalkInState?.guestName || 'the person';
+  const sheltered = state.bleedingWalkInState?.sheltered || false;
+  normalizeDirtyState();
+
+  addEvidenceItem('hunter-vehicle-note', state.night);
+
+  if (choiceId === 'hunters-lie') {
+    state.dirtyPressure = Math.min(10, (state.dirtyPressure || 0) + 1);
+    addToShadowRep(1, 'protected the walk-in from hunters');
+    state.logs.push(`Hunters denied access: lied about ${guestName}. Dirty pressure up. Shadow rep improved. They left — for now.`);
+    pushLiveAlert(state, { type: 'warning', message: 'Hunters turned away with a lie. +1 dirty pressure.', dedupeKey: 'hunters-lied' });
+    applyIdentityImpact({ doctrine: { secrecy: 2, stability: -1 }, factions: { locals: -1 }, reason: 'lied to hunters at desk' });
+
+  } else if (choiceId === 'hunters-show-log') {
+    if (sheltered) {
+      state.dirtyPressure = Math.min(10, (state.dirtyPressure || 0) + 2);
+      addEvidenceItem('off-book-register-note', state.night);
+      state.logs.push(`Hunters shown log: off-book stay gap noticed. Dirty pressure spiked. They know someone was here.`);
+      pushLiveAlert(state, { type: 'danger', message: 'Log gap exposed — off-book stay visible. +2 dirty pressure.', dedupeKey: 'hunters-log-exposed' });
+      applyIdentityImpact({ doctrine: { control: -1, stability: -1 }, factions: { ownership: -1 }, reason: 'off-book stay exposed to hunters' });
+    } else {
+      state.reputation = Math.max(0, (state.reputation || 50) + 1);
+      state.logs.push(`Hunters shown clean log: guest was properly logged. They were satisfied and left.`);
+      pushLiveAlert(state, { type: 'info', message: 'Log shown — clean record. Hunters satisfied.', dedupeKey: 'hunters-log-clean' });
+    }
+
+  } else if (choiceId === 'hunters-stall') {
+    const outcome = Math.random();
+    if (outcome < 0.4) {
+      state.dirtyPressure = Math.min(10, (state.dirtyPressure || 0) + 1);
+      state.logs.push(`Hunters stalled: time bought but they remained suspicious. Dirty pressure up slightly.`);
+      pushLiveAlert(state, { type: 'warning', message: 'Stall failed — hunters still suspicious. +1 dirty pressure.', dedupeKey: 'hunters-stall-fail' });
+    } else {
+      state.logs.push(`Hunters stalled: they grew impatient and left. No immediate consequence.`);
+      pushLiveAlert(state, { type: 'info', message: 'Hunters grew impatient and left. Stall worked.', dedupeKey: 'hunters-stall-win' });
+    }
+    applyIdentityImpact({ doctrine: { improvisation: 1, secrecy: 1 }, factions: {}, reason: 'stalled hunters' });
+
+  } else if (choiceId === 'hunters-call-police') {
+    state.reputation = Math.max(0, (state.reputation || 50) + 2);
+    const hasDirty = (state.dirtyLedger?.totalDirtyMoney || 0) > 0 || (state.dirtyLedger?.offBookStays || 0) > 0;
+    if (hasDirty) {
+      state.dirtyPressure = Math.min(10, (state.dirtyPressure || 0) + 1);
+      state.logs.push(`Hunters removed by police call: +2 reputation. Police audit risk due to dirty ledger activity.`);
+      pushLiveAlert(state, { type: 'warning', message: 'Police called — hunters gone. Dirty ledger risk flagged in audit.', dedupeKey: 'hunters-police-dirty' });
+    } else {
+      state.logs.push(`Hunters removed by police call: +2 reputation. Clean audit.`);
+      pushLiveAlert(state, { type: 'info', message: 'Police called — clean outcome. +2 reputation.', dedupeKey: 'hunters-police-clean' });
+    }
+    applyIdentityImpact({ doctrine: { control: 1, force: 1 }, factions: { authorities: 1, locals: -1 }, reason: 'called police on hunters' });
+  }
+
+  if (progressShift('hunters-response', { timeScale: 0.2, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+// ── Vending Machine Dead Drop ──────────────────
+
+function triggerVendingDeadDropEvent() {
+  if (state.activeNightEvent) return;
+  normalizeDirtyState();
+  if (state.vendingDropState.offered || state.vendingDropState.completed) return;
+  state.vendingDropState.offered = true;
+
+  const night = Math.max(1, Number(state.night || 1));
+  const payback = night >= 4 ? 100 : night >= 3 ? 75 : 50;
+
+  state.activeNightEvent = {
+    id: 'vending-dead-drop',
+    title: 'Message in the Machine Panel',
+    description: `Behind the vending machine panel: a folded note. "Leave your item in Slot B-4. Take what's there in return." The exchange is already staged. Whoever set this up expected the desk manager to be in play. The $${payback} payback is already in the slot.`,
+    severity: 'medium',
+    payback,
+    options: [
+      {
+        id: 'drop-complete',
+        label: `Use the drop — take the $${payback}`,
+        preview: `+$${payback} dirty, shadow rep +1, dead drop evidence`,
+        description: 'You play along. The cash is in the slot. Someone now knows you\'re part of this.',
+        note: 'Dirty money. Dead drop logged. Evidence item added.'
+      },
+      {
+        id: 'drop-ignore',
+        label: 'Leave it — too risky',
+        preview: 'No consequence',
+        description: 'Walk away. The drop stays untouched.',
+        note: 'Clean outcome.'
+      },
+      {
+        id: 'drop-log-it',
+        label: 'Document the note — log as suspicious',
+        preview: '+1 reputation, evidence item, police awareness',
+        description: 'Report the drop point. It becomes an official record.',
+        note: 'Small rep boost. Evidence token documented cleanly.'
+      }
+    ]
+  };
+  state.nightEventOverlayOpen = true;
+  state.logs.push(`Vending machine dead drop discovered: pre-staged exchange found at Machine Panel B-4.`);
+  pushLiveAlert(state, {
+    type: 'warning',
+    message: 'Dead drop discovered in vending machine. Respond to the offer.',
+    dedupeKey: `vending-drop-${night}`
+  });
+  renderAll();
+}
+
+function handleVendingDeadDropChoice(choiceId) {
+  state.nightEventOverlayOpen = false;
+  const event = state.activeNightEvent;
+  state.activeNightEvent = null;
+  const payback = event?.payback || 50;
+  normalizeDirtyState();
+
+  if (choiceId === 'drop-complete') {
+    addDirtyCash(payback, 'vending dead drop');
+    addToShadowRep(1, 'completed a vending machine dead drop');
+    recordDirtyAction('dead-drop');
+    state.vendingDropState.completed = true;
+    state.logs.push(`Dead drop completed: $${payback} recovered from Machine Panel B-4. Drop token logged. Shadow rep up.`);
+    pushLiveAlert(state, { type: 'warning', message: `Drop completed. +$${payback} dirty. You are now a known participant.`, dedupeKey: 'drop-done' });
+    applyIdentityImpact({ doctrine: { secrecy: 2, improvisation: 1 }, factions: { locals: -1 }, reason: 'completed vending machine dead drop' });
+
+  } else if (choiceId === 'drop-ignore') {
+    state.logs.push('Vending drop ignored: exchange untouched.');
+    pushLiveAlert(state, { type: 'info', message: 'Drop left alone. No consequence.', dedupeKey: 'drop-ignored' });
+
+  } else if (choiceId === 'drop-log-it') {
+    state.reputation = Math.max(0, (state.reputation || 50) + 1);
+    addEvidenceItem('dead-drop-token', state.night);
+    state.logs.push('Vending drop documented: token logged as suspicious activity. Reported to appropriate channel.');
+    pushLiveAlert(state, { type: 'info', message: 'Drop note documented. +1 reputation. Evidence logged.', dedupeKey: 'drop-logged' });
+    applyIdentityImpact({ doctrine: { control: 1, stability: 1 }, factions: { authorities: 1 }, reason: 'documented dead drop for authorities' });
+  }
+
+  if (progressShift('vending-drop-response', { timeScale: 0.15, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+// ─── end v0.28 ────────────────────────────────────────────────
+
 // ============================================================
 
 function checkFailureState() {
@@ -7137,6 +7526,45 @@ function progressShift(actionKey, options = {}) {
     if (elapsed >= 90 && elapsed < 420 && Math.random() < 0.025) {
       state.burnerPhoneOffered = true;
       triggerBurnerPhoneEvent();
+      return false;
+    }
+  }
+
+  // Bleeding walk-in — rare midnight event, once per shift, mid-to-late
+  if (!state.bleedingWalkInState?.offered && !state.activeNightEvent) {
+    const _wEl = Number(state.shiftElapsedMinutes || 0);
+    const _wNight = Math.max(1, Number(state.night || 1));
+    const _wChance = Math.max(0.015, Math.min(0.045, 0.018 + (_wNight - 1) * 0.007));
+    if (_wEl >= 180 && _wEl < 420 && Math.random() < _wChance) {
+      normalizeDirtyState();
+      triggerBleedingWalkInEvent();
+      return false;
+    }
+  }
+
+  // Hunters follow-up — fires on the correct night after walk-in sheltered
+  if (!state.activeNightEvent) {
+    const _hwState = state.bleedingWalkInState;
+    if (_hwState?.huntersExpected && !_hwState?.huntersFired) {
+      if (Number(_hwState.huntersNight || 0) === Number(state.night || 1)) {
+        const _hwEl = Number(state.shiftElapsedMinutes || 0);
+        if (_hwEl >= 150 && _hwEl < 450 && Math.random() < 0.55) {
+          triggerHuntersEvent();
+          return false;
+        }
+      }
+    }
+  }
+
+  // Vending dead drop — once per run, dirty context or night >= 3, rare
+  if (!state.vendingDropState?.offered && !state.vendingDropState?.completed && !state.activeNightEvent) {
+    const _vNight = Math.max(1, Number(state.night || 1));
+    const _vEl = Number(state.shiftElapsedMinutes || 0);
+    const _vDirty = (state.dirtyLedger?.totalDirtyMoney || 0) > 0 || (state.dirtyPressure || 0) >= 2;
+    const _vChance = _vDirty ? 0.028 : (_vNight >= 3 ? 0.012 : 0);
+    if (_vChance > 0 && _vEl >= 100 && _vEl < 400 && Math.random() < _vChance) {
+      normalizeDirtyState();
+      triggerVendingDeadDropEvent();
       return false;
     }
   }
@@ -8509,6 +8937,18 @@ function handleNightEventChoice(optionId) {
     handleFrontDeskBreachChoice(optionId);
     return;
   }
+  if (activeEventId === 'bleeding-walk-in') {
+    handleBleedingWalkInChoice(optionId);
+    return;
+  }
+  if (activeEventId === 'hunters') {
+    handleHuntersChoice(optionId);
+    return;
+  }
+  if (activeEventId === 'vending-dead-drop') {
+    handleVendingDeadDropChoice(optionId);
+    return;
+  }
 
   const actionKey = `night-event-choice-${activeEventId}`;
   if (!acquireActionLock(actionKey)) return;
@@ -8950,6 +9390,20 @@ function endNight(options = {}) {
   const nemesisPressure = Number(state?.nemesis?.pressureLevel || 0);
   if (corruptionLevel >= 3 || nemesisPressure >= 3) {
     triggerDosRebootOverlay();
+  }
+
+  // v0.28 dirty ledger end-of-night checks
+  normalizeDirtyState();
+  const _totalDirty = state.dirtyLedger?.totalDirtyMoney || 0;
+  const _offBook = state.dirtyLedger?.offBookStays || 0;
+  const _drops = state.dirtyLedger?.deadDrops || 0;
+  // Torn ledger fragment at end of night if enough dirty history
+  if (_totalDirty >= 60 || (_offBook + _drops) >= 2) {
+    addEvidenceItem('torn-ledger-fragment', state.night);
+  }
+  // Shadow rep influences unknown caller and nemesis next night
+  if (Number(state.shadowRep || 0) <= -4 && state.nemesis) {
+    escalateNemesisPressure();
   }
 
   // Activate / escalate nemesis
@@ -9709,6 +10163,10 @@ function nextNight() {
   state.breachEventFired = false;
   normalizeEvidenceLockerState();
   normalizeNemesisState();
+  normalizeDirtyState();
+  // Reset per-night dirty flags but keep cross-night state
+  if (state.bleedingWalkInState) state.bleedingWalkInState.offered = false;
+  if (state.vendingDropState) state.vendingDropState.offered = false;
   state = assignScenarioForNight(state);
   state = normalizePresentationState(state);
   state = normalizeSpecialEncounterState(state);

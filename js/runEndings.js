@@ -94,6 +94,27 @@ function evaluateCategory(snapshot) {
   const nemesisContained = snapshot.nemesisOutcome === 'contained';
   const nemesisEscaped = snapshot.nemesisOutcome === 'escaped';
   const huntWins = n(snapshot.huntWins, 0);
+  const dirtyScore = n(snapshot.dirtyScore, 0);
+  const offBookStays = n(snapshot.offBookStays, 0);
+  const deadDrops = n(snapshot.deadDrops, 0);
+  const shadowRep = n(snapshot.shadowRep, 0);
+
+  // v0.28 dirty endings — checked before v0.27
+  if (offBookStays >= 2 && shadowRep >= 2 && rep >= 38) {
+    return { key: 'protector-in-dark', title: 'Protector in the Dark', subtitle: 'Shelter Given Where No Record Exists' };
+  }
+  if (dirtyScore >= 8 && t.secrecy >= 5 && shadowRep >= 4) {
+    return { key: 'motel-of-secrets', title: 'Motel of Secrets', subtitle: 'Nothing Here Is What It Appears to Be' };
+  }
+  if (dirtyScore >= 4 && deadDrops >= 1 && rep >= 44 && force <= 2) {
+    return { key: 'bought-quiet', title: 'Bought Quiet', subtitle: 'Order Maintained Through Off-Book Arrangements' };
+  }
+  if (dirtyScore >= 6 && policyBreaks >= 2 && rep < 48) {
+    return { key: 'compromised-operator', title: 'Compromised Operator', subtitle: 'The Ledger Shows More Than the System Recorded' };
+  }
+  if (dirtyScore >= 3 && rep >= 42 && failSignals <= 1) {
+    return { key: 'dirty-but-untouched', title: 'Dirty But Untouched', subtitle: 'Off the Books, Out of Sight' };
+  }
 
   // v0.27 endings — checked before base categories
   if (nemesisContained && huntWins >= 2 && evidenceCount >= 6) {
@@ -156,6 +177,10 @@ function evaluateCategory(snapshot) {
 
 function resolveEndingFamilyFromKey(key = '') {
   const value = String(key || '').toLowerCase();
+  if (value.includes('protector-in-dark')) return 'stable';
+  if (value.includes('motel-of-secrets') || value.includes('bought-quiet')) return 'cold';
+  if (value.includes('compromised-operator')) return 'hostile';
+  if (value.includes('dirty-but-untouched')) return 'fragile';
   if (value.includes('nemesis-closed') || value.includes('hunted-closed')) return 'controlled';
   if (value.includes('evidence-trail')) return 'stable';
   if (value.includes('nemesis-escaped')) return 'hostile';
@@ -220,6 +245,11 @@ function evaluateGrade(snapshot) {
   score -= Math.min(12, snapshot.policyBreaks * 2);
   score += Math.min(10, snapshot.cleanResolutions);
   score += snapshot.finaleSurvived ? 6 : 0;
+  // v0.28 dirty score factors
+  score -= Math.min(6, n(snapshot.offBookStays, 0) * 2);
+  score += Math.min(3, n(snapshot.deadDrops, 0));
+  score += Math.min(4, Math.max(0, n(snapshot.shadowRep, 0)));
+  score -= Math.min(5, Math.max(0, -n(snapshot.shadowRep, 0)));
   // v0.27 score factors
   score += Math.min(6, n(snapshot.evidenceCount, 0) * 0.75);
   score += snapshot.mysteryComplete ? 4 : 0;
@@ -249,6 +279,7 @@ export function buildRunEndingPackage(state) {
   const locker = state?.evidenceLocker || {};
   const nemesis = state?.nemesis || {};
   const callerThread = state?.callerThread || {};
+  const dirtyLedger = state?.dirtyLedger || {};
 
   const snapshot = {
     tendencies,
@@ -271,6 +302,12 @@ export function buildRunEndingPackage(state) {
     finalePerformanceLabel: String(state?.finalePerformance?.label || ''),
     finalePerformanceLine: String(state?.finalePerformance?.line || ''),
     endingMood: Array.isArray(state?.summaryIdentityLines) ? String(state.summaryIdentityLines[0] || '') : '',
+    // v0.28
+    dirtyScore: Math.min(10, n(dirtyLedger.totalDirtyMoney, 0) / 20),
+    offBookStays: n(dirtyLedger.offBookStays, 0),
+    deadDrops: n(dirtyLedger.deadDrops, 0),
+    shadowRep: n(state?.shadowRep, 0),
+    totalDirtyMoney: n(dirtyLedger.totalDirtyMoney, 0),
     // v0.27
     evidenceCount: Array.isArray(locker.items) ? locker.items.length : 0,
     mysteryComplete: n(locker.mysteryFragmentsFound, 0) >= 6,
@@ -308,6 +345,10 @@ export function buildRunEndingPackage(state) {
   const finaleIntegrationLine = snapshot.finalePerformanceLabel
     ? `Finale integration: ${snapshot.finalePerformanceLabel}.`
     : 'Finale integration: pressure peaked without a distinct finale profile.';
+
+  const dirtyLine = snapshot.totalDirtyMoney > 0
+    ? `Off-book: $${snapshot.totalDirtyMoney} dirty cash earned, ${snapshot.offBookStays} unlogged stay${snapshot.offBookStays !== 1 ? 's' : ''}, ${snapshot.deadDrops} dead drop${snapshot.deadDrops !== 1 ? 's' : ''}.${snapshot.shadowRep !== 0 ? ` Shadow rep: ${snapshot.shadowRep > 0 ? '+' : ''}${snapshot.shadowRep}.` : ''}`
+    : '';
 
   const evidenceLine = snapshot.evidenceCount >= 6
     ? `Evidence locker: ${snapshot.evidenceCount} items recovered${snapshot.mysteryComplete ? ' — Previous manager mystery resolved' : ''}.`
@@ -353,7 +394,11 @@ export function buildRunEndingPackage(state) {
     snapshot.nemesisOutcome === 'contained' ? 'Nemesis Identified' : '',
     snapshot.mysteryComplete ? 'Manager Mystery' : '',
     snapshot.huntWins >= 2 ? 'Hunt Nights Survived' : '',
-    snapshot.evidenceCount >= 8 ? 'Evidence Trail' : ''
+    snapshot.evidenceCount >= 8 ? 'Evidence Trail' : '',
+    // v0.28 tags
+    snapshot.totalDirtyMoney >= 100 ? 'Off-Book Cash' : '',
+    snapshot.shadowRep >= 4 ? 'Network Standing' : '',
+    snapshot.offBookStays >= 2 ? 'Unlogged Stays' : ''
   ].filter(Boolean).slice(0, 6);
 
   return {
@@ -384,6 +429,13 @@ export function buildRunEndingPackage(state) {
       unresolved: snapshot.unresolved,
       milestoneNights: n(campaign?.milestoneNightsSurvived, 0)
     },
+    // v0.28
+    dirtyLine: dirtyLine || '',
+    dirtyScore: snapshot.dirtyScore,
+    offBookStays: snapshot.offBookStays,
+    deadDrops: snapshot.deadDrops,
+    shadowRep: snapshot.shadowRep,
+    totalDirtyMoney: snapshot.totalDirtyMoney,
     // v0.27
     evidenceLine: evidenceLine || '',
     nemesisLine: nemesisLine || '',

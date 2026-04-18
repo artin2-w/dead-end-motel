@@ -2219,6 +2219,7 @@ export function renderLogs(state) {
     if (/(room \d|guest.*room|occupant|lockdown|evict|service.*call|hallway check|maintenance sent|security sent)/.test(v)) return 'room';
     if (/(lobby|hallway|parking|utility|rear exit|shared space|zone.*pressure|spill)/.test(v)) return 'zone';
     if (/(power|electric|blackout|generator|restore|reroute|emergency power|outage)/.test(v)) return 'power';
+    if (/(off-book|unlogged stay|hidden payment|walk-in|dead drop|vending drop|hunters.*desk|hunters arrived|sheltered|shadow reputation|dirty cash|off-book stay|torn ledger|stained cash|hidden guest)/.test(v)) return 'dirty';
     if (/(suspicious|forged|planted|fake|illegal|contraband|dirty|mismatch|forgery|flagged.*guest)/.test(v)) return 'suspicious';
     return 'archive';
   };
@@ -2245,6 +2246,7 @@ export function renderLogs(state) {
     { key: 'zone',       title: 'Shared Space Escalations',   limit: 4,        collapsed: false },
     { key: 'power',      title: 'Power & Emergency',          limit: 4,        collapsed: false },
     { key: 'suspicious', title: 'Suspicious Activity',        limit: 6,        collapsed: false },
+    { key: 'dirty',      title: 'Off-Book Activity',          limit: 5,        collapsed: false },
     { key: 'archive',    title: 'Full Night Log',             limit: Infinity, collapsed: true  }
   ];
 
@@ -2492,6 +2494,28 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
   const objectiveContainer = document.getElementById('summary-objective-list');
   renderObjectiveList(objectiveContainer, evaluateNightObjectives(state));
 
+  // v0.28 dirty summary
+  const summaryDirtySlot = document.getElementById('summary-dirty-section');
+  if (summaryDirtySlot) {
+    const dls = state?.dirtyLedgerSummary || {};
+    if (dls.hasDirty) {
+      const rows = [
+        dls.totalDirtyMoney > 0 ? `+$${dls.totalDirtyMoney} in off-book cash this shift` : '',
+        dls.offBookStays > 0    ? `${dls.offBookStays} off-book stay${dls.offBookStays !== 1 ? 's' : ''} accepted` : '',
+        dls.deadDrops > 0       ? `${dls.deadDrops} dead drop${dls.deadDrops !== 1 ? 's' : ''} completed` : '',
+        dls.shadowRep !== 0     ? `Shadow reputation: ${dls.shadowRep > 0 ? '+' : ''}${dls.shadowRep}` : ''
+      ].filter(Boolean);
+      summaryDirtySlot.innerHTML = `<div class="v28-summary-dirty-section">
+        <div class="v28-summary-dirty-header">Off-Book Activity</div>
+        <div class="v28-summary-dirty-rows">${rows.map((r) =>
+          `<div class="v28-summary-dirty-row"><span class="v28-summary-dirty-dot"></span><span>${r}</span></div>`
+        ).join('')}</div>
+      </div>`;
+    } else {
+      summaryDirtySlot.innerHTML = '';
+    }
+  }
+
   // v0.27 evidence section in summary
   const summaryEvidenceSlot = document.getElementById('summary-evidence-section');
   if (summaryEvidenceSlot) {
@@ -2523,6 +2547,51 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
       summaryEvidenceSlot.innerHTML = '';
     }
   }
+}
+
+function buildDirtyLedgerHtml(summary = {}) {
+  if (!summary.hasDirty) return '';
+  const rows = [
+    summary.totalDirtyMoney > 0 ? { label: 'Dirty cash earned', value: `$${summary.totalDirtyMoney}` } : null,
+    summary.offBookStays > 0    ? { label: 'Off-book stays',     value: summary.offBookStays }           : null,
+    summary.deadDrops > 0       ? { label: 'Dead drops',         value: summary.deadDrops }              : null,
+    summary.favorsAccepted > 0  ? { label: 'Favors accepted',    value: summary.favorsAccepted }         : null
+  ].filter(Boolean);
+
+  const shadowHtml = buildShadowRepHtml(summary.shadowRep);
+  const rowsHtml = rows.map((r) =>
+    `<div class="v28-dirty-ledger-row"><span class="v28-dlr-label">${r.label}</span><span class="v28-dlr-value">${r.value}</span></div>`
+  ).join('');
+
+  return `<div class="v28-dirty-ledger">
+    <div class="v28-dirty-ledger-header">
+      <span class="v28-dirty-ledger-title">Dirty Ledger</span>
+      <span class="v28-dirty-count-chip">${summary.actions}</span>
+    </div>
+    <div class="v28-dirty-ledger-rows">${rowsHtml || '<span class="v28-dirty-ledger-empty">No dirty actions this shift.</span>'}</div>
+    ${shadowHtml}
+  </div>`;
+}
+
+function buildShadowRepHtml(rep = 0) {
+  if (rep === 0) return '';
+  const pct = Math.round((Math.abs(rep) / 10) * 50);
+  const polarity = rep > 0 ? 'positive' : 'negative';
+  const label = rep >= 5 ? 'Network Trusted' : rep >= 2 ? 'Known' : rep <= -5 ? 'Marked' : 'Mistrusted';
+  const note = rep > 0
+    ? 'Off-book activity has earned quiet recognition in dangerous networks.'
+    : 'A betrayal is on record. Dangerous contacts are more aggressive.';
+  const fillStyle = polarity === 'positive'
+    ? `style="width:${pct}%; left:50%"`
+    : `style="width:${pct}%; right:50%; left:auto"`;
+  return `<div class="v28-shadow-rep-strip">
+    <div class="v28-shadow-rep-header">
+      <span class="v28-shadow-rep-title">Shadow Reputation</span>
+      <span class="v28-shadow-rep-level is-${polarity}">${rep > 0 ? '+' : ''}${rep} — ${label}</span>
+    </div>
+    <div class="v28-shadow-rep-track"><div class="v28-shadow-rep-fill is-${polarity}" ${fillStyle}></div></div>
+    <p class="v28-shadow-rep-note">${note}</p>
+  </div>`;
 }
 
 function buildEvidenceLockerHtml(locker = {}, compact = false) {
@@ -2810,6 +2879,13 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
     const nemesis = state?.nemesis || {};
     const nemesisHtml = buildNemesisAlertHtml(nemesis);
     evidenceSlot.innerHTML = nemesisHtml + buildEvidenceLockerHtml(locker, true);
+  }
+
+  // v0.28 dirty ledger in night prep
+  const dirtySlot = document.getElementById('night-prep-dirty-ledger');
+  if (dirtySlot) {
+    const dls = state?.dirtyLedgerSummary || {};
+    dirtySlot.innerHTML = dls.hasDirty ? buildDirtyLedgerHtml(dls) : '';
   }
 
   if (doctrine) {
@@ -3142,6 +3218,26 @@ export function renderRunEnding(ending = {}) {
       const item = document.createElement('li');
       item.textContent = line;
       notes.appendChild(item);
+    });
+  }
+
+  // v0.28 dirty ending lines
+  const dirtyLine = document.getElementById('run-ending-dirty-line');
+  const v28Tags = document.getElementById('run-ending-v28-tags');
+  if (dirtyLine) dirtyLine.textContent = ending?.dirtyLine || '';
+  if (v28Tags) {
+    v28Tags.innerHTML = '';
+    const v28TagData = [
+      ending?.dirtyScore >= 6 ? { label: 'Compromised Operator', cls: '' } : null,
+      ending?.offBookStays >= 2 && ending?.shadowRep >= 2 ? { label: 'Protector in the Dark', cls: 'tag-protector' } : null,
+      ending?.shadowRep >= 4 ? { label: 'Network Standing', cls: 'tag-shadow' } : null,
+      ending?.dirtyScore >= 3 && ending?.deadDrops >= 1 ? { label: 'Bought Quiet', cls: '' } : null
+    ].filter(Boolean);
+    v28TagData.forEach(({ label, cls }) => {
+      const chip = document.createElement('span');
+      chip.className = `v28-ending-tag${cls ? ' ' + cls : ''}`;
+      chip.textContent = label;
+      v28Tags.appendChild(chip);
     });
   }
 

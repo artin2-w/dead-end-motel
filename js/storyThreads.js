@@ -165,7 +165,15 @@ const EVIDENCE_CATALOG = [
   { id: 'mystery-key-tag',       type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Key Tag',   desc: 'A key tag printed with room "0". There is no Room 0 in this motel.' },
   { id: 'mystery-photo',         type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Photo',     desc: 'A photo of the parking lot at night, taped under the desk. Timestamp: two months ago.' },
   { id: 'mystery-note',          type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Note',      desc: '"Don\'t trust the scanner after midnight. It routes to a third address since April."' },
-  { id: 'mystery-badge',         type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Badge',     desc: 'A faded employee badge. The name is scratched off. The photo shows this exact desk.' }
+  { id: 'mystery-badge',         type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Badge',     desc: 'A faded employee badge. The name is scratched off. The photo shows this exact desk.' },
+  // v0.28 dirty business evidence
+  { id: 'stained-cash-band',       type: 'dirty',   category: 'dirty',    label: 'Stained Cash Band',           desc: 'A rubber-banded roll of bills with a brown stain. Not from the till.' },
+  { id: 'off-book-register-note',  type: 'dirty',   category: 'dirty',    label: 'Off-Book Register Note',      desc: 'A handwritten note with room number and initials — never entered into the system.' },
+  { id: 'dead-drop-token',         type: 'dirty',   category: 'dirty',    label: 'Vending Drop Token',          desc: 'A coin-shaped token in the vending machine return slot. Not locally manufactured.' },
+  { id: 'hunter-vehicle-note',     type: 'dirty',   category: 'security', label: 'Hunter Vehicle Note',         desc: 'Partial plate and description of the vehicle that stopped at the lot asking questions.' },
+  { id: 'burner-instruction-slip', type: 'dirty',   category: 'dirty',    label: 'Burner Instruction Slip',     desc: 'A small folded paper. Dead drop instructions for the machine slot. Already used.' },
+  { id: 'torn-ledger-fragment',    type: 'dirty',   category: 'dirty',    label: 'Torn Ledger Fragment',        desc: 'Part of an off-book log. More than one hand wrote on it.' },
+  { id: 'hidden-guest-entry',      type: 'dirty',   category: 'dirty',    label: 'Hidden Guest Entry',          desc: 'An unlogged stay. Someone was here and the system has no record.' }
 ];
 
 const MYSTERY_FRAGMENTS = [
@@ -786,6 +794,38 @@ export function buildEvidenceLockerSummary(state) {
       return acc;
     }, {})
   };
+}
+
+// --- v0.28 Dirty systems exports ---
+
+export function buildDirtyLedgerSummary(state) {
+  const ledger = state?.dirtyLedger || {};
+  const shadowRep = Number(state?.shadowRep || 0);
+  const total = Number(ledger.totalDirtyMoney || 0);
+  const offBook = Number(ledger.offBookStays || 0);
+  const drops = Number(ledger.deadDrops || 0);
+  const favors = Number(ledger.favorsAccepted || 0);
+  const actions = offBook + drops + favors + (Number(ledger.hiddenPayments || 0));
+  return {
+    hasDirty: actions > 0 || total > 0,
+    totalDirtyMoney: total,
+    offBookStays: offBook,
+    deadDrops: drops,
+    favorsAccepted: favors,
+    hiddenPayments: Number(ledger.hiddenPayments || 0),
+    actions,
+    shadowRep
+  };
+}
+
+export function buildShadowRepNote(state) {
+  const rep = Number(state?.shadowRep || 0);
+  if (rep === 0) return null;
+  if (rep >= 5) return { level: 'high', polarity: 'positive', label: 'Network Trusted', note: 'Dangerous networks regard you as a reliable contact. Certain guests arrive more cooperative.' };
+  if (rep >= 2) return { level: 'low', polarity: 'positive', label: 'Known to the Network', note: 'Off-book activity has earned quiet recognition. A few extra doors stay open.' };
+  if (rep <= -5) return { level: 'high', polarity: 'negative', label: 'Marked', note: 'You betrayed the network at least once. Expect pressure, not cooperation. Hunt nights are targeting you.' };
+  if (rep <= -2) return { level: 'low', polarity: 'negative', label: 'Mistrusted', note: 'Prior betrayal is on record. Dangerous contacts are less forgiving and more aggressive.' };
+  return null;
 }
 
 export function buildActiveRunThreadHighlights(state, limit = 3) {

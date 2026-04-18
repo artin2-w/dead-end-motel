@@ -1,0 +1,374 @@
+/* ── v0.28 Dirty Business / Shadow Systems ──── */
+
+:root {
+  --v28-dirty-border:   #92400e;
+  --v28-dirty-bg:       rgba(146, 64, 14, 0.07);
+  --v28-dirty-text:     #d97706;
+  --v28-dirty-muted:    #78350f;
+  --v28-cash-green:     #15803d;
+  --v28-cash-bg:        rgba(21, 128, 61, 0.07);
+  --v28-shadow-border:  #4b5563;
+  --v28-shadow-text:    #9ca3af;
+  --v28-shadow-pos:     #6ee7b7;
+  --v28-shadow-neg:     #fca5a5;
+  --v28-hunter-border:  #991b1b;
+  --v28-hunter-bg:      rgba(153, 27, 27, 0.08);
+  --v28-walkin-border:  #1d4ed8;
+  --v28-walkin-bg:      rgba(29, 78, 216, 0.06);
+  --v28-drop-border:    #5b21b6;
+  --v28-drop-bg:        rgba(91, 33, 182, 0.06);
+}
+
+/* ─── Off-Book / Dirty Cash Indicator ────────── */
+
+.v28-dirty-cash-strip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--v28-dirty-bg);
+  border: 1px solid var(--v28-dirty-border);
+  margin-bottom: 6px;
+}
+
+.v28-dirty-cash-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--v28-dirty-text);
+}
+
+.v28-dirty-cash-amount {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--v28-dirty-text);
+  margin-left: auto;
+}
+
+.v28-dirty-cash-note {
+  font-size: 0.62rem;
+  color: var(--v28-dirty-muted);
+  font-style: italic;
+}
+
+/* ─── Dirty Ledger Panel ─────────────────────── */
+
+.v28-dirty-ledger {
+  border: 1px solid var(--v28-dirty-border);
+  border-radius: 6px;
+  background: var(--v28-dirty-bg);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.v28-dirty-ledger-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.v28-dirty-ledger-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--v28-dirty-text);
+}
+
+.v28-dirty-count-chip {
+  font-size: 0.62rem;
+  font-weight: 700;
+  background: var(--v28-dirty-border);
+  color: #fff;
+  border-radius: 20px;
+  padding: 1px 7px;
+}
+
+.v28-dirty-ledger-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.v28-dirty-ledger-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.67rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.v28-dirty-ledger-row .v28-dlr-label {
+  color: var(--v28-dirty-text);
+}
+
+.v28-dirty-ledger-row .v28-dlr-value {
+  font-weight: 700;
+  color: var(--v28-dirty-text);
+}
+
+.v28-dirty-ledger-empty {
+  font-size: 0.67rem;
+  color: var(--text-muted, #94a3b8);
+  font-style: italic;
+}
+
+/* ─── Shadow Reputation Strip ────────────────── */
+
+.v28-shadow-rep-strip {
+  border: 1px solid var(--v28-shadow-border);
+  border-radius: 5px;
+  background: rgba(75, 85, 99, 0.08);
+  padding: 7px 10px;
+  margin-top: 6px;
+}
+
+.v28-shadow-rep-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.v28-shadow-rep-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--v28-shadow-text);
+}
+
+.v28-shadow-rep-level {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  border: 1px solid currentColor;
+}
+
+.v28-shadow-rep-level.is-positive { color: var(--v28-shadow-pos); }
+.v28-shadow-rep-level.is-negative { color: var(--v28-shadow-neg); }
+.v28-shadow-rep-level.is-neutral  { color: var(--v28-shadow-text); }
+
+.v28-shadow-rep-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 4px;
+  position: relative;
+}
+
+.v28-shadow-rep-fill {
+  height: 100%;
+  border-radius: 2px;
+  position: absolute;
+  top: 0;
+  transition: width 0.3s, left 0.3s;
+}
+
+.v28-shadow-rep-fill.is-positive {
+  background: var(--v28-shadow-pos);
+  left: 50%;
+}
+
+.v28-shadow-rep-fill.is-negative {
+  background: var(--v28-shadow-neg);
+  right: 50%;
+  left: auto;
+}
+
+.v28-shadow-rep-note {
+  font-size: 0.62rem;
+  color: var(--v28-shadow-text);
+  line-height: 1.4;
+}
+
+/* ─── Bleeding Walk-In Event Card ────────────── */
+
+.active-night-event-card[data-event-type="bleeding-walk-in"],
+.night-event-card.walkin-event {
+  border-color: var(--v28-walkin-border);
+  background: var(--v28-walkin-bg);
+}
+
+.v28-walkin-distress-chip {
+  display: inline-block;
+  font-size: 0.63rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--v28-walkin-border);
+  color: #fff;
+  border-radius: 3px;
+  padding: 1px 7px;
+  margin-bottom: 5px;
+}
+
+.v28-walkin-cash-offer {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--v28-cash-green);
+  margin: 4px 0;
+}
+
+/* ─── Hunters Event Card ─────────────────────── */
+
+.active-night-event-card[data-event-type="hunters"],
+.night-event-card.hunters-event {
+  border-color: var(--v28-hunter-border);
+  background: var(--v28-hunter-bg);
+}
+
+.v28-hunters-warning-chip {
+  display: inline-block;
+  font-size: 0.63rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--v28-hunter-border);
+  color: #fff;
+  border-radius: 3px;
+  padding: 1px 7px;
+  margin-bottom: 5px;
+}
+
+/* ─── Vending Dead Drop Event Card ───────────── */
+
+.active-night-event-card[data-event-type="vending-dead-drop"],
+.night-event-card.drop-event {
+  border-color: var(--v28-drop-border);
+  background: var(--v28-drop-bg);
+}
+
+.v28-drop-chip {
+  display: inline-block;
+  font-size: 0.63rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--v28-drop-border);
+  color: #fff;
+  border-radius: 3px;
+  padding: 1px 7px;
+  margin-bottom: 5px;
+}
+
+/* ─── Night prep dirty slot (#night-prep-dirty-ledger: grid cell; summary styles below) ─ */
+
+/* ─── Summary Dirty Section ──────────────────── */
+
+.v28-summary-dirty-section {
+  margin-top: 10px;
+}
+
+.v28-summary-dirty-header {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--v28-dirty-text);
+  margin-bottom: 6px;
+}
+
+.v28-summary-dirty-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.v28-summary-dirty-row {
+  font-size: 0.67rem;
+  color: var(--text-muted, #94a3b8);
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.v28-summary-dirty-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--v28-dirty-border);
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* ─── Report section: dirty ──────────────────── */
+
+[data-section="dirty"] .report-section-header {
+  color: var(--v28-dirty-text);
+}
+
+[data-section="dirty"] .report-section-title {
+  color: var(--v28-dirty-text);
+}
+
+/* ─── Run ending dirty tags ──────────────────── */
+
+.v28-ending-tag {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 3px;
+  padding: 2px 8px;
+  background: var(--v28-dirty-bg);
+  border: 1px solid var(--v28-dirty-border);
+  color: var(--v28-dirty-text);
+}
+
+.v28-ending-tag.tag-shadow {
+  background: rgba(75, 85, 99, 0.12);
+  border-color: var(--v28-shadow-border);
+  color: var(--v28-shadow-text);
+}
+
+.v28-ending-tag.tag-protector {
+  background: rgba(29, 78, 216, 0.1);
+  border-color: var(--v28-walkin-border);
+  color: #93c5fd;
+}
+
+.v28-ending-dirty-line {
+  font-size: 0.67rem;
+  color: var(--text-muted, #94a3b8);
+  margin: 3px 0;
+  line-height: 1.45;
+}
+
+.v28-ending-tag-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 8px 0;
+}
+
+/* ─── Topbar dirty cash indicator ────────────── */
+
+.stat-box.stat-dirty-cash {
+  border-color: var(--v28-dirty-border);
+}
+
+.stat-box.stat-dirty-cash .label {
+  color: var(--v28-dirty-text);
+  opacity: 0.9;
+}
+
+.stat-box.stat-dirty-cash strong {
+  color: var(--v28-dirty-text);
+}
+
+/* ─── MCB off-book indicator ─────────────────── */
+
+.mcb-offbook-strip {
+  font-size: 0.62rem;
+  color: var(--v28-dirty-text);
+  background: var(--v28-dirty-bg);
+  border-top: 1px solid var(--v28-dirty-border);
+  padding: 3px 8px;
+  letter-spacing: 0.04em;
+}
