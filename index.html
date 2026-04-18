@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dead End Motel v0.24</title>
+  <title>Dead End Motel v0.25</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -11,12 +11,13 @@
   <link rel="stylesheet" href="styles/v21-layer.css" />
   <link rel="stylesheet" href="styles/v22-visual.css" />
   <link rel="stylesheet" href="styles/v24-caseboard.css" />
+  <link rel="stylesheet" href="styles/v25-weather.css" />
 </head>
 <body>
   <div id="app" class="app-shell screen-main-menu">
     <header class="topbar topbar-v20" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.24</p>
+        <p class="eyebrow">Dead End Motel v0.25</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -332,6 +333,11 @@
               </div>
             </section>
 
+            <section class="aar-block aar-block-weather" aria-labelledby="aar-weather-heading">
+              <h3 id="aar-weather-heading" class="aar-block-title">Conditions &amp; motel state</h3>
+              <div id="summary-weather-condition"></div>
+            </section>
+
             <section class="aar-block aar-block-threads" aria-labelledby="aar-threads-heading">
               <h3 id="aar-threads-heading" class="aar-block-title">Threads, identity &amp; carryover</h3>
               <div class="summary-flavor-block">
@@ -374,6 +380,7 @@
               <div id="night-prep-threads" class="night-prep-threads"></div>
               <div id="night-prep-suspect-board" class="night-prep-suspect-board"></div>
               <div id="night-prep-forecast" class="night-prep-forecast"></div>
+              <div id="night-prep-condition" class="night-prep-condition"></div>
             </div>
             <div id="night-prep-plan-grid" class="night-prep-plan-grid"></div>
             <div id="night-prep-staff-focus-grid" class="night-prep-plan-grid"></div>

@@ -244,6 +244,91 @@ export function setActivePanel(panelId) {
   });
 }
 
+function deriveWeatherState(state) {
+  const explicit = state?.nightWeather;
+  if (explicit?.primary) return explicit;
+  const scenario = String(state?.activeScenario?.label || '').toLowerCase();
+  const crisis = String(state?.crisisNight?.kind || '').toLowerCase();
+  const pressure = state?.uiPressureLevel || 'calm';
+  const power = Number(state?.power ?? 100);
+  const camInterference = Number(state?.cameraInterferenceLevel || 0);
+  const blackout = state?.blackoutState?.level || 'none';
+  const night = Number(state?.night || 1);
+  let primary = 'clear';
+  let intensity = 'mild';
+  const effects = [];
+  if (/storm|surge|volatile/.test(scenario) || /storm/.test(crisis)) {
+    primary = 'storm'; intensity = 'severe';
+    effects.push({ domain: 'Power', text: 'Blackout risk elevated', severity: 'danger' });
+    effects.push({ domain: 'Cameras', text: 'Feed instability expected', severity: 'warn' });
+  } else if (/fog|mist|low.vis/.test(scenario) || camInterference >= 2) {
+    primary = 'fog'; intensity = 'moderate';
+    effects.push({ domain: 'Visibility', text: 'Outdoor zones reduced', severity: 'warn' });
+    effects.push({ domain: 'Cameras', text: 'Lot and rear feeds degraded', severity: 'warn' });
+  } else if (/cold|freeze|winter/.test(scenario)) {
+    primary = 'cold'; intensity = 'moderate';
+    effects.push({ domain: 'Power', text: 'Higher drain overnight', severity: 'warn' });
+    effects.push({ domain: 'Outdoor', text: 'Rear and parking more volatile', severity: 'warn' });
+  } else if (/rain|wet|drizzle/.test(scenario)) {
+    primary = 'rain'; intensity = 'mild';
+    effects.push({ domain: 'Outdoor', text: 'Lot uncertainty higher', severity: 'warn' });
+  } else if ((pressure === 'emergency' || pressure === 'dire') && blackout !== 'none') {
+    primary = 'storm'; intensity = 'severe';
+    effects.push({ domain: 'Power', text: 'Grid unstable — blackout likely', severity: 'danger' });
+  } else if (power <= 35 || blackout === 'partial' || blackout === 'full') {
+    primary = 'storm'; intensity = 'moderate';
+    effects.push({ domain: 'Power', text: 'Grid under strain', severity: 'warn' });
+  } else if (night >= 4 && pressure !== 'calm') {
+    primary = 'fog'; intensity = 'mild';
+    effects.push({ domain: 'Visibility', text: 'Late-campaign haze', severity: 'neutral' });
+  }
+  if (!effects.length) effects.push({ domain: 'Conditions', text: 'No notable weather impact', severity: 'ok' });
+  return { primary, intensity, effects };
+}
+
+function deriveMotelCondition(state) {
+  const explicit = state?.motelCondition;
+  if (explicit?.overall) return explicit;
+  const money = Number(state?.money || 0);
+  const rep = Number(state?.reputation || 50);
+  const power = Number(state?.power ?? 100);
+  const upgradeCount = Number(state?.progression?.ownedUpgradeIds?.length || 0);
+  const pressure = state?.uiPressureLevel || 'calm';
+  let score = 50;
+  if (money >= 600) score += 15;
+  else if (money >= 300) score += 8;
+  else if (money <= 80) score -= 18;
+  else if (money <= 150) score -= 8;
+  if (rep >= 70) score += 10;
+  else if (rep >= 50) score += 4;
+  else if (rep <= 25) score -= 20;
+  else if (rep <= 35) score -= 10;
+  if (power >= 80) score += 6;
+  else if (power <= 35) score -= 14;
+  else if (power <= 50) score -= 6;
+  if (upgradeCount >= 4) score += 12;
+  else if (upgradeCount >= 2) score += 6;
+  if (pressure === 'emergency') score -= 12;
+  else if (pressure === 'dire') score -= 8;
+  score = Math.max(0, Math.min(100, score));
+  let overall = 'maintained';
+  if (score >= 80) overall = 'upgraded';
+  else if (score >= 58) overall = 'maintained';
+  else if (score >= 40) overall = 'strained';
+  else if (score >= 22) overall = 'neglected';
+  else overall = 'deteriorating';
+  const signals = [];
+  if (money >= 400) signals.push({ text: 'Finances solid', polarity: 'positive' });
+  else if (money <= 100) signals.push({ text: 'Cash flow critical', polarity: 'negative' });
+  if (rep >= 65) signals.push({ text: 'Reputation strong', polarity: 'positive' });
+  else if (rep <= 30) signals.push({ text: 'Reputation at risk', polarity: 'negative' });
+  if (power <= 40) signals.push({ text: 'Power strained', polarity: 'negative' });
+  if (upgradeCount >= 3) signals.push({ text: `${upgradeCount} upgrades active`, polarity: 'positive' });
+  if (pressure === 'emergency' || pressure === 'dire') signals.push({ text: 'Under heavy pressure', polarity: 'negative' });
+  if (!signals.length) signals.push({ text: 'Operations normal', polarity: 'neutral' });
+  return { overall, score, signals };
+}
+
 function renderMotelCommandBoard(state) {
   const board = document.getElementById('motel-command-board');
   if (!board) return;
@@ -309,11 +394,19 @@ function renderMotelCommandBoard(state) {
     '</div>';
   }).join('');
 
+  const weather = deriveWeatherState(state);
+  const condition = deriveMotelCondition(state);
+
   board.innerHTML =
     '<div class="mcb-inner">' +
       '<div class="mcb-top-strip">' +
         '<span class="mcb-title">Command</span>' +
         '<span class="mcb-badge ' + badgeClass + '">' + badgeText + '</span>' +
+      '</div>' +
+      '<div class="mcb-env-strip">' +
+        '<span class="mcb-env-label">Env</span>' +
+        '<span class="mcb-weather-chip is-' + weather.primary + '">' + weather.primary.charAt(0).toUpperCase() + weather.primary.slice(1) + '</span>' +
+        '<span class="mcb-condition-chip is-' + condition.overall + '">' + condition.overall.charAt(0).toUpperCase() + condition.overall.slice(1) + '</span>' +
       '</div>' +
       '<div class="mcb-layout">' +
         '<div class="mcb-zone-col">' + zoneHtml(2, 'park', 'Park') + zoneHtml(1, 'lobby', 'Lobby') + '</div>' +
@@ -422,6 +515,10 @@ export function renderTopbar(state) {
     appShell.classList.toggle('atmosphere-scanner-compromised', Boolean(override.active && override.scannerCompromised));
     appShell.classList.toggle('atmosphere-hunt-night', Boolean(huntNight.active));
     appShell.classList.toggle('atmosphere-alerts-compromised', Boolean(override.active && override.alertsCompromised));
+    const _topbarWeather = deriveWeatherState(state);
+    const _topbarCondition = deriveMotelCondition(state);
+    appShell.dataset.weather = _topbarWeather.primary;
+    appShell.dataset.motelCondition = _topbarCondition.overall;
   }
 
   const warningFlags = state?.topbarWarningFlags || {};
@@ -613,9 +710,11 @@ export function renderTopbar(state) {
     };
     const phase = getNightPhaseLabel(nightNum, totalNights);
     const scenarioName = state?.activeScenario?.label || '';
+    const _calWeather = deriveWeatherState(state);
     calStrip.innerHTML =
       `<span class="shift-cal-night-label">Night ${nightNum}</span>` +
       `<span class="shift-cal-phase-chip ${phase.cls}">${phase.label}</span>` +
+      (_calWeather.primary !== 'clear' ? `<span class="shift-cal-weather-chip is-${_calWeather.primary}">${_calWeather.primary.charAt(0).toUpperCase() + _calWeather.primary.slice(1)}</span>` : '') +
       (scenarioName ? `<span class="shift-cal-scenario-label">${scenarioName}</span>` : '');
   }
 
@@ -1537,6 +1636,15 @@ export function renderSharedSpaces(state) {
   if (!grid) return;
   grid.innerHTML = '';
 
+  const _ssWeather = deriveWeatherState(state);
+  const OUTDOOR_ZONE_IDS = [2, 6];
+  const WEATHER_HINT_TEXT = {
+    fog: { 2: 'Lot visibility reduced — head counts uncertain', 6: 'Rear exit obscured — movement harder to track' },
+    cold: { 2: 'Cold snap — outdoor wait times shorter', 6: 'Rear access icy — entries may spike' },
+    rain: { 2: 'Rain in lot — vehicle reads less reliable', 6: 'Rear exit wet — pattern disrupted' },
+    storm: { 2: 'Storm conditions — lot is volatile', 6: 'Rear access hazardous — threat risk up' }
+  };
+
   const spaces = Array.isArray(state?.sharedSpaces) ? state.sharedSpaces : [];
   spaces.forEach((space) => {
     const card = document.createElement('article');
@@ -1552,6 +1660,11 @@ export function renderSharedSpaces(state) {
     });
     const systemNoise = Boolean(state?.systemOverride?.active) && scannerHot;
     const linkedScanner = linkedRoomCalls > 0 && scannerHot;
+    const zoneNumeric = Number(space?.zoneId || 0);
+    const isOutdoor = OUTDOOR_ZONE_IDS.includes(zoneNumeric);
+    const weatherHintText = isOutdoor && _ssWeather.primary !== 'clear'
+      ? (WEATHER_HINT_TEXT[_ssWeather.primary]?.[zoneNumeric] || null)
+      : null;
     card.className = `room-card shared-space-card ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'} ${emergencyPriority ? 'is-emergency-priority' : ''} ${systemNoise ? 'shared-space-system-noise' : ''} ${linkedScanner ? 'has-linked-scanner' : ''}`.trim();
     card.dataset.zoneId = String(space.zoneId || 0);
     card.innerHTML = `
@@ -1575,6 +1688,7 @@ export function renderSharedSpaces(state) {
           ? `<p class="shared-space-connection-line${linkedScanner ? ' is-linked-scanner' : ''}">${linkedRoomCalls > 0 ? `${linkedRoomCalls} room-call line${linkedRoomCalls === 1 ? '' : 's'}` : 'No room-call line'}${scannerHot ? ' · scanner agrees' : ''}</p>`
           : ''}
         ${emergencyPriority ? '<p class="room-service-note room-service-note-priority">Emergency priority zone.</p>' : ''}
+        ${weatherHintText ? `<div class="v25-weather-context-hint is-${_ssWeather.primary}"><span class="v25-weather-context-hint-label">Weather</span><span class="v25-weather-context-hint-text">${weatherHintText}</span></div>` : ''}
         ${space?.modifiers?.length
           ? `<details class="shared-space-modifiers-drawer"><summary>Zone modifiers</summary><div class="shared-space-modifiers-body">${space.modifiers.join(' · ')}</div></details>`
           : ''}
@@ -1646,11 +1760,14 @@ function getCameraStatusClass(status) {
 export function renderCameras(state) {
   const grid = document.getElementById('camera-grid');
   grid.innerHTML = '';
-  grid.classList.remove('camera-grid-glitch-light', 'camera-grid-glitch-heavy', 'camera-grid-scanline');
+  grid.classList.remove('camera-grid-glitch-light', 'camera-grid-glitch-heavy', 'camera-grid-scanline',
+    'weather-clear', 'weather-fog', 'weather-cold', 'weather-rain', 'weather-storm');
   const cameraInterference = Number(state?.cameraInterferenceLevel || 0);
   if (cameraInterference >= 1) grid.classList.add('camera-grid-scanline');
   if (cameraInterference >= 2) grid.classList.add('camera-grid-glitch-light');
   if (cameraInterference >= 3) grid.classList.add('camera-grid-glitch-heavy');
+  const _camWeather = deriveWeatherState(state);
+  grid.classList.add(`weather-${_camWeather.primary}`);
 
   state.cameras.forEach((camera) => {
     const activeEvent = (state.activeEvents || []).find(
@@ -2234,6 +2351,29 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
     }
   }
 
+  const summaryWeatherSlot = document.getElementById('summary-weather-condition');
+  if (summaryWeatherSlot) {
+    const sw = deriveWeatherState(state);
+    const sc = deriveMotelCondition(state);
+    const weatherLabels = { clear: 'Clear', fog: 'Fog', cold: 'Cold', rain: 'Rain', storm: 'Storm' };
+    const weatherLabel = weatherLabels[sw.primary] || sw.primary;
+    const weatherNote = sw.primary === 'clear'
+      ? 'Conditions were clear tonight.'
+      : `Shift ran under <span class="highlight-weather">${weatherLabel}</span> conditions — ${sw.effects[0]?.text || 'weather impacted operations'}.`;
+    const condNote = sc.overall === 'upgraded' || sc.overall === 'maintained'
+      ? `Motel held <span class="highlight-ok">${sc.overall}</span> condition through the shift.`
+      : `Motel ended the shift <span class="highlight-${sc.overall === 'deteriorating' ? 'danger' : 'warn'}">${sc.overall}</span> — address before next night.`;
+    summaryWeatherSlot.innerHTML =
+      `<div class="v25-summary-weather-section">
+        <div class="v25-summary-weather-header">Conditions & State</div>
+        <div class="v25-summary-weather-body">${weatherNote} ${condNote}</div>
+        <div class="v25-summary-condition-row">
+          <span class="v25-summary-condition-label">Motel</span>
+          <span class="mcb-condition-chip is-${sc.overall}">${sc.overall.charAt(0).toUpperCase() + sc.overall.slice(1)}</span>
+        </div>
+      </div>`;
+  }
+
   if (threadFlavor) {
     threadFlavor.className = 'summary-thread-flavor summary-thread-v20';
     threadFlavor.innerHTML = '';
@@ -2348,47 +2488,109 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
 
   const forecastStrip = document.getElementById('night-prep-forecast');
   if (forecastStrip) {
-    const buildForecastChips = () => {
-      const conditions = [];
-      const explicit = Array.isArray(state?.nightForecast?.conditions) ? state.nightForecast.conditions : [];
-      if (explicit.length) {
-        explicit.forEach((c) => conditions.push(String(c).toLowerCase().replace(/\s+/g, '-')));
-      } else {
-        const power = Number(state?.power ?? 100);
-        const blackout = state?.blackoutState?.level;
-        const scenario = String(state?.activeScenario?.label || '').toLowerCase();
-        const pressure = state?.uiPressureLevel || 'calm';
-        if (power <= 40 || blackout === 'partial' || blackout === 'full') conditions.push('unstable-grid');
-        if (blackout === 'partial' || blackout === 'full') conditions.push('poor-visibility');
-        if (pressure === 'calm' && !conditions.length) conditions.push('calm');
-        if (/storm|surge|volatile/.test(scenario)) conditions.push('storm-risk');
-        if (/fog|mist|low.vis/.test(scenario)) conditions.push('fog-prone');
-        if (/cold|freeze|winter/.test(scenario)) conditions.push('cold');
-        if (pressure === 'emergency' || pressure === 'dire') conditions.push('pressure-rising');
-      }
-      if (!conditions.length) conditions.push('calm');
-      const LABELS = {
-        'calm':            'Calm',
-        'fog-prone':       'Fog-Prone',
-        'cold':            'Cold',
-        'storm-risk':      'Storm Risk',
-        'unstable-grid':   'Unstable Grid',
-        'poor-visibility': 'Poor Visibility',
-        'pressure-rising': 'Pressure Rising'
-      };
-      return conditions.slice(0, 4).map((c) => {
-        const label = LABELS[c] || c.replace(/-/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
-        return `<span class="v24-forecast-chip v24-forecast-chip-${c}">${label}</span>`;
-      }).join('');
-    };
-
+    const fw = deriveWeatherState(state);
     const nextNight = Math.max(1, Number(state?.night || 1) + 1);
+
+    const conditions = [];
+    const explicit = Array.isArray(state?.nightForecast?.conditions) ? state.nightForecast.conditions : [];
+    if (explicit.length) {
+      explicit.forEach((c) => conditions.push(String(c).toLowerCase().replace(/\s+/g, '-')));
+    } else {
+      const _pw = Number(state?.power ?? 100);
+      const _bk = state?.blackoutState?.level;
+      const _sc = String(state?.activeScenario?.label || '').toLowerCase();
+      const _pr = state?.uiPressureLevel || 'calm';
+      if (fw.primary !== 'clear') conditions.push(fw.primary);
+      if (_pw <= 40 || _bk === 'partial' || _bk === 'full') conditions.push('unstable-grid');
+      if (_bk === 'partial' || _bk === 'full') conditions.push('poor-visibility');
+      if (_pr === 'emergency' || _pr === 'dire') conditions.push('pressure-rising');
+      if (/storm|surge|volatile/.test(_sc) && !conditions.includes('storm')) conditions.push('storm-risk');
+      if (!conditions.length) conditions.push('calm');
+    }
+    const COND_LABELS = {
+      'clear': 'Clear', 'calm': 'Calm', 'fog': 'Fog', 'cold': 'Cold', 'rain': 'Rain', 'storm': 'Storm',
+      'fog-prone': 'Fog-Prone', 'storm-risk': 'Storm Risk', 'unstable-grid': 'Unstable Grid',
+      'poor-visibility': 'Poor Visibility', 'pressure-rising': 'Pressure Rising'
+    };
+    const chipsHtml = conditions.slice(0, 4).map((c) => {
+      const label = COND_LABELS[c] || c.replace(/-/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+      return `<span class="v25-condition-chip is-${c}">${label}</span>`;
+    }).join('');
+
+    const effectsHtml = fw.effects.map((e) =>
+      `<div class="v25-effect-row">
+        <span class="v25-effect-domain">${e.domain}</span>
+        <span class="v25-effect-text severity-${e.severity}">${e.text}</span>
+      </div>`
+    ).join('');
+
+    const PLANNING_HINTS = {
+      fog:   ['Check lot and rear camera feeds before opening', 'Visibility-dependent calls take longer to resolve'],
+      cold:  ['Power drain will be higher — consider generator reserve', 'Outdoor zone entries may spike unexpectedly'],
+      rain:  ['Lot intel less reliable — cross-check scanner', 'Expect more rear-exit uncertainty'],
+      storm: ['Pre-stage blackout response before guests arrive', 'Scanner and cameras may lose stability mid-shift']
+    };
+    const hints = PLANNING_HINTS[fw.primary] || [];
+    const hintsHtml = hints.length
+      ? `<div class="v25-planning-hints">
+          <div class="v25-planning-hints-header">Planning</div>
+          ${hints.map((h) => `<div class="v25-planning-hint">${h}</div>`).join('')}
+        </div>`
+      : '';
+
     forecastStrip.innerHTML = prepSurface(
-      'forecast-v24',
+      'forecast-v25',
       `Night ${nextNight} — Shift Forecast`,
-      `<div class="v24-forecast-strip">
-        <div class="v24-forecast-header">Conditions</div>
-        <div class="v24-forecast-chips">${buildForecastChips()}</div>
+      `<div class="v25-forecast-panel">
+        <div class="v25-conditions-row">
+          <span class="v25-conditions-label">Conditions</span>
+          ${chipsHtml}
+        </div>
+        <div class="v25-effects-block">
+          <div class="v25-effects-header">Gameplay Impact</div>
+          ${effectsHtml}
+        </div>
+        ${hintsHtml}
+      </div>`
+    );
+  }
+
+  const conditionSlot = document.getElementById('night-prep-condition');
+  if (conditionSlot) {
+    const fc = deriveMotelCondition(state);
+    const ownedUpgrades = Array.isArray(state?.progression?.ownedUpgradeIds) ? state.progression.ownedUpgradeIds : [];
+    const upgradeList = Array.isArray(upgrades) ? upgrades : [];
+    const upgradeItemsHtml = upgradeList.length
+      ? `<div class="v25-upgrade-list">
+          ${upgradeList.slice(0, 5).map((u) => {
+            const isOwned = ownedUpgrades.includes(u.id);
+            const effectSummary = buildUpgradeEffectSummary(u);
+            return `<div class="v25-upgrade-item${isOwned ? ' is-owned' : ''}">
+              <span class="v25-upgrade-item-name">${u.name || u.id}</span>
+              ${isOwned ? `<span class="v25-upgrade-item-effect">${effectSummary || 'Active'}</span>` : ''}
+            </div>`;
+          }).join('')}
+        </div>`
+      : '';
+    const signalsHtml = fc.signals.map((s) =>
+      `<div class="v25-condition-signal-row is-${s.polarity}">
+        <span class="v25-signal-dot"></span>
+        <span>${s.text}</span>
+      </div>`
+    ).join('');
+    const barWidth = Math.round(fc.score);
+    conditionSlot.innerHTML = prepSurface(
+      'condition-v25',
+      'Motel Condition',
+      `<div class="v25-condition-surface">
+        <div class="v25-condition-score-bar-wrap">
+          <div class="v25-condition-score-bar-track">
+            <div class="v25-condition-score-bar-fill is-${fc.overall}" style="width:${barWidth}%"></div>
+          </div>
+          <span class="v25-condition-score-label is-${fc.overall}">${fc.overall.charAt(0).toUpperCase() + fc.overall.slice(1)}</span>
+        </div>
+        <div class="v25-condition-signals">${signalsHtml}</div>
+        ${upgradeItemsHtml}
       </div>`
     );
   }
