@@ -80,6 +80,26 @@ import {
   consumeEmergencyReroute
 } from './powerEconomy.js';
 import {
+  normalizeAnalogSurvivalState,
+  finalizeAnalogSurvivalState,
+  resetAnalogForNewShift,
+  getAnalogPassiveDrainBonus,
+  getCameraAnalogPenalty,
+  tickOperatorFatigue,
+  getFatigueTier,
+  shouldFatigueBlurNames,
+  getBreakerBoardSummary,
+  useCoffee,
+  useStrongStim,
+  maybeRollLotPayphoneOffer,
+  buildLotPayphoneNightEvent,
+  resolveLotPayphoneChoice,
+  applyNeonArrivalBias,
+  tickColdWithoutHeating,
+  cycleCircuitTier,
+  cycleNeonPlayerWish
+} from './analogSurvival.js';
+import {
   normalizeCameraSceneState,
   buildFreshCameraSceneState,
   clearCameraScene,
@@ -289,6 +309,7 @@ import {
   renderRooms,
   renderSharedSpaces,
   renderCameras,
+  renderAnalogPowerExtras,
   renderNightEventCard,
   renderNightEventOverlay,
   renderCameraSceneOverlay,
@@ -2592,6 +2613,8 @@ function restoreNightStartSnapshot(options = {}) {
   state.shiftStats = normalizeShiftStats(state.shiftStats);
   state = normalizeNightCycleState(state);
   state = normalizePowerEconomyState(state);
+  normalizeAnalogSurvivalState(state);
+  finalizeAnalogSurvivalState(state);
   state = normalizeCameraSceneState(state);
   state = normalizeLocationState(state);
   state = normalizePresentationState(state);
@@ -5257,8 +5280,50 @@ function buildRenderState() {
     hallwayThreatLine: buildHallwayThreatLine(state),
     cameraInterferenceLevel: Math.max(
       blackoutState.cameraInterference,
-      Number(state?.crisisEscalation?.cameraInterferenceLevel || 0)
+      Number(state?.crisisEscalation?.cameraInterferenceLevel || 0),
+      getCameraAnalogPenalty(state)
     ),
+    analog: getBreakerBoardSummary(state),
+    presentationFatigue: getFatigueTier(state),
+    blurGuestNamesFromFatigue: shouldFatigueBlurNames(state),
+    onAnalogCycleCircuit: (circuitId) => {
+      onMeaningfulAction();
+      audioController.playUiClick();
+      cycleCircuitTier(state, circuitId);
+      if (progressShift('breaker-toggle', { timeScale: 0.08, skipPassiveDrain: true })) return;
+      renderAll();
+    },
+    onAnalogNeonCycle: () => {
+      onMeaningfulAction();
+      audioController.playUiClick();
+      cycleNeonPlayerWish(state);
+      if (progressShift('neon-toggle', { timeScale: 0.08, skipPassiveDrain: true })) return;
+      renderAll();
+    },
+    onOperatorCoffee: () => {
+      onMeaningfulAction();
+      audioController.playUiClick();
+      const r = useCoffee(state);
+      if (!r.ok) {
+        pushLiveAlert(state, { type: 'warning', message: r.reason, dedupeKey: 'coffee-fail' });
+      } else {
+        pushLiveAlert(state, { type: 'info', message: 'Coffee run: fatigue eased.', dedupeKey: 'coffee-ok' });
+      }
+      if (progressShift('operatorCoffee', { timeScale: 0.12, skipPassiveDrain: true })) return;
+      renderAll();
+    },
+    onOperatorStim: () => {
+      onMeaningfulAction();
+      audioController.playUiClick();
+      const r = useStrongStim(state);
+      if (!r.ok) {
+        pushLiveAlert(state, { type: 'warning', message: r.reason, dedupeKey: 'stim-fail' });
+      } else {
+        pushLiveAlert(state, { type: 'warning', message: 'Strong stim used — rebound queued, dirty pressure ticked.', dedupeKey: 'stim-ok' });
+      }
+      if (progressShift('operatorStim', { timeScale: 0.12, skipPassiveDrain: true })) return;
+      renderAll();
+    },
     nightIdentityLine: buildNightIdentitySummary(state),
     nightMoodLine: buildNightMoodLine(state, ownerBrief, emergencyNight),
     motelCapacityLine: `Rooms licensed tonight: ${getUnlockedRoomCapForNight(state.night)} / 6`,
@@ -5839,6 +5904,8 @@ function bootstrapState() {
   if (!state?.nightStartSnapshot?.state) {
     captureNightStartSnapshot('bootstrap-fallback', { force: true });
   }
+  normalizeAnalogSurvivalState(state);
+  finalizeAnalogSurvivalState(state);
 }
 function renderAll() {
   evaluatePresentationState();
@@ -5869,6 +5936,7 @@ function renderAll() {
   );
   renderSharedSpaces(renderState);
   renderCameras(renderState);
+  renderAnalogPowerExtras(renderState);
   renderNightEventOverlay(renderState);
   renderCameraSceneOverlay(renderState);
   renderSpecialEncounterOverlay(renderState);
@@ -6155,6 +6223,7 @@ function startShift() {
     dedupeKey: `scenario-start-${state.night}`
   });
   pushOpeningTensionBeat('shift-start');
+  resetAnalogForNewShift(state);
   captureNightStartSnapshot('shift-start', { force: true });
   setActiveScreen('game-screen');
   setActivePanel('frontdesk-panel');
@@ -6165,6 +6234,53 @@ function startShift() {
 // ============================================================
 // v0.23 — RAID / CAMERA SABOTAGE / BURNER PHONE / ZONE BLACKOUT
 // ============================================================
+
+function triggerLotPayphoneEvent() {
+  state.activeNightEvent = buildLotPayphoneNightEvent();
+  state.nightEventOverlayOpen = false;
+  state.logs.push('Parking island payphone — a wet ring cuts across the lot.');
+  pushLiveAlert(state, {
+    type: 'warning',
+    kind: 'actionable',
+    message: 'Lot payphone ringing. Cannot answer from desk — send someone or let it die.',
+    dedupeKey: `lot-payphone-open-${state.night}`
+  });
+  renderAll();
+}
+
+function handleLotPayphoneChoice(choiceId) {
+  onMeaningfulAction();
+  audioController.playUiClick();
+  state.nightEventOverlayOpen = false;
+  state.activeNightEvent = null;
+  const result = resolveLotPayphoneChoice(state, choiceId);
+  if (!result?.ok) {
+    renderAll();
+    return;
+  }
+  if (Array.isArray(result.logs) && result.logs.length) {
+    state.logs.push(...result.logs);
+  }
+  if (Array.isArray(result.alerts) && result.alerts.length) {
+    result.alerts.forEach((msg, index) => {
+      pushLiveAlert(state, {
+        type: result.success ? 'info' : 'warning',
+        message: msg,
+        dedupeKey: `payphone-${state.night}-${choiceId}-${index}`
+      });
+    });
+  }
+  if (result.effects && Object.keys(result.effects).length) {
+    applyNightEventPressureEffects(result.effects, 'lot-payphone');
+  }
+  if (result.success) {
+    state.shiftStats.nightEventsResolved = (state.shiftStats.nightEventsResolved || 0) + 1;
+  } else if (choiceId === 'send-runner' && !result.success) {
+    state.shiftStats.nightEventsMissed = (state.shiftStats.nightEventsMissed || 0) + 1;
+  }
+  if (progressShift('lot-payphone', { timeScale: 0.22, skipPassiveDrain: true })) return;
+  renderAll();
+}
 
 function triggerPoliceRaidEvent() {
   state.activeNightEvent = {
@@ -8247,17 +8363,29 @@ function progressShift(actionKey, options = {}) {
     typeof options.passiveDrainScale === 'number' && Number.isFinite(options.passiveDrainScale)
       ? Math.max(0, options.passiveDrainScale)
       : 1;
+  const analogBonus = skipPassiveDrain ? 0 : Math.max(0, Math.round(getAnalogPassiveDrainBonus(state)));
   const passiveDrain = Math.max(
     0,
     Math.round(
       passiveDrainBase *
         passiveMult *
         Math.max(0.75, Number(state?.runModifiers?.passiveDrainMult || 1))
-    )
+    ) + analogBonus
   );
   if (passiveDrain > 0) {
     state.power = clampPower(state.power - passiveDrain);
-    state.logs.push(`Power grid load drained ${passiveDrain}% during ongoing motel operations.`);
+    state.logs.push(
+      `Power grid load drained ${passiveDrain}% during ongoing motel operations${
+        analogBonus > 0 ? ` (breaker load +${analogBonus})` : ''
+      }.`
+    );
+  }
+  if (!skipPassiveDrain) {
+    tickOperatorFatigue(state, actionKey);
+    const coldAlert = tickColdWithoutHeating(state);
+    if (coldAlert?.alert) {
+      pushLiveAlert(state, coldAlert.alert);
+    }
   }
 
   maybeTriggerBlackoutPressure(`pre-${actionKey}`);
@@ -8627,6 +8755,12 @@ function progressShift(actionKey, options = {}) {
     }
   }
 
+  // v0.32 lot payphone — rare outdoor line (weather / pressure weighted)
+  if (!state.activeNightEvent && maybeRollLotPayphoneOffer(state)) {
+    triggerLotPayphoneEvent();
+    return false;
+  }
+
   // v0.31 midnight DJ — once per night, elapsed ≥ 180 min
   if (!state.townState?.djBroadcastFiredTonight) {
     const _djEl = Number(state.shiftElapsedMinutes || 0);
@@ -8718,14 +8852,15 @@ function callNextArrival() {
     preparedDeskGuest.threadMemoryLine = [preparedDeskGuest.threadMemoryLine, preparedDeskGuest.linkedArrival.note].filter(Boolean).join(' ');
   }
 
-  state.guests.push(preparedDeskGuest);
-  maybeAdvanceSignatureNightFlow('arrival', { guest: preparedDeskGuest });
+  const arrivalGuest = applyNeonArrivalBias(preparedDeskGuest, state);
+  state.guests.push(arrivalGuest);
+  maybeAdvanceSignatureNightFlow('arrival', { guest: arrivalGuest });
   registerContentExposure(state, {
     kind: 'guest',
-    archetype: preparedDeskGuest?.archetypeKey,
+    archetype: arrivalGuest?.archetypeKey,
     outsideHeavy: Number(branchContext?.signals?.outsideRisk || 0) >= 6
   });
-  registerContentExposure(state, { kind: 'guestMood', mood: preparedDeskGuest?.mood });
+  registerContentExposure(state, { kind: 'guestMood', mood: arrivalGuest?.mood });
   if (preparedDeskGuest?.specialEncounter?.id) {
     registerContentExposure(state, { kind: 'special', id: preparedDeskGuest.specialEncounter.id });
   }
@@ -9968,6 +10103,10 @@ function handleNightEventChoice(optionId) {
   const activeEventId = state?.activeNightEvent?.id || 'none';
 
   // Dispatch v0.23 custom event handlers before the generic resolver
+  if (activeEventId === 'lot-payphone') {
+    handleLotPayphoneChoice(optionId);
+    return;
+  }
   if (activeEventId === 'police-raid') {
     handleRaidChoice(optionId);
     return;
@@ -10604,6 +10743,11 @@ function endNight(options = {}) {
     ].slice(0, 4);
     state.summaryIdentityLines = [...doctrineNotes, ...factionLines].slice(0, 4);
     state.summaryIdentityLines.unshift(buildNightMoodLine(state, buildOwnerPressureBrief(), getEmergencyNightProfile(state)));
+    normalizeAnalogSurvivalState(state);
+    const analogRecall = (state.analogSurvival?.analogNightLog || []).filter(Boolean).slice(-2);
+    if (analogRecall.length) {
+      state.summaryIdentityLines.push(`Breaker / neon / operator: ${analogRecall.join(' · ')}`);
+    }
     state.summaryIdentityLines = state.summaryIdentityLines.filter(Boolean).slice(0, 5);
     if ((state.shiftStats.nightEventsMissed || 0) === 0 && (state.shiftStats.unresolvedLocationScenes || 0) === 0) {
       applyIdentityImpact({
@@ -11256,6 +11400,7 @@ function nextNight() {
   state.storyChains = [];
   state.shiftStats = createShiftStats();
   state.powerEconomy = buildFreshPowerEconomy();
+  resetAnalogForNewShift(state);
   applyNightStartProgression(state);
   applyDayShiftPlanForNightStart();
   state.cameraScene = buildFreshCameraSceneState();

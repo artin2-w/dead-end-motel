@@ -823,6 +823,9 @@ export function tickNightEvents(state, branchContext = null) {
 
   if (state.activeNightEvent) {
     const event = state.activeNightEvent;
+    const skipDirectorTimeout = ['police-raid', 'lot-payphone', 'unknown-caller', 'burner-phone', 'hunters'].includes(
+      String(event?.id || '')
+    );
     event.ageTicks += 1;
     const safeNight = Math.max(1, Number(state?.night || 1));
 
@@ -834,6 +837,7 @@ export function tickNightEvents(state, branchContext = null) {
             : safeNight === 4 ? 0.82
               : 0.9;
     const shouldWorsen =
+      !skipDirectorTimeout &&
       event.worsenStage < event.maxWorsenStages &&
       event.ageTicks > 0 &&
       event.ageTicks % event.worsenEvery === 0 &&
@@ -852,7 +856,7 @@ export function tickNightEvents(state, branchContext = null) {
       6 +
       Math.max(0, event.maxWorsenStages - event.worsenStage) +
       (safeNight <= 2 ? 1 : 0);
-    if (event.ageTicks >= timeoutTicks) {
+    if (!skipDirectorTimeout && event.ageTicks >= timeoutTicks) {
       state.shiftStats.nightEventsMissed = (state.shiftStats.nightEventsMissed || 0) + 1;
       payload.logs.push(`Active event timed out unresolved: ${event.title}.`);
       payload.alerts.push(`${event.title} caused unresolved shift pressure.`);

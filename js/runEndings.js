@@ -329,6 +329,10 @@ function evaluateGrade(snapshot) {
   score += snapshot.nemesisOutcome === 'contained' ? 5 : 0;
   score -= snapshot.nemesisOutcome === 'escaped' ? 4 : 0;
   score += Math.min(6, n(snapshot.huntWins, 0) * 2);
+  // v0.32 operator / grid toll
+  if (n(snapshot.operatorFatigueEnd, 0) >= 78) score -= 2;
+  else if (n(snapshot.operatorFatigueEnd, 0) <= 35) score += 2;
+  if (n(snapshot.analogStrongStimUses, 0) >= 1) score -= 1;
 
   if (score >= 86) return { grade: 'S', label: 'Definitive Campaign Close' };
   if (score >= 75) return { grade: 'A', label: 'Strong Campaign Close' };
@@ -410,7 +414,9 @@ export function buildRunEndingPackage(state) {
     nemesisOutcome: String(nemesis.resolvedOutcome || (nemesis.active ? 'active' : '')),
     nemesisStyleKey: String(nemesis.styleKey || ''),
     huntWins: n(callerThread.huntNightWins, 0),
-    huntLosses: n(callerThread.huntNightLosses, 0)
+    huntLosses: n(callerThread.huntNightLosses, 0),
+    operatorFatigueEnd: n(state?.analogSurvival?.operatorFatigue, 0),
+    analogStrongStimUses: n(state?.analogSurvival?.stimUses?.strong, 0)
   };
 
   const ending = evaluateCategory(snapshot);
@@ -463,6 +469,7 @@ export function buildRunEndingPackage(state) {
     ? `Hunt nights: ${snapshot.huntWins} win${snapshot.huntWins !== 1 ? 's' : ''}, ${snapshot.huntLosses} miss${snapshot.huntLosses !== 1 ? 'es' : ''}.`
     : '';
 
+  const analogFoot = (state?.analogSurvival?.analogNightLog || []).filter(Boolean).slice(-1)[0];
   const notes = [
     snapshot.endingMood ? `Late-run identity: ${snapshot.endingMood}` : '',
     snapshot.finalePerformanceLabel ? `Finale assessment: ${snapshot.finalePerformanceLabel}` : '',
@@ -471,8 +478,9 @@ export function buildRunEndingPackage(state) {
     `Unresolved pressure events: ${snapshot.unresolved}`,
     `Special + event containment wins: ${snapshot.cleanResolutions}`,
     rareMoments > 0 ? `Rare run moments surfaced: ${rareMoments}` : '',
+    analogFoot ? `Physical desk toll: ${analogFoot}` : '',
     finaleIntegrationLine
-  ].slice(0, 4);
+  ].slice(0, 5);
 
   const tags = [
     `Difficulty: ${difficultyLabel}`,
@@ -505,7 +513,9 @@ export function buildRunEndingPackage(state) {
     // v0.29 tags
     snapshot.staffCompromised && !snapshot.staffDismissed ? 'Compromised Operator' : '',
     snapshot.staffDismissed && !snapshot.staffCompromised ? 'Last Honest Shift' : '',
-    snapshot.mutinyFired && snapshot.avgStaffMorale < 0.30 ? 'Fear Management' : ''
+    snapshot.mutinyFired && snapshot.avgStaffMorale < 0.30 ? 'Fear Management' : '',
+    snapshot.operatorFatigueEnd >= 75 ? 'Operator Exhausted' : '',
+    snapshot.analogStrongStimUses >= 1 ? 'Chemically Stabilized' : ''
   ].filter(Boolean).slice(0, 6);
 
   return {

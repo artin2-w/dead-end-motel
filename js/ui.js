@@ -421,6 +421,13 @@ function renderMotelCommandBoard(state) {
         (callCount > 0 ? '<span class="mcb-stat mcb-stat-alert">Calls <strong>' + callCount + '</strong></span>' : '') +
         (tenseCount > 0 ? '<span class="mcb-stat mcb-stat-warn">Tense <strong>' + tenseCount + '</strong></span>' : '') +
       '</div>' +
+      (state?.analog
+        ? '<div class="mcb-analog-strip" title="Physical grid + operator strain">' +
+            '<span class="mcb-analog-chip">Breaker ' + state.analog.load + '/' + state.analog.budget + '</span>' +
+            '<span class="mcb-analog-chip neon-' + String(state.analog.neon?.mode || '').replace(/\s+/g, '-') + '">Neon ' + (state.analog.neon?.mode || '') + '</span>' +
+            '<span class="mcb-analog-chip fatigue-' + (state.analog.fatigueTier || 'steady') + '">Op ' + (state.analog.fatigueTier || '') + '</span>' +
+          '</div>'
+        : '') +
     '</div>';
 }
 
@@ -446,7 +453,10 @@ export function renderTopbar(state) {
 
   const powerDisplay = document.getElementById('power-display');
   if (powerDisplay) {
-    powerDisplay.title = 'Power fuels scans, investigations, and emergency responses.';
+    const br = state?.analog;
+    powerDisplay.title = br
+      ? `Power fuels scans, investigations, and emergency responses. Breaker load ${br.load}/${br.budget} • Neon ${br.neon?.mode || ''}.`
+      : 'Power fuels scans, investigations, and emergency responses.';
   }
   const reputationDisplay = document.getElementById('reputation-display');
   if (reputationDisplay) {
@@ -519,6 +529,8 @@ export function renderTopbar(state) {
     const _topbarCondition = deriveMotelCondition(state);
     appShell.dataset.weather = _topbarWeather.primary;
     appShell.dataset.motelCondition = _topbarCondition.overall;
+    appShell.dataset.operatorFatigue = state?.presentationFatigue || 'steady';
+    appShell.dataset.neonMode = state?.analog?.neon?.mode || 'bright';
   }
 
   const radioBtn = document.getElementById('radio-intercept-btn');
@@ -1109,7 +1121,7 @@ export function renderGuests(
     card.innerHTML = `
       <div class="guest-card-header">
         <div class="guest-arch-avatar guest-arch-risk-${riskLower}" title="${guest.archetypeLabel || 'Unknown Pattern'}">${archetypeInitial}</div>
-        <h4>${guest.name}</h4>
+        <h4 class="${state.blurGuestNamesFromFatigue ? 'v32-fatigue-name' : ''}">${guest.name}</h4>
         <div class="guest-critical-badges">
           ${getReturningBadgeMarkup(guest)}
           ${getFlagBadgeMarkup(guest.flagged)}
@@ -1353,6 +1365,7 @@ export function renderNightEventCard(state) {
   }
 
   card.classList.add('is-active');
+  card.dataset.eventType = String(event.id || event.title || 'generic').toLowerCase().replace(/\s+/g, '-');
   card.innerHTML = `
     <div class="active-event-header">
       <p class="section-tag">Active Event</p>
@@ -1939,6 +1952,92 @@ export function renderCameras(state) {
     }
 
     grid.appendChild(card);
+  });
+}
+
+const V32_CIRCUIT_LABELS = {
+  lobby: 'Lobby',
+  parking: 'Parking',
+  cameras: 'Cameras',
+  heating: 'Heat',
+  neon: 'Neon',
+  utility: 'Util'
+};
+
+export function renderAnalogPowerExtras(state) {
+  const root = document.getElementById('analog-breaker-mount');
+  if (!root) return;
+
+  const analog = state?.analog;
+  if (!analog || !analog.circuits) {
+    root.innerHTML = '';
+    return;
+  }
+
+  const neonLabel =
+    analog.neon?.mode === 'bright'
+      ? 'Bright'
+      : analog.neon?.mode === 'flicker'
+        ? 'Flicker'
+        : analog.neon?.mode === 'dark'
+          ? 'Dark'
+          : analog.neon?.mode === 'unstable'
+            ? 'Unstable'
+            : String(analog.neon?.mode || '');
+
+  root.innerHTML = `
+    <div class="v32-breaker-board">
+      <div class="v32-breaker-header">
+        <span class="v32-breaker-title">Breaker board</span>
+        <span class="v32-breaker-load ${analog.load > analog.budget ? 'is-over' : ''}" title="Load units vs safe budget under current weather and grid strain">
+          ${analog.load} / ${analog.budget}
+        </span>
+      </div>
+      <p class="v32-breaker-hint muted microcopy-line">Tap a circuit: full → dim → cut. Over budget auto-dims low-priority zones. Neon cycles separately.</p>
+      <div class="v32-circuit-grid" id="v32-circuit-grid"></div>
+      <div class="v32-neon-strip">
+        <span class="v32-neon-label">Neon facade</span>
+        <span class="v32-neon-pill mode-${String(analog.neon?.mode || '').replace(/\s+/g, '-')}${analog.neon?.forced ? ' is-forced' : ''}">${neonLabel}${analog.neon?.forced ? ' (grid)' : ''}</span>
+        <button type="button" class="button button-secondary v32-neon-cycle-btn">Cycle sign</button>
+      </div>
+      <div class="v32-operator-strip">
+        <span class="v32-operator-label">Operator</span>
+        <div class="v32-fatigue-track" title="Fatigue rises on tense nights and long shifts">
+          <div class="v32-fatigue-fill is-${analog.fatigueTier}" style="width:${Math.min(100, analog.fatigue)}%"></div>
+        </div>
+        <span class="v32-fatigue-tier">${analog.fatigueTier}</span>
+        <button type="button" class="button button-utility v32-coffee-btn" title="Cheap recovery; short cooldown">Coffee −$4</button>
+        <button type="button" class="button button-warning v32-stim-btn" title="Once per night • rebound fatigue • +dirty exposure">Stim −$14</button>
+      </div>
+    </div>
+  `;
+
+  const grid = root.querySelector('#v32-circuit-grid');
+  if (grid) {
+    Object.keys(analog.circuits).forEach((id) => {
+      const tier = analog.circuits[id]?.tier || 'dim';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `v32-circuit-btn tier-${tier}`;
+      btn.textContent = `${V32_CIRCUIT_LABELS[id] || id} · ${String(tier).toUpperCase()}`;
+      btn.title = id === 'neon' ? 'Cycles neon intent (bright / flicker / dark).' : 'Cycles circuit draw tier.';
+      btn.addEventListener('click', () => {
+        if (typeof state.onAnalogCycleCircuit === 'function') {
+          state.onAnalogCycleCircuit(id);
+        }
+      });
+      grid.appendChild(btn);
+    });
+  }
+
+  root.querySelector('.v32-neon-cycle-btn')?.addEventListener('click', () => {
+    if (typeof state.onAnalogNeonCycle === 'function') state.onAnalogNeonCycle();
+  });
+  root.querySelector('.v32-coffee-btn')?.addEventListener('click', () => {
+    if (typeof state.onOperatorCoffee === 'function') state.onOperatorCoffee();
+  });
+  root.querySelector('.v32-stim-btn')?.addEventListener('click', () => {
+    if (typeof state.onOperatorStim === 'function') state.onOperatorStim();
   });
 }
 

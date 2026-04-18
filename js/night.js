@@ -74,6 +74,14 @@ export function buildNightSummary(state) {
   if (Number(state?.shiftStats?.roomCallsHandled || 0) > 0) {
     identity.push('Occupied-room calls became part of the night rhythm instead of staying as background pressure.');
   }
+  const analogLog = Array.isArray(state?.analogSurvival?.analogNightLog) ? state.analogSurvival.analogNightLog.filter(Boolean) : [];
+  if (analogLog.length) {
+    identity.push(`Physical grid choices mattered: ${analogLog.slice(-2).join(' · ')}`);
+  }
+  const fatigueEnd = Number(state?.analogSurvival?.operatorFatigue || 0);
+  if (fatigueEnd >= 55) {
+    identity.push('Operator fatigue stacked high enough that the shift felt personally costly, not just strategically tense.');
+  }
   if (state?.emergencyNight?.active || Number(state?.emergencyState?.commandHistory?.length || 0) > 0) {
     identity.push('The shift crossed into command-state management, where containment choices mattered as much as basic desk reads.');
   }
