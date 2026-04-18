@@ -2491,6 +2491,127 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
 
   const objectiveContainer = document.getElementById('summary-objective-list');
   renderObjectiveList(objectiveContainer, evaluateNightObjectives(state));
+
+  // v0.27 evidence section in summary
+  const summaryEvidenceSlot = document.getElementById('summary-evidence-section');
+  if (summaryEvidenceSlot) {
+    const locker = state?.evidenceLockerSummary || state?.evidenceLocker || {};
+    const items = Array.isArray(locker.items) ? locker.items : [];
+    const nemesis = state?.nemesis || {};
+    if (items.length > 0 || nemesis.active || nemesis.resolvedOutcome) {
+      const recentItems = items.slice(-5);
+      const rowsHtml = recentItems.map((item) => {
+        const cat = String(item.category || 'other');
+        return `<div class="v27-summary-evidence-row">
+          <span class="v27-summary-evidence-dot category-${cat}"></span>
+          <span>${item.label || 'Evidence'} — Night ${item.night || '?'}</span>
+        </div>`;
+      }).join('');
+      const mysteryReveal = locker.mysteryFragmentsFound >= 6
+        ? `<div class="v27-summary-mystery-reveal">Previous Manager Mystery resolved — all fragments recovered.</div>`
+        : locker.mysteryFragmentsFound > 0
+          ? `<div class="v27-summary-mystery-reveal">${locker.mysteryFragmentsFound} / 6 previous manager fragments recovered.</div>`
+          : '';
+      const nemesisHtml = buildNemesisAlertHtml(nemesis);
+      summaryEvidenceSlot.innerHTML = `<div class="v27-summary-evidence-section">
+        <div class="v27-summary-evidence-header">Evidence &amp; Surveillance</div>
+        ${nemesisHtml}
+        ${rowsHtml ? `<div class="v27-summary-evidence-list">${rowsHtml}</div>` : ''}
+        ${mysteryReveal}
+      </div>`;
+    } else {
+      summaryEvidenceSlot.innerHTML = '';
+    }
+  }
+}
+
+function buildEvidenceLockerHtml(locker = {}, compact = false) {
+  const items = Array.isArray(locker.items) ? locker.items : [];
+  const found = Number(locker.mysteryFragmentsFound || 0);
+  const mysteryComplete = found >= 6;
+  const TOTAL_MYSTERY = 6;
+
+  const countChip = `<span class="v27-evidence-count-chip">${items.length}</span>`;
+  const header = `<div class="v27-evidence-locker-header"><span class="v27-evidence-locker-title">Evidence Locker</span>${countChip}</div>`;
+
+  let listHtml = '';
+  if (!items.length) {
+    listHtml = '<p class="v27-evidence-empty">No evidence collected yet.</p>';
+  } else {
+    const displayItems = compact ? items.slice(-6) : items;
+    listHtml = `<div class="v27-evidence-list">${displayItems.map((item) => {
+      const cat = String(item.category || 'other');
+      return `<div class="v27-evidence-item category-${cat}">
+        <span class="v27-evidence-item-label">${item.label || 'Evidence'}</span>
+        <span class="v27-evidence-item-desc">${item.desc || ''}</span>
+        <span class="v27-evidence-item-night">Night ${item.night || '?'}</span>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  // Mystery strip
+  const pips = Array.from({ length: TOTAL_MYSTERY }, (_, i) =>
+    `<span class="v27-mystery-pip${i < found ? ' is-found' : ''}"></span>`
+  ).join('');
+  const mysteryLatest = found > 0 && !compact
+    ? (() => {
+        const lastMysteryItem = [...items].reverse().find((it) => it.category === 'mystery');
+        return lastMysteryItem
+          ? `<p class="v27-mystery-latest-note">${lastMysteryItem.desc}</p>`
+          : '';
+      })()
+    : '';
+  const mysteryBanner = mysteryComplete
+    ? '<div class="v27-mystery-complete-banner">Previous Manager Mystery — Resolved</div>'
+    : '';
+  const mysteryStrip = found > 0
+    ? `<div class="v27-mystery-strip">
+        <div class="v27-mystery-strip-header"><span class="v27-mystery-strip-title">Previous Manager</span></div>
+        <div class="v27-mystery-progress-row">${pips}<span class="v27-mystery-progress-label">${found} / ${TOTAL_MYSTERY}</span></div>
+        ${mysteryLatest}${mysteryBanner}
+      </div>`
+    : '';
+
+  return `<div class="v27-evidence-locker">${header}${listHtml}${mysteryStrip}</div>`;
+}
+
+function buildNemesisAlertHtml(nemesis = {}) {
+  if (!nemesis.active && !nemesis.resolvedOutcome) return '';
+  const isIdentified = Boolean(nemesis.identified);
+  const pressureLevel = Math.min(3, Math.max(0, Number(nemesis.pressureLevel || 0)));
+  const pressurePct = Math.round((pressureLevel / 3) * 100);
+  const STYLE_LABELS = {
+    harshControl: 'Control-First',
+    hospitality: 'Over-Hospitable',
+    patternHunter: 'Pattern Obsessive',
+    greed: 'Money-Driven',
+    overreaction: 'Over-Reactive',
+    fearBased: 'Fear-Driven'
+  };
+  const styleLabel = STYLE_LABELS[nemesis.styleKey] || nemesis.styleKey || 'Unknown Style';
+  const outcomeMap = {
+    contained: 'Contained — adversary repelled',
+    escaped: 'Escaped — unresolved',
+    missing: 'Status unclear'
+  };
+
+  if (nemesis.resolvedOutcome) {
+    const outcomeText = outcomeMap[nemesis.resolvedOutcome] || nemesis.resolvedOutcome;
+    return `<div class="v27-nemesis-alert${isIdentified ? ' v27-nemesis-identified' : ''}">
+      <div class="v27-nemesis-alert-header"><span class="v27-nemesis-alert-title">Nemesis — ${outcomeText}</span></div>
+      <p class="v27-nemesis-note">Adversary exploited your <em>${styleLabel}</em> tendencies. Outcome logged.</p>
+    </div>`;
+  }
+
+  return `<div class="v27-nemesis-alert${isIdentified ? ' v27-nemesis-identified' : ''}">
+    <div class="v27-nemesis-alert-header"><span class="v27-nemesis-alert-title">Nemesis — Active</span></div>
+    <span class="v27-nemesis-style-chip">${styleLabel}</span>
+    <div class="v27-nemesis-pressure-row">
+      <div class="v27-nemesis-pressure-track"><div class="v27-nemesis-pressure-fill" style="width:${pressurePct}%"></div></div>
+      <span class="v27-nemesis-pressure-label">Pressure ${pressureLevel}/3</span>
+    </div>
+    <p class="v27-nemesis-note">A recurring adversary is profiling your patterns. Hunt night containment may identify them.</p>
+  </div>`;
 }
 
 export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) {
@@ -2680,6 +2801,15 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
     } else {
       socialMemSlot.innerHTML = '';
     }
+  }
+
+  // v0.27 evidence locker + nemesis in night prep
+  const evidenceSlot = document.getElementById('night-prep-evidence');
+  if (evidenceSlot) {
+    const locker = state?.evidenceLockerSummary || state?.evidenceLocker || {};
+    const nemesis = state?.nemesis || {};
+    const nemesisHtml = buildNemesisAlertHtml(nemesis);
+    evidenceSlot.innerHTML = nemesisHtml + buildEvidenceLockerHtml(locker, true);
   }
 
   if (doctrine) {
@@ -3015,9 +3145,33 @@ export function renderRunEnding(ending = {}) {
     });
   }
 
+  // v0.27 evidence / nemesis / hunt lines
+  const evidenceLine = document.getElementById('run-ending-evidence-line');
+  const nemesisLine = document.getElementById('run-ending-nemesis-line');
+  const huntLine = document.getElementById('run-ending-hunt-line');
+  const v27Tags = document.getElementById('run-ending-v27-tags');
+  if (evidenceLine) evidenceLine.textContent = ending?.evidenceLine || '';
+  if (nemesisLine) nemesisLine.textContent = ending?.nemesisLine || '';
+  if (huntLine) huntLine.textContent = ending?.huntLine || '';
+  if (v27Tags) {
+    v27Tags.innerHTML = '';
+    const v27TagData = [
+      ending?.nemesisOutcome === 'contained' ? { label: 'Nemesis Identified', cls: 'tag-nemesis' } : null,
+      ending?.mysteryComplete ? { label: 'Manager Mystery', cls: 'tag-mystery' } : null,
+      (ending?.huntWins || 0) >= 2 ? { label: 'Hunt Nights Survived', cls: 'tag-hunt' } : null,
+      (ending?.evidenceCount || 0) >= 8 ? { label: 'Evidence Trail', cls: '' } : null
+    ].filter(Boolean);
+    v27TagData.forEach(({ label, cls }) => {
+      const chip = document.createElement('span');
+      chip.className = `v27-ending-tag${cls ? ' ' + cls : ''}`;
+      chip.textContent = label;
+      v27Tags.appendChild(chip);
+    });
+  }
+
   if (tags) {
     tags.innerHTML = '';
-    (Array.isArray(ending?.tags) ? ending.tags : []).slice(0, 4).forEach((line) => {
+    (Array.isArray(ending?.tags) ? ending.tags : []).slice(0, 6).forEach((line) => {
       const chip = document.createElement('span');
       chip.className = 'run-ending-tag';
       chip.textContent = line;

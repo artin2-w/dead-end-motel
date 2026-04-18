@@ -160,7 +160,10 @@ import {
   markThreadOutcome,
   advanceStoryThreadsAfterNight,
   buildActiveRunThreadHighlights,
-  buildSocialMemoryNote
+  buildSocialMemoryNote,
+  buildEvidenceItem,
+  checkMysteryFragmentUnlock,
+  buildEvidenceLockerSummary
 } from './storyThreads.js';
 import {
   normalizeCarryoverState,
@@ -1811,6 +1814,8 @@ function resolveHuntNightAction(guest, action = 'unknown', targetState = state) 
       targetState.huntNight.cluesCaught += 1;
       targetState.callerThread.huntNightWins = Math.max(0, Number(targetState?.callerThread?.huntNightWins || 0) + 1);
       targetState.logs.push('Hunt night: the planted caller-linked arrival was contained before room release.');
+      addEvidenceItem('hunt-night-win', targetState.night || 1);
+      if (targetState.nemesis?.active) resolveNemesis('contained', targetState);
     } else if (String(guest?.huntRole || '') === 'caller-decoy') {
       targetState.huntNight.wrongEjects += 1;
       targetState.logs.push('Hunt night: a decoy was handled as the prime target. The real line remains active.');
@@ -1821,6 +1826,8 @@ function resolveHuntNightAction(guest, action = 'unknown', targetState = state) 
     targetState.huntNight.outcome = 'missed-target';
     targetState.callerThread.huntNightLosses = Math.max(0, Number(targetState?.callerThread?.huntNightLosses || 0) + 1);
     targetState.logs.push('Hunt night failure: caller-linked target was admitted under compromised signal pressure.');
+    addEvidenceItem('hunt-night-loss', targetState.night || 1);
+    if (targetState.nemesis?.active) escalateNemesisPressure(targetState);
     targetState.reputation = clampReputation(targetState.reputation - 3);
   }
 }
@@ -5164,6 +5171,8 @@ function buildRenderState() {
     radioInterceptionUsed: Boolean(state.radioInterceptionUsed),
     socialMemoryNote: buildSocialMemoryNote(state),
     unknownCallerHistory: Array.isArray(state.unknownCallerHistory) ? state.unknownCallerHistory : [],
+    evidenceLockerSummary: buildEvidenceLockerSummary(state),
+    nemesis: state.nemesis || {},
     onHandleSpecialEncounter: handleOpenSpecialEncounter,
     onCloseSpecialEncounter: handleCloseSpecialEncounter,
     onSpecialEncounterChoice: handleSpecialEncounterChoice,
@@ -6527,6 +6536,7 @@ function handleUnknownCallerChoice(choiceId) {
   if (choiceId === 'caller-log') {
     state.logs.push('Unknown caller contact logged. Pattern added to surveillance record.');
     state.unknownCallerLogged = true;
+    addEvidenceItem('caller-log-entry', state.night);
     pushLiveAlert(state, { type: 'info', message: 'Anonymous contact logged. Pattern on record.', dedupeKey: 'caller-logged' });
   } else if (choiceId === 'caller-dismiss') {
     state.logs.push('Unknown caller dismissed. No action taken.');
@@ -6589,13 +6599,15 @@ function performRadioInterception() {
   ];
   const t = TRANSMISSIONS[Math.floor(Math.random() * TRANSMISSIONS.length)];
 
-  if (Math.random() < successChance) {
+  const interceptSuccess = Math.random() < successChance;
+  if (interceptSuccess) {
     state.logs.push(`Radio intercept (−5 power): ${t.text}`);
     pushLiveAlert(state, {
       type: t.impact,
       message: `Intercept recovered: ${t.text}`,
       dedupeKey: 'radio-intercept-' + state.night
     });
+    addEvidenceItem('intercept-success', state.night);
   } else {
     state.logs.push('Radio intercept (−5 power): heavy static — no usable signal recovered.');
     pushLiveAlert(state, { type: 'info', message: 'Radio intercept: static only. −5 power consumed.', dedupeKey: 'radio-intercept-fail-' + state.night });
@@ -6604,6 +6616,221 @@ function performRadioInterception() {
   if (progressShift('radio-intercept', { timeScale: 0.2, skipPassiveDrain: true })) return;
   renderAll();
 }
+
+// ─── v0.27 Evidence Locker & Nemesis ─────────────────────────
+
+function normalizeEvidenceLockerState(targetState = state) {
+  if (!targetState) return;
+  if (!targetState.evidenceLocker || typeof targetState.evidenceLocker !== 'object') {
+    targetState.evidenceLocker = { items: [], mysteryFragmentsFound: 0 };
+  }
+  if (!Array.isArray(targetState.evidenceLocker.items)) targetState.evidenceLocker.items = [];
+  if (typeof targetState.evidenceLocker.mysteryFragmentsFound !== 'number') {
+    targetState.evidenceLocker.mysteryFragmentsFound = 0;
+  }
+}
+
+function normalizeNemesisState(targetState = state) {
+  if (!targetState) return;
+  if (!targetState.nemesis || typeof targetState.nemesis !== 'object') {
+    targetState.nemesis = {
+      active: false,
+      identified: false,
+      styleKey: null,
+      pressureLevel: 0,
+      lastNight: 0,
+      resolvedOutcome: null
+    };
+  }
+}
+
+function addEvidenceItem(triggerId, night = null, contextLabel = '') {
+  normalizeEvidenceLockerState();
+  const item = buildEvidenceItem(triggerId, night !== null ? night : (state.night || 1), contextLabel);
+  if (!item) return;
+  const existing = state.evidenceLocker.items;
+  // prevent duplicate template per night
+  const alreadyThisNight = existing.some((e) => e.templateId === triggerId && e.night === item.night);
+  if (alreadyThisNight) return;
+  state.evidenceLocker.items = [...existing, item].slice(-32);
+}
+
+function maybeActivateNemesis(targetState = state) {
+  normalizeNemesisState(targetState);
+  normalizeCallerThreadState(targetState);
+  if (targetState.nemesis.active || targetState.nemesis.resolvedOutcome) return;
+  const night = Math.max(1, Number(targetState.night || 1));
+  if (night < 3) return;
+  const huntWins = Number(targetState?.callerThread?.huntNightWins || 0);
+  const huntLosses = Number(targetState?.callerThread?.huntNightLosses || 0);
+  const callerCount = Array.isArray(targetState.unknownCallerHistory) ? targetState.unknownCallerHistory.length : 0;
+  const styleMemory = targetState?.callerThread?.styleMemory || {};
+  const dominantStyle = getDominantCallerStyle(targetState);
+  const dominantScore = Number(styleMemory[dominantStyle] || 0);
+  // Activate when caller keeps escalating or hunt nights become recurring
+  const shouldActivate =
+    (huntWins + huntLosses >= 2) ||
+    (callerCount >= 3 && dominantScore >= 4) ||
+    (night >= 5 && callerCount >= 2);
+  if (!shouldActivate) return;
+  targetState.nemesis.active = true;
+  targetState.nemesis.styleKey = dominantStyle;
+  targetState.nemesis.pressureLevel = 1;
+  targetState.nemesis.lastNight = night;
+  targetState.logs.push('Nemesis pattern confirmed: a consistent presence has been profiling your management style across multiple shifts.');
+  pushLiveAlert(targetState, {
+    type: 'danger',
+    message: 'Nemesis active: a recurring adversary has built a profile on your patterns. Hunt nights ahead may target your blind spots.',
+    dedupeKey: `nemesis-activate-${night}`
+  });
+}
+
+function escalateNemesisPressure(targetState = state) {
+  normalizeNemesisState(targetState);
+  if (!targetState.nemesis.active || targetState.nemesis.resolvedOutcome) return;
+  targetState.nemesis.pressureLevel = Math.min(3, targetState.nemesis.pressureLevel + 1);
+  targetState.nemesis.lastNight = Math.max(1, Number(targetState.night || 1));
+}
+
+function resolveNemesis(outcome = 'contained', targetState = state) {
+  normalizeNemesisState(targetState);
+  if (!targetState.nemesis.active) return;
+  targetState.nemesis.active = false;
+  targetState.nemesis.identified = true;
+  targetState.nemesis.resolvedOutcome = outcome;
+  const msg = outcome === 'contained'
+    ? 'Nemesis pattern disrupted: the recurring adversary\'s access has been cut after hunt night containment.'
+    : outcome === 'escaped'
+      ? 'Nemesis pattern unresolved: the recurring presence withdrew but left no clear resolution.'
+      : 'Nemesis status unclear: pressure faded without decisive action.';
+  targetState.logs.push(msg);
+  pushLiveAlert(targetState, {
+    type: outcome === 'contained' ? 'info' : 'warning',
+    message: msg,
+    dedupeKey: `nemesis-resolve-${targetState.night}`
+  });
+}
+
+function triggerFrontDeskBreachEvent() {
+  if (state.activeNightEvent) return;
+  const night = Math.max(1, Number(state.night || 1));
+  const nemesisActive = Boolean(state.nemesis?.active);
+  const pressure = state?.uiPressureLevel || 'calm';
+  const eligible = night >= 3 && (['high', 'critical', 'emergency', 'dire'].includes(pressure) || nemesisActive);
+  if (!eligible) return;
+
+  state.activeNightEvent = {
+    id: 'front-desk-breach',
+    title: 'Front Desk Breach',
+    description: 'Someone has pushed through the desk barrier. They are in the restricted area — they\'ve seen your board. You have seconds to act.',
+    severity: 'high',
+    options: [
+      {
+        id: 'breach-lock-out',
+        label: 'Force them out immediately',
+        preview: '−5 reputation, −3 power',
+        description: 'Physical removal. Fast but aggressive — the motel hears this.',
+        note: 'Risk: reputaion cost. Stops breach cleanly.'
+      },
+      {
+        id: 'breach-call-staff',
+        label: 'Call for staff backup',
+        preview: '−$12, moderate time cost',
+        description: 'Escalate through channels. Staff contain the situation professionally.',
+        note: 'Money cost. Slower but cleaner outcome.'
+      },
+      {
+        id: 'breach-let-through',
+        label: 'Do nothing — let them pass',
+        preview: '+2 dirty pressure, −8 reputation',
+        description: 'They see everything on your board. The cost comes later.',
+        note: 'High risk. Dirty pressure + reputation damage.'
+      }
+    ]
+  };
+  state.nightEventOverlayOpen = true;
+  state.logs.push('Front desk breach: unauthorized access to restricted area — immediate response required.');
+  pushLiveAlert(state, {
+    type: 'danger',
+    message: 'Front Desk Breach: unauthorized person in restricted zone. Respond now.',
+    dedupeKey: `breach-${night}`
+  });
+  audioController.playEmergencyPulse('high');
+  renderAll();
+}
+
+function handleFrontDeskBreachChoice(choiceId) {
+  state.nightEventOverlayOpen = false;
+  state.activeNightEvent = null;
+
+  if (choiceId === 'breach-lock-out') {
+    state.reputation = Math.max(0, (state.reputation || 50) - 5);
+    state.power = Math.max(0, (state.power || 100) - 3);
+    addEvidenceItem('breach-contained', state.night);
+    if (state.nemesis?.active) escalateNemesisPressure();
+    state.logs.push('Breach resolved: physical removal. Reputation impact registered. Board contents exposed briefly.');
+    pushLiveAlert(state, { type: 'warning', message: 'Breach contained by force. −5 rep, −3 power.', dedupeKey: 'breach-lockout-done' });
+    applyIdentityImpact({ doctrine: { control: 1, force: 1 }, factions: { guests: -1 }, reason: 'front-desk breach lockout' });
+  } else if (choiceId === 'breach-call-staff') {
+    const cost = 12;
+    if ((state.money || 0) >= cost) {
+      state.money = Math.max(0, (state.money || 0) - cost);
+    }
+    addEvidenceItem('breach-contained', state.night);
+    state.logs.push(`Breach resolved via staff response. −$${cost}. Handled professionally.`);
+    pushLiveAlert(state, { type: 'info', message: `Breach resolved by staff. −$${cost}.`, dedupeKey: 'breach-staff-done' });
+    applyIdentityImpact({ doctrine: { compassion: 1, stability: 1 }, factions: { staff: 1, ownership: 1 }, reason: 'front-desk breach staff response' });
+  } else if (choiceId === 'breach-let-through') {
+    state.dirtyPressure = Math.min(10, (state.dirtyPressure || 0) + 2);
+    state.reputation = Math.max(0, (state.reputation || 50) - 8);
+    if (state.nemesis?.active) escalateNemesisPressure();
+    state.logs.push('Breach unchallenged: intruder had full desk access. Dirty pressure up. Reputation damage logged.');
+    pushLiveAlert(state, { type: 'danger', message: 'Breach uncontested — +2 dirty pressure, −8 reputation.', dedupeKey: 'breach-ignored' });
+    applyIdentityImpact({ doctrine: { improvisation: 1, stability: -1 }, factions: { ownership: -2, guests: -1 }, reason: 'front-desk breach ignored' });
+  }
+
+  if (progressShift('breach-response', { timeScale: 0.2, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+function triggerDosRebootOverlay() {
+  const existing = document.getElementById('v27-dos-reboot-overlay');
+  if (existing) return;
+
+  addEvidenceItem('dos-reboot-log', state.night);
+  state.logs.push('System terminal rebooted unexpectedly. Prior session logs unavailable.');
+
+  const overlay = document.createElement('div');
+  overlay.id = 'v27-dos-reboot-overlay';
+  overlay.className = 'v27-dos-reboot';
+
+  const lines = [
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    'DEAD END MOTEL — DESK TERMINAL',
+    'SYSTEM REINITIALIZING...',
+    'RESTORING LAST STABLE SESSION...',
+    `NIGHT ${state.night || 1} — SHIFT IN PROGRESS`,
+    'WARNING: PRIOR LOG SEGMENT UNAVAILABLE',
+    '> SESSION RESTORED_'
+  ];
+
+  const sep = document.createElement('div');
+  sep.className = 'v27-dos-separator';
+  sep.textContent = '══════════════════════════════════';
+  overlay.appendChild(sep);
+
+  lines.forEach((text, i) => {
+    const line = document.createElement('div');
+    line.className = 'v27-dos-line' + (i === lines.length - 1 ? ' dos-blink' : '');
+    line.textContent = text;
+    overlay.appendChild(line);
+  });
+
+  document.body.appendChild(overlay);
+  setTimeout(() => { overlay.remove(); }, 3800);
+}
+
+// ─── end v0.27 ────────────────────────────────────────────────
 
 function triggerZoneBlackout(cameraId) {
   onMeaningfulAction();
@@ -6910,6 +7137,22 @@ function progressShift(actionKey, options = {}) {
     if (elapsed >= 90 && elapsed < 420 && Math.random() < 0.025) {
       state.burnerPhoneOffered = true;
       triggerBurnerPhoneEvent();
+      return false;
+    }
+  }
+
+  // Front desk breach — nemesis / high-pressure, once per night, mid-shift
+  if (!state.breachEventFired && !state.activeNightEvent) {
+    const _el = Number(state.shiftElapsedMinutes || 0);
+    const _pres = state?.uiPressureLevel || 'calm';
+    const _nemActive = Boolean(state.nemesis?.active);
+    const _nemPressure = Number(state.nemesis?.pressureLevel || 0);
+    const _breachChance = (_nemActive && _nemPressure >= 2)
+      ? 0.035
+      : (['dire', 'emergency'].includes(_pres) ? 0.015 : 0);
+    if (_breachChance > 0 && _el >= 200 && _el < 450 && Math.random() < _breachChance) {
+      state.breachEventFired = true;
+      triggerFrontDeskBreachEvent();
       return false;
     }
   }
@@ -8262,6 +8505,10 @@ function handleNightEventChoice(optionId) {
     handleUnknownCallerChoice(optionId);
     return;
   }
+  if (activeEventId === 'front-desk-breach') {
+    handleFrontDeskBreachChoice(optionId);
+    return;
+  }
 
   const actionKey = `night-event-choice-${activeEventId}`;
   if (!acquireActionLock(actionKey)) return;
@@ -8669,6 +8916,60 @@ function endNight(options = {}) {
   state.shiftStats.threadsEscalated = (state.shiftStats.threadsEscalated || 0) + Number(threadUpdate?.escalated || 0);
   state.shiftStats.threadsAdvancedCleanly =
     (state.shiftStats.threadsAdvancedCleanly || 0) + Number(threadUpdate?.stabilized || 0);
+
+  // v0.27 end-of-night hooks
+  normalizeEvidenceLockerState();
+  normalizeNemesisState();
+
+  // Camera sabotage evidence
+  const hadSabotage = (state.cameras || []).some((cam) => cam.sabotageType);
+  if (hadSabotage) addEvidenceItem('sabotage-confirmed', state.night);
+
+  // Named figure / faction presence evidence
+  const hadNamedFigure = (state.guests || []).some((g) => g.namedPresence);
+  if (hadNamedFigure) addEvidenceItem('named-figure-spotted', state.night);
+
+  const hadFactionContact = (state.guests || []).some((g) => g.factionProfile?.id && g.factionProfile?.id !== 'phreaker-local');
+  if (hadFactionContact) addEvidenceItem('faction-presence', state.night);
+
+  // Mystery fragment unlock
+  const fragment = checkMysteryFragmentUnlock(state);
+  if (fragment) {
+    state.evidenceLocker.mysteryFragmentsFound = (state.evidenceLocker.mysteryFragmentsFound || 0) + 1;
+    addEvidenceItem(fragment.id, state.night);
+    state.logs.push(`Previous manager discovery: ${fragment.label} — ${fragment.desc}`);
+    pushLiveAlert(state, {
+      type: 'info',
+      message: `Evidence found: ${fragment.label}. Added to locker.`,
+      dedupeKey: `mystery-fragment-${state.night}`
+    });
+  }
+
+  // Trigger DOS reboot on high corruption or nemesis pressure 3
+  const corruptionLevel = Number(state?.systemOverride?.corruptionLevel || 0);
+  const nemesisPressure = Number(state?.nemesis?.pressureLevel || 0);
+  if (corruptionLevel >= 3 || nemesisPressure >= 3) {
+    triggerDosRebootOverlay();
+  }
+
+  // Activate / escalate nemesis
+  maybeActivateNemesis();
+  if (state.nemesis?.active) {
+    const huntThisNight = state.huntNight?.night === state.night && !state.huntNight?.resolved;
+    if (huntThisNight) escalateNemesisPressure();
+    // Nemesis escapes if unresolved after 3+ nights active
+    const nightsSinceActive = state.night - (state.nemesis.lastNight || state.night);
+    if (nightsSinceActive >= 3 && !state.nemesis.resolvedOutcome) {
+      resolveNemesis('escaped');
+    }
+  }
+
+  // Front desk breach: rare trigger when nemesis is high pressure
+  if (state.nemesis?.active && state.nemesis.pressureLevel >= 2 && !state.activeNightEvent) {
+    if (Math.random() < 0.28) {
+      triggerFrontDeskBreachEvent();
+    }
+  }
   if ((state.shiftStats.nightEventsMissed || 0) === 0 && (state.shiftStats.unresolvedLocationScenes || 0) === 0) {
     state.shiftStats.carryoverProblemsContained = (state.shiftStats.carryoverProblemsContained || 0) + 1;
   }
@@ -9403,6 +9704,11 @@ function nextNight() {
   state.raidStatus = 'none';
   state.cameraSabotageTriggered = false;
   state.burnerPhoneOffered = false;
+  state.unknownCallerFired = false;
+  state.radioInterceptionUsed = false;
+  state.breachEventFired = false;
+  normalizeEvidenceLockerState();
+  normalizeNemesisState();
   state = assignScenarioForNight(state);
   state = normalizePresentationState(state);
   state = normalizeSpecialEncounterState(state);

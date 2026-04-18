@@ -146,6 +146,37 @@ const THREAD_TEMPLATES = [
   }
 ];
 
+// --- v0.27 Evidence & Mystery ---
+
+const EVIDENCE_CATALOG = [
+  { id: 'caller-log-entry',      type: 'caller',    category: 'surveillance', label: 'Logged Call',                desc: 'An unidentified voice made contact. The pattern is on record.' },
+  { id: 'hunt-night-win',        type: 'hunt',      category: 'security',     label: 'Hunt Night Win',              desc: 'The caller\'s planted arrival was identified and turned back.' },
+  { id: 'hunt-night-loss',       type: 'hunt',      category: 'security',     label: 'Hunt Night Failure',          desc: 'The planted arrival was admitted. The caller now has a room number.' },
+  { id: 'sabotage-confirmed',    type: 'camera',    category: 'surveillance', label: 'Camera Sabotage Confirmed',   desc: 'A feed was confirmed compromised. Someone knows the system layout.' },
+  { id: 'intercept-success',     type: 'intercept', category: 'surveillance', label: 'Radio Intercept',             desc: 'Partial transmission recovered from scanner band.' },
+  { id: 'retaliation-flag',      type: 'desk',      category: 'guest',        label: 'Retaliation Pattern',         desc: 'A guest with prior rejection history appeared again with elevated risk.' },
+  { id: 'named-figure-spotted',  type: 'desk',      category: 'faction',      label: 'Named Figure Confirmed',      desc: 'A recurring named figure was identified at the front desk.' },
+  { id: 'faction-presence',      type: 'desk',      category: 'faction',      label: 'Faction Contact',             desc: 'A guest with a known network affiliation passed through the desk.' },
+  { id: 'room-escalation',       type: 'room',      category: 'security',     label: 'Room Escalation',             desc: 'Room pressure climbed beyond what routine handling could contain.' },
+  { id: 'breach-contained',      type: 'breach',    category: 'security',     label: 'Front Desk Breach',           desc: 'An unauthorized person breached the front desk area and was turned back.' },
+  { id: 'dos-reboot-log',        type: 'system',    category: 'system',       label: 'System Reboot Event',         desc: 'The desk terminal rebooted unexpectedly. Prior session logs are missing.' },
+  { id: 'mystery-object-found',  type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Object',    desc: 'A personal item in Room 7 doesn\'t match any current or recent guest.' },
+  { id: 'mystery-shift-log',     type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Shift Log', desc: 'A partial shift log found inside the power board housing — not yours.' },
+  { id: 'mystery-key-tag',       type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Key Tag',   desc: 'A key tag printed with room "0". There is no Room 0 in this motel.' },
+  { id: 'mystery-photo',         type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Photo',     desc: 'A photo of the parking lot at night, taped under the desk. Timestamp: two months ago.' },
+  { id: 'mystery-note',          type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Note',      desc: '"Don\'t trust the scanner after midnight. It routes to a third address since April."' },
+  { id: 'mystery-badge',         type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Badge',     desc: 'A faded employee badge. The name is scratched off. The photo shows this exact desk.' }
+];
+
+const MYSTERY_FRAGMENTS = [
+  { index: 0, id: 'mystery-object-found',  nightMin: 1, triggerChance: 0.55 },
+  { index: 1, id: 'mystery-shift-log',     nightMin: 2, triggerChance: 0.50 },
+  { index: 2, id: 'mystery-key-tag',       nightMin: 2, triggerChance: 0.45 },
+  { index: 3, id: 'mystery-photo',         nightMin: 3, triggerChance: 0.45 },
+  { index: 4, id: 'mystery-note',          nightMin: 4, triggerChance: 0.42 },
+  { index: 5, id: 'mystery-badge',         nightMin: 5, triggerChance: 0.40 }
+];
+
 const NAMED_RECURRING_CATALOG = [
   {
     id: 'the-adjuster',
@@ -712,6 +743,49 @@ export function buildSocialMemoryNote(state) {
     return { tone: 'fair', label: 'Fair', note: `Clean record (${clean} handled well). Guests arrive with reduced tension.` };
   }
   return { tone: 'balanced', label: 'Balanced', note: `Mixed handling history (${clean} clean, ${harsh} harsh). Reputation is neutral.` };
+}
+
+// --- v0.27 Evidence locker exports ---
+
+export function buildEvidenceItem(triggerId, night = 1, contextLabel = '') {
+  const template = EVIDENCE_CATALOG.find((e) => e.id === triggerId);
+  if (!template) return null;
+  return {
+    id: `${triggerId}-n${night}-${Math.floor(Math.random() * 9999)}`,
+    templateId: triggerId,
+    type: template.type,
+    category: template.category,
+    label: contextLabel ? `${template.label}: ${contextLabel}` : template.label,
+    desc: template.desc,
+    night
+  };
+}
+
+export function checkMysteryFragmentUnlock(state) {
+  const night = Math.max(1, Number(state?.night || 1));
+  const locker = state?.evidenceLocker || {};
+  const found = Number(locker.mysteryFragmentsFound || 0);
+  const next = MYSTERY_FRAGMENTS[found];
+  if (!next) return null;
+  if (night < next.nightMin) return null;
+  if (Math.random() > next.triggerChance) return null;
+  return EVIDENCE_CATALOG.find((e) => e.id === next.id) || null;
+}
+
+export function buildEvidenceLockerSummary(state) {
+  const locker = state?.evidenceLocker || {};
+  const items = Array.isArray(locker.items) ? locker.items : [];
+  return {
+    items,
+    count: items.length,
+    mysteryFragmentsFound: Number(locker.mysteryFragmentsFound || 0),
+    mysteryComplete: Number(locker.mysteryFragmentsFound || 0) >= MYSTERY_FRAGMENTS.length,
+    byCategoryCount: items.reduce((acc, item) => {
+      const cat = item.category || 'other';
+      acc[cat] = (acc[cat] || 0) + 1;
+      return acc;
+    }, {})
+  };
 }
 
 export function buildActiveRunThreadHighlights(state, limit = 3) {

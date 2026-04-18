@@ -89,6 +89,25 @@ function evaluateCategory(snapshot) {
   const force = snapshot.forceHeavy;
   const trustDelta = snapshot.guestTrust - snapshot.localHostility;
   const localHostility = snapshot.localHostility;
+  const evidenceCount = n(snapshot.evidenceCount, 0);
+  const mysteryComplete = Boolean(snapshot.mysteryComplete);
+  const nemesisContained = snapshot.nemesisOutcome === 'contained';
+  const nemesisEscaped = snapshot.nemesisOutcome === 'escaped';
+  const huntWins = n(snapshot.huntWins, 0);
+
+  // v0.27 endings — checked before base categories
+  if (nemesisContained && huntWins >= 2 && evidenceCount >= 6) {
+    return { key: 'nemesis-closed', title: 'The Pattern Was Broken', subtitle: 'Adversary Identified and Contained' };
+  }
+  if (mysteryComplete && evidenceCount >= 8) {
+    return { key: 'evidence-trail', title: 'Evidence Trail', subtitle: 'The Previous Manager\'s Story, Finally Told' };
+  }
+  if (huntWins >= 3) {
+    return { key: 'hunted-closed', title: 'Hunt Nights Survived', subtitle: 'Every Planted Arrival Turned Back' };
+  }
+  if (nemesisEscaped && rep <= 40) {
+    return { key: 'nemesis-escaped', title: 'The Pattern Walked Away', subtitle: 'Adversary Withdrew Before Containment' };
+  }
 
   if (rep >= 62 && t.control >= 6 && force >= 2) {
     return { key: 'order-through-control', title: 'Order Through Control', subtitle: 'Cold Stability Secured' };
@@ -137,6 +156,9 @@ function evaluateCategory(snapshot) {
 
 function resolveEndingFamilyFromKey(key = '') {
   const value = String(key || '').toLowerCase();
+  if (value.includes('nemesis-closed') || value.includes('hunted-closed')) return 'controlled';
+  if (value.includes('evidence-trail')) return 'stable';
+  if (value.includes('nemesis-escaped')) return 'hostile';
   if (value.includes('controlled-manager')) return 'controlled';
   if (value.includes('trusted') || value.includes('shelter')) return 'stable';
   if (value.includes('fragile') || value.includes('unsteady')) return 'fragile';
@@ -198,6 +220,12 @@ function evaluateGrade(snapshot) {
   score -= Math.min(12, snapshot.policyBreaks * 2);
   score += Math.min(10, snapshot.cleanResolutions);
   score += snapshot.finaleSurvived ? 6 : 0;
+  // v0.27 score factors
+  score += Math.min(6, n(snapshot.evidenceCount, 0) * 0.75);
+  score += snapshot.mysteryComplete ? 4 : 0;
+  score += snapshot.nemesisOutcome === 'contained' ? 5 : 0;
+  score -= snapshot.nemesisOutcome === 'escaped' ? 4 : 0;
+  score += Math.min(6, n(snapshot.huntWins, 0) * 2);
 
   if (score >= 86) return { grade: 'S', label: 'Definitive Campaign Close' };
   if (score >= 75) return { grade: 'A', label: 'Strong Campaign Close' };
@@ -217,6 +245,10 @@ export function buildRunEndingPackage(state) {
   const runSetupSummary = state?.runSetupSummary || null;
   const difficultyLabel = String(runSetupSummary?.difficultyLabel || 'Standard');
   const contractLabels = Array.isArray(runSetupSummary?.contractLabels) ? runSetupSummary.contractLabels : [];
+
+  const locker = state?.evidenceLocker || {};
+  const nemesis = state?.nemesis || {};
+  const callerThread = state?.callerThread || {};
 
   const snapshot = {
     tendencies,
@@ -238,7 +270,15 @@ export function buildRunEndingPackage(state) {
     finalePerformanceKey: String(state?.finalePerformance?.key || ''),
     finalePerformanceLabel: String(state?.finalePerformance?.label || ''),
     finalePerformanceLine: String(state?.finalePerformance?.line || ''),
-    endingMood: Array.isArray(state?.summaryIdentityLines) ? String(state.summaryIdentityLines[0] || '') : ''
+    endingMood: Array.isArray(state?.summaryIdentityLines) ? String(state.summaryIdentityLines[0] || '') : '',
+    // v0.27
+    evidenceCount: Array.isArray(locker.items) ? locker.items.length : 0,
+    mysteryComplete: n(locker.mysteryFragmentsFound, 0) >= 6,
+    mysteryFragmentsFound: n(locker.mysteryFragmentsFound, 0),
+    nemesisOutcome: String(nemesis.resolvedOutcome || (nemesis.active ? 'active' : '')),
+    nemesisStyleKey: String(nemesis.styleKey || ''),
+    huntWins: n(callerThread.huntNightWins, 0),
+    huntLosses: n(callerThread.huntNightLosses, 0)
   };
 
   const ending = evaluateCategory(snapshot);
@@ -269,6 +309,24 @@ export function buildRunEndingPackage(state) {
     ? `Finale integration: ${snapshot.finalePerformanceLabel}.`
     : 'Finale integration: pressure peaked without a distinct finale profile.';
 
+  const evidenceLine = snapshot.evidenceCount >= 6
+    ? `Evidence locker: ${snapshot.evidenceCount} items recovered${snapshot.mysteryComplete ? ' — Previous manager mystery resolved' : ''}.`
+    : snapshot.evidenceCount > 0
+      ? `Evidence locker: ${snapshot.evidenceCount} item${snapshot.evidenceCount !== 1 ? 's' : ''} recovered${snapshot.mysteryFragmentsFound > 0 ? ` — ${snapshot.mysteryFragmentsFound}/6 mystery fragments found` : ''}.`
+      : '';
+
+  const nemesisLine = snapshot.nemesisOutcome === 'contained'
+    ? `Nemesis: pattern identified and contained after ${snapshot.huntWins} hunt night win${snapshot.huntWins !== 1 ? 's' : ''}.`
+    : snapshot.nemesisOutcome === 'escaped'
+      ? 'Nemesis: recurring adversary withdrew without resolution.'
+      : snapshot.nemesisOutcome === 'active'
+        ? 'Nemesis: the recurring presence was never fully identified.'
+        : '';
+
+  const huntLine = snapshot.huntWins > 0 || snapshot.huntLosses > 0
+    ? `Hunt nights: ${snapshot.huntWins} win${snapshot.huntWins !== 1 ? 's' : ''}, ${snapshot.huntLosses} miss${snapshot.huntLosses !== 1 ? 'es' : ''}.`
+    : '';
+
   const notes = [
     snapshot.endingMood ? `Late-run identity: ${snapshot.endingMood}` : '',
     snapshot.finalePerformanceLabel ? `Finale assessment: ${snapshot.finalePerformanceLabel}` : '',
@@ -290,8 +348,13 @@ export function buildRunEndingPackage(state) {
     tendencies.compassion >= 5 ? 'Guest-Facing' : '',
     tendencies.secrecy >= 5 ? 'Discreet' : '',
     snapshot.forceHeavy >= 4 ? 'Force-Driven' : '',
-    snapshot.unresolved >= 5 ? 'High Carryover' : ''
-  ].filter(Boolean).slice(0, 4);
+    snapshot.unresolved >= 5 ? 'High Carryover' : '',
+    // v0.27 tags
+    snapshot.nemesisOutcome === 'contained' ? 'Nemesis Identified' : '',
+    snapshot.mysteryComplete ? 'Manager Mystery' : '',
+    snapshot.huntWins >= 2 ? 'Hunt Nights Survived' : '',
+    snapshot.evidenceCount >= 8 ? 'Evidence Trail' : ''
+  ].filter(Boolean).slice(0, 6);
 
   return {
     key: ending.key,
@@ -320,6 +383,16 @@ export function buildRunEndingPackage(state) {
       avgPower: Math.round(snapshot.powerAvg),
       unresolved: snapshot.unresolved,
       milestoneNights: n(campaign?.milestoneNightsSurvived, 0)
-    }
+    },
+    // v0.27
+    evidenceLine: evidenceLine || '',
+    nemesisLine: nemesisLine || '',
+    huntLine: huntLine || '',
+    evidenceCount: snapshot.evidenceCount,
+    mysteryComplete: snapshot.mysteryComplete,
+    mysteryFragmentsFound: snapshot.mysteryFragmentsFound,
+    nemesisOutcome: snapshot.nemesisOutcome,
+    huntWins: snapshot.huntWins,
+    huntLosses: snapshot.huntLosses
   };
 }
