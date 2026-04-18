@@ -1,0 +1,689 @@
+/* Dead End Motel v0.24 — Caseboard, Report, Identity, Forecast Pass */
+
+/* ============================================================
+   CSS VARIABLES
+   ============================================================ */
+
+:root {
+  --v24-risk-high:   rgba(248, 113, 113, 0.9);
+  --v24-risk-medium: rgba(251, 191, 36, 0.88);
+  --v24-risk-low:    rgba(52, 211, 153, 0.8);
+
+  --v24-section-room:        rgba(96, 165, 250, 0.7);
+  --v24-section-camera:      rgba(52, 211, 153, 0.65);
+  --v24-section-zone:        rgba(251, 191, 36, 0.65);
+  --v24-section-power:       rgba(251, 146, 60, 0.7);
+  --v24-section-suspicious:  rgba(192, 132, 252, 0.7);
+  --v24-section-key:         rgba(248, 113, 113, 0.75);
+  --v24-section-success:     rgba(52, 211, 153, 0.65);
+}
+
+/* ============================================================
+   GUEST CASEBOARD — RISK IDENTITY FRAME
+   ============================================================ */
+
+/* Left accent border keyed to risk level */
+.guest-card[data-risk="high"] {
+  border-left: 3px solid rgba(248, 113, 113, 0.55);
+  background: rgba(22, 6, 6, 0.12);
+}
+
+.guest-card[data-risk="medium"] {
+  border-left: 3px solid rgba(251, 191, 36, 0.42);
+  background: rgba(22, 16, 4, 0.08);
+}
+
+.guest-card[data-risk="low"] {
+  border-left: 3px solid rgba(52, 211, 153, 0.3);
+}
+
+/* Guest header: flex for avatar + text block */
+.guest-card.guest-card-v20 .guest-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+}
+
+.guest-card.guest-card-v20 .guest-card-header h4 {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Archetype avatar glyph */
+.guest-arch-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  user-select: none;
+}
+
+.guest-arch-risk-low    { background: rgba(52, 211, 153, 0.14); color: rgba(52, 211, 153, 0.85); border: 1px solid rgba(52, 211, 153, 0.28); }
+.guest-arch-risk-medium { background: rgba(251, 191, 36, 0.13); color: rgba(251, 191, 36, 0.9);  border: 1px solid rgba(251, 191, 36, 0.3);  }
+.guest-arch-risk-high   { background: rgba(248, 113, 113, 0.14); color: rgba(248, 113, 113, 0.9); border: 1px solid rgba(248, 113, 113, 0.3); }
+.guest-arch-risk-unknown { background: rgba(100, 116, 139, 0.12); color: rgba(148, 163, 184, 0.7); border: 1px solid rgba(148, 163, 184, 0.18); }
+
+/* Verdict strip: compact read-at-a-glance bar */
+.v24-verdict-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.28rem 0;
+  margin: 0.18rem 0 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.v24-verdict-chip {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 0.09rem 0.38rem;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* Risk verdict chips */
+.v24-verdict-chip-risk-low    { background: rgba(52, 211, 153, 0.11); color: rgba(52, 211, 153, 0.82); border: 1px solid rgba(52, 211, 153, 0.2); }
+.v24-verdict-chip-risk-medium { background: rgba(251, 191, 36, 0.11); color: rgba(251, 191, 36, 0.9);  border: 1px solid rgba(251, 191, 36, 0.22); }
+.v24-verdict-chip-risk-high   { background: rgba(248, 113, 113, 0.13); color: rgba(248, 113, 113, 0.92); border: 1px solid rgba(248, 113, 113, 0.26); }
+
+/* Policy verdict chips */
+.v24-verdict-chip-policy-approve { background: rgba(52, 211, 153, 0.1);  color: rgba(52, 211, 153, 0.78); }
+.v24-verdict-chip-policy-watch   { background: rgba(251, 191, 36, 0.1);  color: rgba(251, 191, 36, 0.82); }
+.v24-verdict-chip-policy-deny    { background: rgba(248, 113, 113, 0.13); color: rgba(248, 113, 113, 0.92); border: 1px solid rgba(248, 113, 113, 0.22); }
+
+/* Deception / contradiction signal chips */
+.v24-verdict-chip-dec-low    { background: rgba(96, 165, 250, 0.08);  color: rgba(96, 165, 250, 0.65); }
+.v24-verdict-chip-dec-medium { background: rgba(251, 191, 36, 0.1);   color: rgba(251, 191, 36, 0.82); }
+.v24-verdict-chip-dec-high   { background: rgba(248, 113, 113, 0.12); color: rgba(248, 113, 113, 0.9);  border: 1px solid rgba(248, 113, 113, 0.22); }
+
+/* Contradiction count chip */
+.v24-verdict-chip-cont-none { background: rgba(52, 211, 153, 0.08); color: rgba(52, 211, 153, 0.6); }
+.v24-verdict-chip-cont-low  { background: rgba(251, 191, 36, 0.09); color: rgba(251, 191, 36, 0.75); }
+.v24-verdict-chip-cont-high { background: rgba(248, 113, 113, 0.12); color: rgba(248, 113, 113, 0.88); }
+
+/* Action group sections: stronger separator */
+.guest-action-stack .action-group {
+  padding-top: 0.38rem;
+  margin-top: 0.28rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.guest-action-stack .action-group-label {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
+  margin-bottom: 0.2rem;
+}
+
+/* Case read block: stronger visual separation */
+.guest-case-read {
+  border-left: 2px solid rgba(96, 165, 250, 0.2);
+}
+
+.guest-case-read.is-hot {
+  border-left-color: rgba(248, 113, 113, 0.45);
+}
+
+.guest-case-read.has-scanner-friction {
+  border-left-color: rgba(192, 132, 252, 0.38);
+}
+
+/* Contradiction items: clearer incident look */
+.guest-contradiction-item {
+  border-left-color: rgba(248, 113, 113, 0.55);
+  background: rgba(30, 6, 6, 0.12);
+  border-radius: 0 3px 3px 0;
+  padding-top: 0.12rem;
+  padding-bottom: 0.12rem;
+}
+
+/* ============================================================
+   CAMERA ANOMALY IDENTITY
+   ============================================================ */
+
+/* Per-status color identity via data-cam-status attribute */
+
+.camera-card[data-cam-status="clear"] {
+  --cam-accent: rgba(52, 211, 153, 0.65);
+  --cam-preview-text-color: rgba(52, 211, 153, 0.28);
+}
+
+.camera-card[data-cam-status="motion-detected"] {
+  --cam-accent: rgba(251, 191, 36, 0.85);
+  --cam-preview-text-color: rgba(251, 191, 36, 0.55);
+  border-color: rgba(251, 191, 36, 0.25);
+  background: rgba(22, 18, 4, 0.52);
+}
+.camera-card[data-cam-status="motion-detected"]::before {
+  animation: cam-alert-blink 1.1s ease-in-out infinite;
+}
+
+.camera-card[data-cam-status="blocked"] {
+  --cam-accent: rgba(251, 146, 60, 0.88);
+  --cam-preview-text-color: rgba(251, 146, 60, 0.5);
+  border-color: rgba(251, 146, 60, 0.28);
+  background: rgba(22, 12, 4, 0.52);
+}
+
+.camera-card[data-cam-status="static"] {
+  --cam-accent: rgba(96, 165, 250, 0.65);
+  --cam-preview-text-color: rgba(96, 165, 250, 0.4);
+  border-color: rgba(96, 165, 250, 0.2);
+}
+
+.camera-card[data-cam-status="signal-lost"] {
+  --cam-accent: rgba(248, 113, 113, 0.72);
+  --cam-preview-text-color: rgba(248, 113, 113, 0.48);
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(22, 6, 6, 0.55);
+}
+.camera-card[data-cam-status="signal-lost"]::before {
+  animation: cam-alert-blink 1.8s ease-in-out infinite;
+}
+
+.camera-card[data-cam-status="looping-feed"] {
+  --cam-accent: rgba(192, 132, 252, 0.82);
+  --cam-preview-text-color: rgba(192, 132, 252, 0.48);
+  border-color: rgba(192, 132, 252, 0.25);
+  background: rgba(14, 6, 28, 0.5);
+}
+.camera-card[data-cam-status="looping-feed"]::before {
+  animation: cam-alert-blink 2.4s ease-in-out infinite;
+}
+
+.camera-card[data-cam-status="door-ajar"] {
+  --cam-accent: rgba(251, 191, 36, 0.92);
+  --cam-preview-text-color: rgba(251, 191, 36, 0.6);
+  border-color: rgba(251, 191, 36, 0.32);
+  background: rgba(22, 18, 4, 0.58);
+}
+.camera-card[data-cam-status="door-ajar"]::before {
+  animation: cam-alert-blink 0.75s ease-in-out infinite;
+}
+
+.camera-card[data-cam-status="false-calm"] {
+  --cam-accent: rgba(52, 211, 153, 0.38);
+  --cam-preview-text-color: rgba(192, 132, 252, 0.35);
+  border-color: rgba(192, 132, 252, 0.18);
+}
+
+.camera-card[data-cam-status="sabotage"] {
+  --cam-accent: rgba(248, 113, 113, 0.95);
+  --cam-preview-text-color: rgba(248, 113, 113, 0.65);
+  border-color: rgba(248, 113, 113, 0.42);
+  background: rgba(28, 4, 4, 0.65);
+}
+.camera-card[data-cam-status="sabotage"]::before {
+  animation: cam-alert-blink 0.6s ease-in-out infinite;
+}
+
+.camera-card[data-cam-status="blackout"] {
+  --cam-accent: rgba(248, 113, 113, 0.7);
+  --cam-preview-text-color: rgba(248, 113, 113, 0.45);
+}
+
+/* Status indicator dot: inherit accent color */
+.camera-card::before {
+  background: var(--cam-accent, rgba(52, 211, 153, 0.85)) !important;
+}
+
+/* Camera preview overlay text */
+.camera-preview[data-preview-text]:not(.camera-preview-blind)::after {
+  content: attr(data-preview-text);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.5rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: var(--cam-preview-text-color, rgba(52, 211, 153, 0.3));
+  pointer-events: none;
+}
+
+/* Anomaly type chip shown in camera meta line */
+.camera-anomaly-chip {
+  display: inline-block;
+  font-size: 0.54rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.07rem 0.32rem;
+  border-radius: 3px;
+  border: 1px solid var(--cam-accent, rgba(248,113,113,0.3));
+  color: var(--cam-accent, rgba(248, 113, 113, 0.82));
+  background: rgba(0, 0, 0, 0.2);
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
+/* Camera name: uses accent color */
+.camera-card[data-cam-status] h4 {
+  color: var(--cam-accent, rgba(0, 220, 80, 0.7));
+}
+
+/* ============================================================
+   NIGHT REPORT — CATEGORIZED SECTIONS
+   ============================================================ */
+
+.log-list-v24 {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Report section block */
+.report-section {
+  margin-bottom: 0.9rem;
+}
+
+.report-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.22rem 0 0.18rem;
+  margin-bottom: 0.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.report-section-title {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+  flex: 1;
+}
+
+.report-section-count {
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 0.04rem 0.28rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.32);
+}
+
+/* Section identity: title color per type */
+.report-section-key      .report-section-title { color: var(--v24-section-key); }
+.report-section-success  .report-section-title { color: var(--v24-section-success); }
+.report-section-room     .report-section-title { color: var(--v24-section-room); }
+.report-section-camera   .report-section-title { color: var(--v24-section-camera); }
+.report-section-zone     .report-section-title { color: var(--v24-section-zone); }
+.report-section-power    .report-section-title { color: var(--v24-section-power); }
+.report-section-suspicious .report-section-title { color: var(--v24-section-suspicious); }
+.report-section-archive  .report-section-title { color: rgba(255, 255, 255, 0.25); }
+
+.report-section-key      .report-section-header { border-bottom-color: rgba(248, 113, 113, 0.14); }
+.report-section-suspicious .report-section-header { border-bottom-color: rgba(192, 132, 252, 0.14); }
+
+/* Archive / overflow drawer */
+.report-archive-drawer {
+  margin-top: 0.18rem;
+}
+
+.report-archive-drawer > summary {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.32);
+  cursor: pointer;
+  padding: 0.22rem 0;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+.report-archive-drawer > summary::before {
+  content: '›';
+  font-size: 0.85rem;
+  font-weight: 900;
+  transition: transform 0.15s ease;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.report-archive-drawer[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+/* Log items in sections: tighter */
+.report-section .log-item {
+  margin-bottom: 0.06rem;
+  border-radius: var(--radius-sm);
+}
+
+/* Section empty state */
+.report-section-empty {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.28);
+  font-style: italic;
+  padding: 0.15rem 0;
+}
+
+/* ============================================================
+   WHAT MATTERS NOW — PRIORITY STRIP
+   ============================================================ */
+
+.report-priority-strip {
+  margin-bottom: 0.8rem;
+  padding: 0.5rem 0.65rem 0.45rem;
+  background: rgba(4, 10, 22, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  border-left: 3px solid rgba(248, 113, 113, 0.48);
+}
+
+.report-priority-strip.is-all-clear {
+  border-left-color: rgba(52, 211, 153, 0.42);
+  background: rgba(4, 16, 10, 0.35);
+}
+
+.report-priority-title {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(248, 113, 113, 0.72);
+  margin-bottom: 0.28rem;
+}
+
+.report-priority-strip.is-all-clear .report-priority-title {
+  color: rgba(52, 211, 153, 0.65);
+}
+
+.report-priority-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.report-priority-chip {
+  font-size: 0.65rem;
+  padding: 0.14rem 0.48rem;
+  border-radius: 3px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.report-priority-chip-danger  { background: rgba(248, 113, 113, 0.13); color: rgba(248, 113, 113, 0.92); border: 1px solid rgba(248, 113, 113, 0.22); }
+.report-priority-chip-warning { background: rgba(251, 191, 36, 0.11);  color: rgba(251, 191, 36, 0.88);  border: 1px solid rgba(251, 191, 36, 0.2);  }
+.report-priority-chip-ok      { background: rgba(52, 211, 153, 0.1);   color: rgba(52, 211, 153, 0.75);  border: 1px solid rgba(52, 211, 153, 0.18); }
+.report-priority-chip-info    { background: rgba(96, 165, 250, 0.1);   color: rgba(96, 165, 250, 0.72);  border: 1px solid rgba(96, 165, 250, 0.18); }
+
+/* ============================================================
+   ROOM IDENTITY PASS
+   ============================================================ */
+
+/* Room left-border accent by tone */
+.room-tone-steady.room-card-occupied {
+  border-left: 3px solid rgba(52, 211, 153, 0.28);
+}
+
+.room-tone-strained.room-card-occupied {
+  border-left: 3px solid rgba(251, 191, 36, 0.45);
+  background: rgba(20, 16, 4, 0.18);
+}
+
+.room-tone-hostile.room-card-occupied {
+  border-left: 3px solid rgba(248, 113, 113, 0.6);
+  background: rgba(20, 6, 6, 0.22);
+}
+
+/* Room condition pill: stronger identity */
+.room-card .room-condition-pill {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+/* Focused room: clearer boundary */
+.room-card-focused .room-overview-row {
+  background: rgba(6, 12, 26, 0.5);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  padding: 0.35rem 0.55rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Service kind-specific alert accent (extends v22 base) */
+.room-service-kind-disturbance.room-service-alert::before { background: rgba(248, 113, 113, 1); }
+.room-service-kind-noise.room-service-alert::before       { background: rgba(251, 191, 36, 0.95); animation: incident-critical-pulse 1.7s ease-in-out infinite; }
+.room-service-kind-threat.room-service-alert::before      { background: rgba(248, 113, 113, 1); animation: incident-critical-pulse 1.0s ease-in-out infinite; }
+.room-service-kind-complaint.room-service-alert::before   { background: rgba(251, 146, 60, 0.85); }
+.room-service-kind-maintenance.room-service-alert::before { background: rgba(96, 165, 250, 0.75); }
+
+/* Pressure row chips: cleaner */
+.room-card .room-state-chip {
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   CALENDAR / NIGHT LABEL FOUNDATION
+   ============================================================ */
+
+.shift-cal-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  padding: 0.28rem 0 0.22rem;
+  margin-bottom: 0.18rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.shift-cal-night-label {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.shift-cal-phase-chip {
+  font-size: 0.57rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 0.09rem 0.42rem;
+  border-radius: 3px;
+}
+
+.shift-cal-phase-chip.is-opening {
+  background: rgba(52, 211, 153, 0.1);
+  color: rgba(52, 211, 153, 0.75);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.shift-cal-phase-chip.is-early {
+  background: rgba(96, 165, 250, 0.1);
+  color: rgba(96, 165, 250, 0.75);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+}
+
+.shift-cal-phase-chip.is-mid {
+  background: rgba(251, 191, 36, 0.1);
+  color: rgba(251, 191, 36, 0.78);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.shift-cal-phase-chip.is-stretch {
+  background: rgba(251, 146, 60, 0.1);
+  color: rgba(251, 146, 60, 0.78);
+  border: 1px solid rgba(251, 146, 60, 0.2);
+}
+
+.shift-cal-phase-chip.is-finale {
+  background: rgba(248, 113, 113, 0.13);
+  color: rgba(248, 113, 113, 0.88);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  animation: mcb-badge-flash 1.4s ease-in-out infinite;
+}
+
+.shift-cal-scenario-label {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.38);
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   FORECAST FOUNDATION
+   ============================================================ */
+
+.v24-forecast-strip {
+  margin-top: 0.4rem;
+}
+
+.v24-forecast-header {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 0.28rem;
+}
+
+.v24-forecast-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.v24-forecast-chip {
+  font-size: 0.68rem;
+  padding: 0.16rem 0.52rem;
+  border-radius: 4px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.05);
+  letter-spacing: 0.01em;
+}
+
+/* Forecast condition chip variants */
+.v24-forecast-chip-calm           { background: rgba(52, 211, 153, 0.1);   color: rgba(52, 211, 153, 0.8);  border-color: rgba(52, 211, 153, 0.2);  }
+.v24-forecast-chip-fog-prone      { background: rgba(96, 165, 250, 0.08);  color: rgba(96, 165, 250, 0.68); border-color: rgba(96, 165, 250, 0.16); }
+.v24-forecast-chip-cold           { background: rgba(147, 197, 253, 0.08); color: rgba(147, 197, 253, 0.68); border-color: rgba(147, 197, 253, 0.15); }
+.v24-forecast-chip-storm-risk     { background: rgba(248, 113, 113, 0.1);  color: rgba(248, 113, 113, 0.78); border-color: rgba(248, 113, 113, 0.22); }
+.v24-forecast-chip-unstable-grid  { background: rgba(251, 146, 60, 0.1);   color: rgba(251, 146, 60, 0.8);  border-color: rgba(251, 146, 60, 0.22);  }
+.v24-forecast-chip-poor-visibility{ background: rgba(100, 116, 139, 0.12); color: rgba(148, 163, 184, 0.65); border-color: rgba(148, 163, 184, 0.14); }
+.v24-forecast-chip-pressure-rising{ background: rgba(192, 132, 252, 0.1);  color: rgba(192, 132, 252, 0.75); border-color: rgba(192, 132, 252, 0.2);  }
+
+/* Prep forecast surface: distinct panel */
+.prep-surface-forecast .prep-surface-title {
+  color: rgba(96, 165, 250, 0.6);
+}
+
+/* ============================================================
+   PREMIUM VISUAL POLISH
+   ============================================================ */
+
+/* Section tags: crisper */
+.section-tag {
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
+  margin-bottom: 0.12rem;
+  display: block;
+}
+
+/* Panel header: cleaner separation */
+.panel .panel-header {
+  margin-bottom: 0.55rem;
+}
+
+/* Prep surface cards: more intentional framing */
+.prep-surface {
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.prep-surface .prep-surface-title {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.32);
+  padding: 0.32rem 0.6rem 0.28rem;
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: block;
+}
+
+.prep-surface .prep-surface-body {
+  padding: 0.45rem 0.6rem 0.5rem;
+}
+
+/* Guest card: rhythm */
+.guest-card.guest-card-v20 {
+  padding: 0.72rem 0.82rem 0.62rem;
+}
+
+/* Room card: tighter baseline */
+.room-card {
+  border-radius: var(--radius-md);
+}
+
+/* Camera card: monitor header tighter */
+.camera-card h4 {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+}
+
+/* Action group labels: consistent */
+.action-group-label {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.26);
+  padding-bottom: 0.14rem;
+}
+
+/* Night prep title: calendar feel */
+#night-prep-title {
+  letter-spacing: 0.02em;
+}
+
+#night-prep-meta {
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 720px) {
+  .v24-verdict-strip {
+    gap: 0.18rem;
+  }
+
+  .shift-cal-strip {
+    gap: 0.3rem;
+  }
+
+  .report-priority-chips {
+    gap: 0.22rem;
+  }
+
+  .v24-forecast-chips {
+    gap: 0.22rem;
+  }
+}

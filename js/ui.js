@@ -598,6 +598,27 @@ export function renderTopbar(state) {
         : `Campaign: ${label}`;
   }
 
+  const calStrip = document.getElementById('shift-cal-strip');
+  if (calStrip) {
+    const nightNum = Number(state?.night || 1);
+    const totalNights = Number(state?.campaignProgress?.totalNights || state?.totalNights || 5);
+    const isFinale = Boolean(state?.campaignMilestone?.isFinale || state?.finaleUi?.active);
+    const getNightPhaseLabel = (n, total) => {
+      if (n === 1) return { label: 'Opening Night', cls: 'is-opening' };
+      if (isFinale) return { label: 'Final Night', cls: 'is-finale' };
+      const pct = total > 1 ? n / total : 0.5;
+      if (pct <= 0.35) return { label: 'Early Campaign', cls: 'is-early' };
+      if (pct <= 0.65) return { label: 'Mid-Campaign', cls: 'is-mid' };
+      return { label: 'Final Stretch', cls: 'is-stretch' };
+    };
+    const phase = getNightPhaseLabel(nightNum, totalNights);
+    const scenarioName = state?.activeScenario?.label || '';
+    calStrip.innerHTML =
+      `<span class="shift-cal-night-label">Night ${nightNum}</span>` +
+      `<span class="shift-cal-phase-chip ${phase.cls}">${phase.label}</span>` +
+      (scenarioName ? `<span class="shift-cal-scenario-label">${scenarioName}</span>` : '');
+  }
+
   const motelCapacityLine = document.getElementById('motel-capacity-line');
   if (motelCapacityLine) {
     motelCapacityLine.textContent = state?.motelCapacityLine || '';
@@ -919,6 +940,8 @@ export function renderGuests(
         ? 'guest-card-urgent'
         : '';
     card.className = `guest-card guest-card-v20 ${emphasisClass}`.trim();
+    card.dataset.risk = (guest.riskLevel || 'Low').toLowerCase();
+    card.dataset.archetype = (guest.archetypeKey || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '-');
     const contradictionLines = Array.isArray(guest?.contradictionLines) ? guest.contradictionLines.slice(0, 3) : [];
     const scannerFriction = (guest?.scannerMatches || []).some((line) => /mismatch|planted/i.test(String(line)));
     const recommendedQuestions = Array.isArray(guest?.recommendedQuestionLabels) ? guest.recommendedQuestionLabels.slice(0, 3) : [];
@@ -930,8 +953,16 @@ export function renderGuests(
     const linkedCaseLabel = guest?.linkedArrival?.kind ? formatCaseLabel(guest.linkedArrival.kind) : '';
     const policyLead = String(guest.policyAlignmentLine || guest.policyReason || '').trim();
     const strapline = (guest?.inspectionHeadline || policyLead.split('.')[0] || 'Scan chips and case read before releasing a room.').trim();
+    const riskLower = (guest.riskLevel || 'Low').toLowerCase();
+    const policyLower = (guest.policyRecommendation || 'Approve').toLowerCase();
+    const archetypeInitial = (guest.archetypeLabel || 'G').charAt(0).toUpperCase();
+    const decSig = Number(guest?.deceptionSignal || 0);
+    const contCount = contradictionLines.length;
+    const decChipClass = decSig >= 2 ? 'dec-high' : decSig >= 1 ? 'dec-medium' : 'dec-low';
+    const contChipClass = contCount >= 2 ? 'cont-high' : contCount >= 1 ? 'cont-low' : 'cont-none';
     card.innerHTML = `
       <div class="guest-card-header">
+        <div class="guest-arch-avatar guest-arch-risk-${riskLower}" title="${guest.archetypeLabel || 'Unknown Pattern'}">${archetypeInitial}</div>
         <h4>${guest.name}</h4>
         <div class="guest-critical-badges">
           ${getReturningBadgeMarkup(guest)}
@@ -946,6 +977,13 @@ export function renderGuests(
         <span class="policy-badge ${getPolicyBadgeClass(guest.policyRecommendation || 'Approve')}" title="Policy is guidance, not a forced action.">${(guest.policyRecommendation || 'Approve').toUpperCase()}</span>
         <span class="guest-meta-chip">Mood: ${guest.mood}</span>
         <span class="guest-meta-chip guest-meta-chip-archetype">${guest.archetypeLabel || 'Unknown Pattern'}</span>
+      </div>
+      <div class="v24-verdict-strip">
+        <span class="v24-verdict-chip v24-verdict-chip-risk-${riskLower}" title="Risk level">Risk ${guest.riskLevel || 'Low'}</span>
+        <span class="v24-verdict-chip v24-verdict-chip-policy-${policyLower}" title="Policy recommendation">${(guest.policyRecommendation || 'APPROVE').toUpperCase()}</span>
+        ${decSig > 0 ? `<span class="v24-verdict-chip v24-verdict-chip-${decChipClass}" title="Deception signal">Deception ×${decSig}</span>` : ''}
+        ${contCount > 0 ? `<span class="v24-verdict-chip v24-verdict-chip-${contChipClass}" title="Contradictions found">${contCount} Contradiction${contCount > 1 ? 's' : ''}</span>` : ''}
+        ${guest?.forgeryProfile?.isForged ? '<span class="v24-verdict-chip v24-verdict-chip-dec-high" title="Forgery risk detected">Forgery Risk</span>' : ''}
       </div>
       <div class="guest-chip-row guest-chip-row-secondary">
         ${buildSignalChips(guest)}
@@ -1633,14 +1671,49 @@ export function renderCameras(state) {
     const blindCooldown = Number(camera.blindCooldown || 0);
     const blindLabel = blindMode === 'sabotage' ? 'SABOTAGED' : blindMode === 'blackout' ? ('BLACKOUT ' + (blindCooldown > 0 ? blindCooldown + ' left' : '')) : null;
 
+    const camStatusNorm = isBlind
+      ? (blindMode || 'blackout')
+      : (camera.status || 'clear').toLowerCase().replace(/\s+/g, '-');
+
+    const getCameraPreviewText = () => {
+      if (isBlind) return blindMode === 'sabotage' ? 'SABOTAGED' : 'BLACKOUT';
+      const s = camStatusNorm;
+      if (s === 'clear') return 'LIVE';
+      if (s.includes('motion')) return 'MOTION';
+      if (s.includes('blocked')) return 'BLOCKED';
+      if (s.includes('static')) return 'STATIC';
+      if (s.includes('signal')) return 'NO SIGNAL';
+      if (s.includes('loop')) return 'LOOP';
+      if (s.includes('door')) return 'DOOR AJAR';
+      if (s.includes('false') || s.includes('calm')) return 'SUSPICIOUS';
+      return String(camera.status || '').toUpperCase().slice(0, 14);
+    };
+    const cameraPreviewText = getCameraPreviewText();
+
+    const getAnomalyChipLabel = () => {
+      if (isBlind) return blindMode === 'sabotage' ? 'Sabotage' : 'Blackout';
+      const s = camStatusNorm;
+      if (s === 'clear') return null;
+      if (s.includes('motion')) return 'Motion';
+      if (s.includes('blocked')) return 'Blocked';
+      if (s.includes('static')) return 'Static';
+      if (s.includes('signal')) return 'Signal Lost';
+      if (s.includes('loop')) return 'Looping Feed';
+      if (s.includes('door')) return 'Door Ajar';
+      if (s.includes('false') || s.includes('calm')) return 'False Calm';
+      return null;
+    };
+    const anomalyChipLabel = getAnomalyChipLabel();
+
     const card = document.createElement('article');
     card.className = `camera-card ${getCameraStatusClass(camera.status)} ${actionable ? 'is-actionable' : ''} ${isBlind ? 'camera-card-blind' : ''} ${cameraInterference >= 2 ? 'camera-card-glitch' : ''} ${cameraInterference >= 3 ? 'camera-card-flicker' : ''}`.trim();
+    card.dataset.camStatus = camStatusNorm;
     const statusClass = isBlind ? 'is-alert' : camera.status === 'Clear' ? 'is-clear' : 'is-alert';
     const displayStatus = blindLabel || camera.status;
     card.innerHTML = `
-      <div class="camera-preview ${isBlind ? 'camera-preview-blind' : ''}"></div>
+      <div class="camera-preview ${isBlind ? 'camera-preview-blind' : ''}" data-preview-text="${cameraPreviewText}"></div>
       <h4>${camera.name}</h4>
-      <p class="camera-meta">Status: <span class="camera-status-badge ${statusClass}">${displayStatus}</span></p>
+      <p class="camera-meta">Status: <span class="camera-status-badge ${statusClass}">${displayStatus}</span>${anomalyChipLabel ? `<span class="camera-anomaly-chip">${anomalyChipLabel}</span>` : ''}</p>
       <p class="camera-meta">Zone: ${zoneStatusText} • ${containmentText}</p>
       ${isBlind ? '<p class="camera-alert-line">Feed offline. Zone dark.</p>' : (actionable ? '<p class="camera-alert-line">Anomaly requires response.</p>' : '')}
     `;
@@ -1861,22 +1934,114 @@ export function renderSpecialEncounterOverlay(state) {
   }
 }
 
+function buildReportPriorityStrip(state) {
+  const rooms = Array.isArray(state?.rooms) ? state.rooms : [];
+  const cameras = Array.isArray(state?.cameras) ? state.cameras : [];
+  const spaces = Array.isArray(state?.sharedSpaces) ? state.sharedSpaces : [];
+
+  const hostileRooms = rooms.filter((r) => r.occupied && r.condition === 'Hostile').length;
+  const tenseRooms   = rooms.filter((r) => r.occupied && r.condition === 'Tense').length;
+  const pendingCalls = rooms.filter((r) => r.occupied && Boolean(r?.serviceState?.pendingRequest)).length;
+  const unresolvedCams = cameras.filter((cam) => {
+    const ev = (state.activeEvents || []).find((e) => String(e?.cameraId) === String(cam.id));
+    return Boolean(ev && !state?.cameraScene?.resolvedZones?.[cam.id]);
+  }).length;
+  const hotZones = spaces.filter((s) => s.severity === 'high').length;
+  const powerCritical = Number(state?.power ?? 100) <= 30;
+
+  const hasIssues = hostileRooms > 0 || unresolvedCams > 0 || hotZones > 0 || powerCritical || tenseRooms >= 2 || pendingCalls >= 2;
+
+  const strip = document.createElement('div');
+  strip.className = `report-priority-strip ${hasIssues ? '' : 'is-all-clear'}`.trim();
+
+  const titleEl = document.createElement('div');
+  titleEl.className = 'report-priority-title';
+  titleEl.textContent = hasIssues ? 'What Needs Attention' : 'Shift Status: Under Control';
+  strip.appendChild(titleEl);
+
+  const chips = document.createElement('div');
+  chips.className = 'report-priority-chips';
+
+  const addChip = (text, cls) => {
+    const chip = document.createElement('span');
+    chip.className = `report-priority-chip report-priority-chip-${cls}`;
+    chip.textContent = text;
+    chips.appendChild(chip);
+  };
+
+  if (!hasIssues) {
+    addChip('No critical threats', 'ok');
+    if (tenseRooms > 0) addChip(`${tenseRooms} tense room${tenseRooms > 1 ? 's' : ''} — monitor`, 'info');
+  } else {
+    if (hostileRooms > 0) addChip(`${hostileRooms} hostile room${hostileRooms > 1 ? 's' : ''}`, 'danger');
+    if (tenseRooms > 0)   addChip(`${tenseRooms} tense room${tenseRooms > 1 ? 's' : ''}`, 'warning');
+    if (pendingCalls > 0) addChip(`${pendingCalls} room call${pendingCalls > 1 ? 's' : ''} pending`, 'warning');
+    if (unresolvedCams > 0) addChip(`${unresolvedCams} camera alert${unresolvedCams > 1 ? 's' : ''}`, 'warning');
+    if (hotZones > 0)     addChip(`${hotZones} hot zone${hotZones > 1 ? 's' : ''}`, 'danger');
+    if (powerCritical)    addChip(`Power critical (${state.power}%)`, 'danger');
+  }
+
+  strip.appendChild(chips);
+  return strip;
+}
+
+function buildLogItem(entry) {
+  const classifyTone = (line = '') => {
+    const v = String(line).toLowerCase();
+    if (/(failed|collapse|critical|blackout|evict|danger|breach|slipping|sabotage|hostile.*escalat)/.test(v)) return 'danger';
+    if (/(warning|low|flagged|blocked|unstable|risk|pressure|incident)/.test(v)) return 'warning';
+    if (/(success|stabilized|restored|owned|resolved|complete|back online|secured)/.test(v)) return 'success';
+    return 'info';
+  };
+  const tone = classifyTone(entry.text);
+  const item = document.createElement('div');
+  item.className = `log-item log-item-${tone}`;
+
+  const pill = document.createElement('span');
+  pill.className = `log-pill log-pill-${tone}`;
+  pill.textContent = tone.toUpperCase();
+
+  const text = document.createElement('span');
+  text.className = 'log-text';
+  text.textContent = entry.text;
+
+  item.appendChild(pill);
+  item.appendChild(text);
+
+  if (entry.count > 1) {
+    const repeat = document.createElement('span');
+    repeat.className = 'log-repeat-count';
+    repeat.textContent = `×${entry.count}`;
+    item.appendChild(repeat);
+  }
+  return item;
+}
+
 export function renderLogs(state) {
   const list = document.getElementById('incident-log');
   list.innerHTML = '';
-  list.className = 'log-list log-list-v20';
+  list.className = 'log-list log-list-v20 log-list-v24';
+
+  list.appendChild(buildReportPriorityStrip(state));
 
   if (!state.logs.length) {
-    list.innerHTML = '<div class="log-item">No incidents yet.</div>';
+    const empty = document.createElement('div');
+    empty.className = 'log-item';
+    empty.textContent = 'No incidents yet.';
+    list.appendChild(empty);
     return;
   }
 
-  const classifyLogLine = (line = '') => {
-    const value = String(line).toLowerCase();
-    if (/(failed|collapse|critical|blackout|evict|danger|breach|slipping)/.test(value)) return 'danger';
-    if (/(warning|low|flagged|blocked|unstable|risk|pressure|incident)/.test(value)) return 'warning';
-    if (/(success|stabilized|restored|owned|resolved|complete|back online)/.test(value)) return 'success';
-    return 'info';
+  const categorizeEntry = (line = '') => {
+    const v = String(line).toLowerCase();
+    if (/(failed|collapse|critical|evict|breach|slipping|raid|sabotage|override.*active|system.*compromised)/.test(v)) return 'key';
+    if (/(success|stabilized|resolved|restored|secured|back online|complete)/.test(v)) return 'success';
+    if (/(camera|feed|monitor|anomaly|signal.*lost|motion.*detect|blind|surveillance|cam\b)/.test(v)) return 'camera';
+    if (/(room \d|guest.*room|occupant|lockdown|evict|service.*call|hallway check|maintenance sent|security sent)/.test(v)) return 'room';
+    if (/(lobby|hallway|parking|utility|rear exit|shared space|zone.*pressure|spill)/.test(v)) return 'zone';
+    if (/(power|electric|blackout|generator|restore|reroute|emergency power|outage)/.test(v)) return 'power';
+    if (/(suspicious|forged|planted|fake|illegal|contraband|dirty|mismatch|forgery|flagged.*guest)/.test(v)) return 'suspicious';
+    return 'archive';
   };
 
   const reversed = state.logs.slice().reverse();
@@ -1888,34 +2053,51 @@ export function renderLogs(state) {
     if (previous && previous.text === normalized) {
       previous.count += 1;
     } else {
-      grouped.push({ text: normalized, count: 1 });
+      grouped.push({ text: normalized, count: 1, category: categorizeEntry(normalized) });
     }
   });
 
-  grouped.forEach((entry) => {
-    const tone = classifyLogLine(entry.text);
-    const item = document.createElement('div');
-    item.className = `log-item log-item-${tone}`;
+  const SECTIONS = [
+    { key: 'key',        title: 'Key Events Tonight',         limit: 6,        collapsed: false },
+    { key: 'success',    title: 'Resolved & Secured',         limit: 4,        collapsed: false },
+    { key: 'room',       title: 'Room Incidents',             limit: 5,        collapsed: false },
+    { key: 'camera',     title: 'Camera & Surveillance',      limit: 5,        collapsed: false },
+    { key: 'zone',       title: 'Shared Space Escalations',   limit: 4,        collapsed: false },
+    { key: 'power',      title: 'Power & Emergency',          limit: 4,        collapsed: false },
+    { key: 'suspicious', title: 'Suspicious Activity',        limit: 6,        collapsed: false },
+    { key: 'archive',    title: 'Full Night Log',             limit: Infinity, collapsed: true  }
+  ];
 
-    const pill = document.createElement('span');
-    pill.className = `log-pill log-pill-${tone}`;
-    pill.textContent = tone.toUpperCase();
+  SECTIONS.forEach(({ key, title, limit, collapsed }) => {
+    const items = grouped.filter((e) => e.category === key);
+    if (!items.length) return;
 
-    const text = document.createElement('span');
-    text.className = 'log-text';
-    text.textContent = entry.text;
+    const section = document.createElement('div');
+    section.className = `report-section report-section-${key}`;
 
-    item.appendChild(pill);
-    item.appendChild(text);
+    const header = document.createElement('div');
+    header.className = 'report-section-header';
+    header.innerHTML = `<span class="report-section-title">${title}</span><span class="report-section-count">${items.length}</span>`;
+    section.appendChild(header);
 
-    if (entry.count > 1) {
-      const repeat = document.createElement('span');
-      repeat.className = 'log-repeat-count';
-      repeat.textContent = `×${entry.count}`;
-      item.appendChild(repeat);
+    const toShow = collapsed ? [] : items.slice(0, limit);
+    const overflow = collapsed ? items : items.slice(limit);
+
+    toShow.forEach((entry) => section.appendChild(buildLogItem(entry)));
+
+    if (overflow.length > 0 || (collapsed && items.length > 0)) {
+      const drawer = document.createElement('details');
+      drawer.className = 'report-archive-drawer';
+      const summary = document.createElement('summary');
+      summary.textContent = collapsed
+        ? `Show all ${items.length} entries`
+        : `${overflow.length} more`;
+      drawer.appendChild(summary);
+      (collapsed ? items : overflow).forEach((entry) => drawer.appendChild(buildLogItem(entry)));
+      section.appendChild(drawer);
     }
 
-    list.appendChild(item);
+    list.appendChild(section);
   });
 }
 
@@ -2161,6 +2343,53 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
       notes.length
         ? `<ul class="prep-notes-list">${notes.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
         : '<p class="muted">No special campaign warnings.</p>'
+    );
+  }
+
+  const forecastStrip = document.getElementById('night-prep-forecast');
+  if (forecastStrip) {
+    const buildForecastChips = () => {
+      const conditions = [];
+      const explicit = Array.isArray(state?.nightForecast?.conditions) ? state.nightForecast.conditions : [];
+      if (explicit.length) {
+        explicit.forEach((c) => conditions.push(String(c).toLowerCase().replace(/\s+/g, '-')));
+      } else {
+        const power = Number(state?.power ?? 100);
+        const blackout = state?.blackoutState?.level;
+        const scenario = String(state?.activeScenario?.label || '').toLowerCase();
+        const pressure = state?.uiPressureLevel || 'calm';
+        if (power <= 40 || blackout === 'partial' || blackout === 'full') conditions.push('unstable-grid');
+        if (blackout === 'partial' || blackout === 'full') conditions.push('poor-visibility');
+        if (pressure === 'calm' && !conditions.length) conditions.push('calm');
+        if (/storm|surge|volatile/.test(scenario)) conditions.push('storm-risk');
+        if (/fog|mist|low.vis/.test(scenario)) conditions.push('fog-prone');
+        if (/cold|freeze|winter/.test(scenario)) conditions.push('cold');
+        if (pressure === 'emergency' || pressure === 'dire') conditions.push('pressure-rising');
+      }
+      if (!conditions.length) conditions.push('calm');
+      const LABELS = {
+        'calm':            'Calm',
+        'fog-prone':       'Fog-Prone',
+        'cold':            'Cold',
+        'storm-risk':      'Storm Risk',
+        'unstable-grid':   'Unstable Grid',
+        'poor-visibility': 'Poor Visibility',
+        'pressure-rising': 'Pressure Rising'
+      };
+      return conditions.slice(0, 4).map((c) => {
+        const label = LABELS[c] || c.replace(/-/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+        return `<span class="v24-forecast-chip v24-forecast-chip-${c}">${label}</span>`;
+      }).join('');
+    };
+
+    const nextNight = Math.max(1, Number(state?.night || 1) + 1);
+    forecastStrip.innerHTML = prepSurface(
+      'forecast-v24',
+      `Night ${nextNight} — Shift Forecast`,
+      `<div class="v24-forecast-strip">
+        <div class="v24-forecast-header">Conditions</div>
+        <div class="v24-forecast-chips">${buildForecastChips()}</div>
+      </div>`
     );
   }
 
