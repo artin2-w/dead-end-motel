@@ -144,6 +144,22 @@ import {
   recordEndlessWaveStats
 } from './endlessShift.js';
 import {
+  normalizeRoadWorldState,
+  decayRoadWorldBetweenNights,
+  tickRoadWorldDuringShift,
+  fundDrifterNetwork,
+  feedMotelHound,
+  appendRoadPayphoneOptions,
+  resolveRoadPayphoneOption,
+  applyArrivalRoadSkew,
+  pickDjCodedAddon,
+  buildRoadWorldRenderModel,
+  maybeBurnDrifterNetwork,
+  bumpRoadHeat,
+  consumeRoadIntelForArrival,
+  markHoundInjury
+} from './roadWorld.js';
+import {
   normalizeCameraSceneState,
   buildFreshCameraSceneState,
   clearCameraScene,
@@ -5321,6 +5337,37 @@ function handleDawnAuditorCleanup() {
   renderAll();
 }
 
+function handleFundDrifterNetwork() {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  normalizeDirtyState(state);
+  const res = fundDrifterNetwork(state);
+  if (!res.ok) {
+    pushLiveAlert(state, { type: 'warning', message: res.reason || 'Unable to fund watchers.', dedupeKey: 'road-fund-fail' });
+    renderAll();
+    return;
+  }
+  pushLiveAlert(state, { type: 'info', message: 'Drifter network widened — texts may beat trouble to your door.', dedupeKey: 'road-fund-ok' });
+  if (progressShift('road-fund-drifters', { timeScale: 0.12, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+function handleFeedMotelHound() {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const res = feedMotelHound(state);
+  if (!res.ok) {
+    pushLiveAlert(state, { type: 'warning', message: res.reason || 'Cannot feed the lot stray right now.', dedupeKey: 'hound-feed-fail' });
+    renderAll();
+    return;
+  }
+  pushLiveAlert(state, { type: 'info', message: 'Motel hound fed — it may warn the lot earlier when something is wrong.', dedupeKey: 'hound-feed-ok' });
+  if (progressShift('motel-hound-feed', { timeScale: 0.1, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
 function buildRenderState() {
   normalizeDeskInspectionState(state);
   normalizeStaffManagementState();
@@ -5496,6 +5543,14 @@ function buildRenderState() {
         cleanupUsed: Number(da.cleanupUsed || 0),
         exposurePreview: da.active ? computeDawnExposure(state) : null,
         onCleanup: handleDawnAuditorCleanup
+      };
+    })(),
+    roadWorldUi: (() => {
+      normalizeRoadWorldState(state);
+      return {
+        ...buildRoadWorldRenderModel(state),
+        onFundDrifterNetwork: handleFundDrifterNetwork,
+        onFeedMotelHound: handleFeedMotelHound
       };
     })(),
     analog: getBreakerBoardSummary(state),
@@ -6168,6 +6223,7 @@ function bootstrapState() {
   normalizeEndlessRunState(state);
   normalizeContractRuntime(state);
   normalizeDawnAuditorState(state);
+  normalizeRoadWorldState(state);
   normalizeForensicNoirState(state);
 }
 function renderAll() {
@@ -6551,7 +6607,7 @@ function handleLostFoundClaimChoice(choiceId) {
 }
 
 function triggerLotPayphoneEvent() {
-  state.activeNightEvent = buildLotPayphoneNightEvent();
+  state.activeNightEvent = appendRoadPayphoneOptions(buildLotPayphoneNightEvent(), state);
   state.nightEventOverlayOpen = false;
   state.logs.push('Parking island payphone — a wet ring cuts across the lot.');
   pushLiveAlert(state, {
@@ -6568,7 +6624,10 @@ function handleLotPayphoneChoice(choiceId) {
   audioController.playUiClick();
   state.nightEventOverlayOpen = false;
   state.activeNightEvent = null;
-  const result = resolveLotPayphoneChoice(state, choiceId);
+  const result =
+    choiceId === 'payphone-drifter-callback' || choiceId === 'payphone-false-trail'
+      ? resolveRoadPayphoneOption(state, choiceId)
+      : resolveLotPayphoneChoice(state, choiceId);
   if (!result?.ok) {
     renderAll();
     return;
@@ -6592,12 +6651,18 @@ function handleLotPayphoneChoice(choiceId) {
     state.shiftStats.nightEventsResolved = (state.shiftStats.nightEventsResolved || 0) + 1;
   } else if (choiceId === 'send-runner' && !result.success) {
     state.shiftStats.nightEventsMissed = (state.shiftStats.nightEventsMissed || 0) + 1;
+    if (Math.random() < 0.38) {
+      markHoundInjury(state);
+      state.logs.push('[Motel hound] The lot went wrong near the runner — the stray keeps its distance now, ribs showing.');
+    }
   }
   if (progressShift('lot-payphone', { timeScale: 0.22, skipPassiveDrain: true })) return;
   renderAll();
 }
 
 function triggerPoliceRaidEvent() {
+  maybeBurnDrifterNetwork(state);
+  bumpRoadHeat(state, 1.2, 'Blue lights narrative tightens — the route knows your sign now.');
   state.activeNightEvent = {
     id: 'police-raid',
     title: 'Police Raid — 5:45 AM Sweep',
@@ -7352,7 +7417,23 @@ function triggerZoneBlackout(cameraId) {
 function normalizeDirtyState(targetState = state) {
   if (!targetState) return;
   if (!targetState.dirtyLedger || typeof targetState.dirtyLedger !== 'object') {
-    targetState.dirtyLedger = { hiddenPayments: 0, offBookStays: 0, favorsAccepted: 0, deadDrops: 0, totalDirtyMoney: 0, lastActionNight: 0 };
+    targetState.dirtyLedger = {
+      hiddenPayments: 0,
+      offBookStays: 0,
+      favorsAccepted: 0,
+      deadDrops: 0,
+      totalDirtyMoney: 0,
+      dirtyScore: 0,
+      lastActionNight: 0
+    };
+  }
+  if (typeof targetState.dirtyLedger.dirtyScore !== 'number') {
+    targetState.dirtyLedger.dirtyScore = Math.max(
+      0,
+      Number(targetState.dirtyLedger.offBookStays || 0) +
+        Number(targetState.dirtyLedger.favorsAccepted || 0) +
+        Number(targetState.dirtyLedger.deadDrops || 0) * 0.5
+    );
   }
   if (typeof targetState.shadowRep !== 'number') targetState.shadowRep = 0;
   if (!targetState.bleedingWalkInState || typeof targetState.bleedingWalkInState !== 'object') {
@@ -8617,6 +8698,11 @@ function fireMidnightDJBroadcast() {
 
   t.lastDjBroadcast = broadcast;
   addToLog(`[Highway Radio] ${broadcast}`);
+  const coded = pickDjCodedAddon(state);
+  if (coded) {
+    addToLog(`[Highway Radio — coded] ${coded}`);
+    t.lastDjBroadcast = `${broadcast} // ${coded}`;
+  }
 }
 
 function respondToDayShiftNote(response) {
@@ -8759,6 +8845,8 @@ function progressShift(actionKey, options = {}) {
       });
     });
   }
+
+  tickRoadWorldDuringShift(state, (a) => pushLiveAlert(state, a));
 
   normalizeForensicNoirState(state);
   tickDawnAuditor(state, (a) => pushLiveAlert(state, a));
@@ -9100,6 +9188,11 @@ function progressShift(actionKey, options = {}) {
     const _bmDirty = Number(state.dirtyLedger?.dirtyScore || 0);
     if (_bmNight >= 2 && _bmDirty > 0 && _bmEl >= 100 && _bmEl < 350 && Math.random() < 0.02) {
       normalizeTownState();
+      normalizeRoadWorldState(state);
+      bumpRoadHeat(state, 0.35, '');
+      state.logs.push(
+        '[Road intel] CB mirror: someone used the old "property interview" phrasing for your exit — might be gossip, might be a cruiser buying time.'
+      );
       triggerBagmanCopEvent();
       return false;
     }
@@ -9208,7 +9301,9 @@ function callNextArrival() {
     preparedDeskGuest.threadMemoryLine = [preparedDeskGuest.threadMemoryLine, preparedDeskGuest.linkedArrival.note].filter(Boolean).join(' ');
   }
 
-  const arrivalGuest = applyNeonArrivalBias(preparedDeskGuest, state);
+  let arrivalGuest = applyNeonArrivalBias(preparedDeskGuest, state);
+  arrivalGuest = applyArrivalRoadSkew(state, arrivalGuest);
+  consumeRoadIntelForArrival(state);
   state.guests.push(arrivalGuest);
   maybeAdvanceSignatureNightFlow('arrival', { guest: arrivalGuest });
   registerContentExposure(state, {
@@ -11763,6 +11858,7 @@ function nextNight() {
   state.failedState = null;
   state.pendingRunCompletion = false;
   normalizeEndlessRunState(state);
+  decayRoadWorldBetweenNights(state);
   if (darkWebContractsEnabled(state)) {
     const nx = String(state.endlessRun.nextDarkContractId || '');
     if (nx && getDarkContractById(nx)) {
@@ -11965,6 +12061,14 @@ function bindEvents() {
       }
       if (e.target.closest('[data-dawn-auditor-cleanup]')) {
         handleDawnAuditorCleanup();
+        e.preventDefault();
+      }
+      if (e.target.closest('[data-road-fund-drifters]')) {
+        handleFundDrifterNetwork();
+        e.preventDefault();
+      }
+      if (e.target.closest('[data-road-feed-hound]')) {
+        handleFeedMotelHound();
         e.preventDefault();
       }
     });

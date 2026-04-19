@@ -130,6 +130,29 @@ export function buildNightSummary(state) {
     identity.push('Dawn inspection: severe read — traces, optics, or paperwork looked too compromised to hand-wave.');
   }
 
+  const rw = state?.roadWorld;
+  if (rw && typeof rw === 'object') {
+    const heat = Number(rw.roadHeat || 0);
+    if (heat >= 4) {
+      identity.push(`Route heat held around ${heat}/10 — the road outside is learning this motel's silhouette.`);
+    }
+    const tips = Number(state?.shiftStats?.roadIntelTipsShift || 0);
+    const wrong = Number(state?.shiftStats?.roadIntelWrong || 0);
+    if (tips > 0) {
+      identity.push(
+        `Drifter wire surfaced ${tips} lead${tips === 1 ? '' : 's'} tonight${wrong > 0 ? `; ${wrong} read cold under scrutiny` : ''}.`
+      );
+    }
+    if (Number(state?.shiftStats?.houndSilenceShift || 0) > 0) {
+      identity.push('The lot hound went unnervingly quiet — a predator-quiet read, not comfort.');
+    } else if (Number(state?.shiftStats?.houndSignalsShift || 0) > 0) {
+      identity.push('The stray on the asphalt carried warnings the glass could not quite decode.');
+    }
+    if (Number(state?.shiftStats?.drifterBurns || 0) > 0) {
+      identity.push('A road watcher line burned — police pressure or betrayal snapped outside intelligence.');
+    }
+  }
+
   let branchOutcome = 'Contained, but ordinary.';
   if (Number(state?.shiftStats?.policyBroken || 0) >= 2 && Number(state?.money || 0) >= 150) {
     branchOutcome = 'Profitable, but socially poisoned.';

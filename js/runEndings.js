@@ -470,7 +470,13 @@ export function buildRunEndingPackage(state) {
     endlessAuditorPasses: n(state?.endlessRun?.auditorPasses, 0),
     endlessAuditorFails: n(state?.endlessRun?.auditorFails, 0),
     endlessCleanupPasses: n(state?.endlessRun?.cleanupPasses, 0),
-    darkWebContractCodename: String(getDarkContractById(state?.endlessRun?.selectedDarkContractId)?.codename || '')
+    darkWebContractCodename: String(getDarkContractById(state?.endlessRun?.selectedDarkContractId)?.codename || ''),
+    roadHeatEnd: n(state?.roadWorld?.roadHeat, 0),
+    drifterTierEnd: n(state?.roadWorld?.drifterNetwork?.tier, 0),
+    drifterBurnedEnd: Boolean(state?.roadWorld?.drifterNetwork?.burned),
+    houndTrustEndPct: Math.round(n(state?.roadWorld?.motelHound?.trust, 0) * 100),
+    roadIntelTipsLastShift: n(state?.shiftStats?.roadIntelTipsShift, 0),
+    houndSilenceLastShift: n(state?.shiftStats?.houndSilenceShift, 0)
   };
 
   const ending = evaluateCategory(snapshot);
@@ -541,8 +547,11 @@ export function buildRunEndingPackage(state) {
     String(state?.runSetup?.campaignMode || '') === 'endless' && n(snapshot.endlessSurvivalScore, 0) > 0
       ? `Endless ledger: endurance ${Math.round(snapshot.endlessSurvivalScore)}, dawn passes ${snapshot.endlessAuditorPasses}, severe hits ${snapshot.endlessAuditorFails}, concealment passes ${snapshot.endlessCleanupPasses}.`
       : '',
+    n(snapshot.roadHeatEnd, 0) >= 4
+      ? `Outside layer: route heat finished near ${snapshot.roadHeatEnd}/10; watchers ended tier ${snapshot.drifterTierEnd}${snapshot.drifterBurnedEnd ? ' (line burned)' : ''}; hound trust about ${snapshot.houndTrustEndPct}%.`
+      : '',
     finaleIntegrationLine
-  ].slice(0, 8);
+  ].slice(0, 9);
 
   const tags = [
     `Difficulty: ${difficultyLabel}`,
@@ -587,8 +596,13 @@ export function buildRunEndingPackage(state) {
     String(state?.runSetup?.campaignMode || '') === 'endless' ? 'Endless Shift' : '',
     n(snapshot.endlessSurvivalScore, 0) >= 120 ? 'Endurance Class' : '',
     n(snapshot.endlessAuditorFails, 0) >= 2 ? 'Dawn Liability' : '',
-    n(snapshot.endlessAuditorPasses, 0) >= 3 ? 'Clean Dawns' : ''
-  ].filter(Boolean).slice(0, 8);
+    n(snapshot.endlessAuditorPasses, 0) >= 3 ? 'Clean Dawns' : '',
+    n(snapshot.roadHeatEnd, 0) >= 7 ? 'Hostile Highway' : '',
+    n(snapshot.roadHeatEnd, 0) >= 4 && n(snapshot.roadIntelTipsLastShift, 0) >= 1 ? 'Read the Road' : '',
+    snapshot.drifterBurnedEnd ? 'Burned Watchers' : '',
+    n(snapshot.houndSilenceLastShift, 0) >= 1 ? 'Hound Went Quiet' : '',
+    n(snapshot.houndTrustEndPct, 0) >= 72 ? 'Lot Stray Loyal' : ''
+  ].filter(Boolean).slice(0, 10);
 
   return {
     key: ending.key,

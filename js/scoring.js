@@ -57,7 +57,12 @@ const DEFAULT_SHIFT_STATS = {
   reportActionsUsed: 0,
   reportActionCosts: 0,
   panicSpendingMoments: 0,
-  finaleCommandCosts: 0
+  finaleCommandCosts: 0,
+  roadIntelTipsShift: 0,
+  roadIntelWrong: 0,
+  houndSignalsShift: 0,
+  houndSilenceShift: 0,
+  drifterBurns: 0
 };
 
 function clampScore(value) {

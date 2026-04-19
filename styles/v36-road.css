@@ -1,0 +1,80 @@
+/* v0.36 — Outside road intelligence, drifter strip, motel hound */
+
+.v36-road-world-strip {
+  margin-top: 0.35rem;
+}
+
+.v36-road-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.75rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(140, 160, 220, 0.28);
+  background: linear-gradient(92deg, rgba(10, 14, 28, 0.94), rgba(12, 22, 18, 0.9));
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.v36-road-heat strong,
+.v36-road-drifters strong {
+  color: #dbe8ff;
+}
+
+.v36-road-intel {
+  flex: 1 1 220px;
+  max-width: 100%;
+  font-style: italic;
+  border-left: 2px solid rgba(120, 200, 255, 0.25);
+  padding-left: 0.45rem;
+}
+
+.v36-road-hound {
+  flex: 0 1 200px;
+  color: rgba(220, 200, 180, 0.92);
+  font-size: 0.74rem;
+}
+
+.v36-road-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.v36-road-btn {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.45rem;
+}
+
+.night-prep-road-world {
+  margin-top: 0.35rem;
+}
+
+.v36-prep-road {
+  padding: 0.45rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(130, 170, 210, 0.22);
+  background: rgba(6, 12, 20, 0.55);
+  font-size: 0.8rem;
+}
+
+.v36-prep-road-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-top: 0.35rem;
+}
+
+.v36-hound-lot-note {
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+}
+
+.report-v36-road-line {
+  margin-top: 0.35rem;
+  font-size: 0.76rem;
+  color: rgba(200, 215, 245, 0.88);
+}

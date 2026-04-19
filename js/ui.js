@@ -677,6 +677,33 @@ export function renderTopbar(state) {
     v35Ext.hidden = parts.length === 0;
   }
 
+  const v36Road = document.getElementById('v36-road-world-strip');
+  const onGameScreen = Boolean(document.getElementById('app')?.classList?.contains('screen-game-screen'));
+  if (v36Road) {
+    const rw = state?.roadWorldUi;
+    if (onGameScreen && rw) {
+      const intel =
+        rw.latestIntel && !rw.latestIntel.consumed
+          ? `<span class="v36-road-intel muted" title="Unverified road rumor">${rw.latestIntel.text}</span>`
+          : '';
+      v36Road.innerHTML = `
+        <div class="v36-road-bar" role="region" aria-label="Outside road intelligence">
+          <span class="v36-road-heat">Route heat <strong>${rw.roadHeat}</strong> · ${rw.roadHeatLabel}</span>
+          <span class="v36-road-drifters">Watchers <strong>T${rw.drifterTier}</strong>${rw.drifterBurned ? ' · line burned' : ''} · ~${rw.drifterReliabilityPct}% signal</span>
+          <span class="v36-road-hound">${rw.houndLine}</span>
+          ${intel}
+          <span class="v36-road-actions">
+            <button type="button" class="button button-secondary v36-road-btn" data-road-fund-drifters ${rw.canFundDrifters ? '' : 'disabled'}>Fund drifters</button>
+            <button type="button" class="button button-secondary v36-road-btn" data-road-feed-hound ${rw.canFeedHound ? '' : 'disabled'}>Feed hound ($7)</button>
+          </span>
+        </div>`;
+      v36Road.hidden = false;
+    } else {
+      v36Road.innerHTML = '';
+      v36Road.hidden = true;
+    }
+  }
+
   const contextStrip = document.getElementById('topbar-context-strip');
   if (contextStrip) {
     const pressure = state?.uiPressureLevel || 'calm';
@@ -1837,6 +1864,7 @@ export function renderSharedSpaces(state) {
           : ''}
         ${emergencyPriority ? '<p class="room-service-note room-service-note-priority">Emergency priority zone.</p>' : ''}
         ${weatherHintText ? `<div class="v25-weather-context-hint is-${_ssWeather.primary}"><span class="v25-weather-context-hint-label">Weather</span><span class="v25-weather-context-hint-text">${weatherHintText}</span></div>` : ''}
+        ${zoneNumeric === 2 && state?.roadWorldUi?.houndLine ? `<p class="v36-hound-lot-note muted">${state.roadWorldUi.houndLine}</p>` : ''}
         ${space?.modifiers?.length
           ? `<details class="shared-space-modifiers-drawer"><summary>Zone modifiers</summary><div class="shared-space-modifiers-body">${space.modifiers.join(' · ')}</div></details>`
           : ''}
@@ -2446,6 +2474,13 @@ function buildReportPriorityStrip(state) {
       ? `Endless shift — endurance ${eu.survivalScore} • tonight: ${cn}`
       : `Broker pressure — tonight: ${cn}`;
     strip.appendChild(mode);
+  }
+  const rw = state?.roadWorldUi;
+  if (rw) {
+    const road = document.createElement('div');
+    road.className = 'report-v36-road-line';
+    road.textContent = `Outside read: route heat ${rw.roadHeat}/10 (${rw.roadHeatLabel}) • watchers T${rw.drifterTier}${rw.drifterBurned ? ' burned' : ''} • ${rw.houndLine}`;
+    strip.appendChild(road);
   }
   return strip;
 }
@@ -3494,6 +3529,27 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
     if (tm.lastDjBroadcast) parts.push(buildDJStripHtml(tm.lastDjBroadcast));
     if (tm.townSuspicion > 0 || tm.corruption > 0) parts.push(buildTownSuspicionHtml(tm));
     townSignalsSlot.innerHTML = parts.join('') || '';
+  }
+
+  const roadPrepSlot = document.getElementById('night-prep-road-world');
+  if (roadPrepSlot) {
+    const rw = state?.roadWorldUi;
+    if (rw) {
+      roadPrepSlot.innerHTML = prepSurface(
+        'road-world-v36',
+        'Route 9 — outside intelligence',
+        `<div class="v36-prep-road">
+          <p class="muted">The road learns before the lobby does. Watchers and the lot stray trade in imperfect warnings.</p>
+          <div class="v36-prep-road-grid">
+            <span>Heat <strong>${rw.roadHeat}</strong> / 10</span>
+            <span>Watchers tier <strong>${rw.drifterTier}</strong>${rw.drifterBurned ? ' · burned' : ''}</span>
+            <span>Hound trust ~<strong>${rw.houndTrustPct}%</strong></span>
+          </div>
+        </div>`
+      );
+    } else {
+      roadPrepSlot.innerHTML = '';
+    }
   }
 
   // v0.31 day shift note in night prep
