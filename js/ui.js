@@ -2172,6 +2172,13 @@ export function renderForensicShiftUi(state) {
         </div>`;
       })
       .join('');
+    const uvTr = Array.isArray(f?.uvDeskTraceLines) ? f.uvDeskTraceLines : [];
+    const uvTraceBlock =
+      lensOn && uvTr.length
+        ? `<div class="v37-uv-trace-list" aria-label="Blacklight desk traces">${uvTr
+            .map((ln) => `<p class="muted v37-uv-trace">${ln}</p>`)
+            .join('')}</div>`
+        : '';
     forensicMount.innerHTML = `
       <div class="v33-forensic-strip">
         <div class="v33-uv-control">
@@ -2187,6 +2194,7 @@ export function renderForensicShiftUi(state) {
           ${tapeRows || '<span class="muted v33-tape-empty">No eligible strips queued.</span>'}
         </div>
       </div>
+      ${uvTraceBlock}
     `;
     forensicMount.querySelector('.v33-uv-toggle-btn')?.addEventListener('click', () => {
       if (typeof state.onToggleUvDeskLens === 'function') state.onToggleUvDeskLens();
@@ -2244,6 +2252,67 @@ export function renderForensicShiftUi(state) {
       });
     });
   }
+}
+
+export function renderOperatorNoirMount(state) {
+  const mount = document.getElementById('operator-noir-mount');
+  if (!mount) return;
+  const op = state?.operatorNoir;
+  if (!op) {
+    mount.innerHTML = '';
+    return;
+  }
+  const stripClass =
+    op.strain >= 86 ? 'v37-strain-strip is-severe' : op.strain >= 64 ? 'v37-strain-strip is-elevated' : 'v37-strain-strip';
+  const lines = Array.isArray(op.lines) ? op.lines : [];
+  const lineButtons = lines
+    .map((ln) => {
+      const dis = !op.canListen || ln.disabled;
+      return `<button type="button" class="button button-secondary v37-line-btn" data-operator-listen="${ln.id}" ${
+        dis ? 'disabled' : ''
+      } title="${ln.hint}">${ln.label}</button>`;
+    })
+    .join('');
+  const quarters = op.quartersPending;
+  const quartersBlock = quarters
+    ? `<div class="v37-operator-card v37-quarters-card">
+        <h4>Operator quarters</h4>
+        <p class="muted microcopy-line">${quarters.label}</p>
+        <div class="v37-quarters-actions">
+          <button type="button" class="button button-warning" data-operator-quarters="check">Check back room</button>
+          <button type="button" class="button button-secondary" data-operator-quarters="ignore">Stay at desk</button>
+        </div>
+      </div>`
+    : '';
+  const hall = op.hallucinationCue
+    ? `<p class="v37-hallucination-cue" role="status">${op.hallucinationCue}</p>`
+    : '';
+  const tone = op.toneShift
+    ? '<p class="muted microcopy-line">Wire tone went flat-polite — someone may be listening back.</p>'
+    : '';
+  mount.innerHTML = `
+    <div class="v37-operator-stack">
+      <div class="${stripClass}">
+        <span class="v37-strain-label">${op.strainLabel}</span>
+        <span class="v37-strain-meta">Line suspicion ${op.lineSuspicion} · listens ${op.listensUsed}/${op.listensMax}</span>
+      </div>
+      ${hall}
+      <div class="v37-operator-grid">
+        <div class="v37-operator-card">
+          <h4>Motel switchboard</h4>
+          <p class="muted microcopy-line">Desk taps — useful, partial, or wrong. Sloppy listens draw eyes toward you.</p>
+          <div class="v37-line-buttons">${lineButtons}</div>
+          ${
+            op.canListen
+              ? ''
+              : `<p class="muted microcopy-line">${op.listenBlockReason || 'Unavailable.'}</p>`
+          }
+          ${tone}
+        </div>
+        ${quartersBlock}
+      </div>
+    </div>
+  `;
 }
 
 export function renderCameraSceneOverlay(state) {
@@ -2482,6 +2551,16 @@ function buildReportPriorityStrip(state) {
     road.textContent = `Outside read: route heat ${rw.roadHeat}/10 (${rw.roadHeatLabel}) • watchers T${rw.drifterTier}${rw.drifterBurned ? ' burned' : ''} • ${rw.houndLine}`;
     strip.appendChild(road);
   }
+  const op = state?.operatorNoir;
+  const ss = state?.shiftStats || {};
+  if (op && (Number(ss.switchboardListens || 0) > 0 || op.strain >= 58)) {
+    const opLine = document.createElement('div');
+    opLine.className = 'report-v37-operator-line';
+    opLine.textContent = `${op.strainLabel} — switchboard taps ${Number(ss.switchboardListens || 0)} tonight · quarters checks ${Number(
+      ss.operatorQuartersChecked || 0
+    )} · strain misreads logged ${Number(ss.operatorHallucinationsTriggered || 0)}`;
+    strip.appendChild(opLine);
+  }
   return strip;
 }
 
@@ -2543,6 +2622,9 @@ export function renderLogs(state) {
     if (/(power|electric|blackout|generator|restore|reroute|emergency power|outage)/.test(v)) return 'power';
     if (/(\[highway radio\]|\[midnight dj\]|highway companion|route 9|roadside|night shift.*dj|broadcasting from)/.test(v)) return 'radio';
     if (/(\[police\]|\[town\]|officer [a-z]+.*visit|bagman|town.*suspicion|corrupt.*law|police.*payoff|false.*police|informant.*record|town.*saw|bought.*law)/.test(v)) return 'town';
+    if (/(switchboard|operator quarters|strain read|back-room|quarters monitor|line still ringing|perception risk|motel switchboard)/i.test(v)) {
+      return 'camera';
+    }
     if (/(room 9|sealed corridor|sealed room|contamination|owner.*authorization|owner.*protected|owner.*override|do not enter|heat.*sensor.*corridor|housekeeping.*sealed|maintenance.*room.*scratched|rear.*sealed|feed.*flicker.*sealed|key.*room.*(no|not).*registered|prior shift.*do not)/.test(v)) return 'contamination';
     if (/(staff.*refused|mutiny|inside.*job|inside.*leak|compromised.*staff|staff.*falsif|dispatch.*inconsistency|internal.*irregularity|staff walkout|forced back.*work|staff.*bonus|dismissed.*shift|log entry.*crossed|repair ticket exceeded|dispatch timing.*slow|zone clear.*camera|filed as resolved.*room pressure)/.test(v)) return 'staff';
     if (/(off-book|unlogged stay|hidden payment|walk-in|dead drop|vending drop|hunters.*desk|hunters arrived|sheltered|shadow reputation|dirty cash|off-book stay|torn ledger|stained cash|hidden guest)/.test(v)) return 'dirty';

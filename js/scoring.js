@@ -62,7 +62,18 @@ const DEFAULT_SHIFT_STATS = {
   roadIntelWrong: 0,
   houndSignalsShift: 0,
   houndSilenceShift: 0,
-  drifterBurns: 0
+  drifterBurns: 0,
+  switchboardListens: 0,
+  switchboardUsefulIntel: 0,
+  switchboardPartialIntel: 0,
+  switchboardBadIntel: 0,
+  switchboardLineNotices: 0,
+  switchboardToneShifts: 0,
+  operatorQuartersChecked: 0,
+  operatorQuartersIgnored: 0,
+  operatorQuartersFalseAlarms: 0,
+  operatorQuartersFindings: 0,
+  operatorHallucinationsTriggered: 0
 };
 
 function clampScore(value) {

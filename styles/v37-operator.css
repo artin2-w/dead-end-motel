@@ -1,0 +1,109 @@
+/* v0.37 — Switchboard / operator quarters / strain strip */
+
+.v37-operator-mount {
+  margin: 0.5rem 0 0.75rem;
+}
+
+.v37-operator-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.v37-strain-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(90deg, rgba(18, 22, 32, 0.92), rgba(12, 14, 22, 0.88));
+  font-size: 0.78rem;
+}
+
+.v37-strain-strip.is-elevated {
+  border-color: rgba(200, 120, 80, 0.35);
+  box-shadow: 0 0 0 1px rgba(200, 120, 80, 0.08);
+}
+
+.v37-strain-strip.is-severe {
+  border-color: rgba(180, 90, 90, 0.45);
+  box-shadow: 0 0 12px rgba(120, 40, 40, 0.12);
+}
+
+.v37-strain-label {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.v37-strain-meta {
+  color: rgba(220, 220, 230, 0.55);
+  font-size: 0.72rem;
+}
+
+.v37-operator-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.55rem;
+}
+
+.v37-operator-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  background: rgba(8, 10, 16, 0.65);
+}
+
+.v37-operator-card h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.v37-operator-card .microcopy-line {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+}
+
+.v37-line-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.v37-line-btn {
+  font-size: 0.72rem !important;
+  padding: 0.25rem 0.45rem !important;
+}
+
+.v37-quarters-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.v37-hallucination-cue {
+  font-size: 0.72rem;
+  color: rgba(230, 180, 140, 0.85);
+  margin-top: 0.25rem;
+}
+
+.v37-uv-trace-list {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+.v37-uv-trace {
+  margin: 0.15rem 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.report-v37-operator-line {
+  margin-top: 0.35rem;
+  font-size: 0.74rem;
+  color: rgba(220, 220, 235, 0.72);
+}

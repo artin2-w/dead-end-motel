@@ -60,7 +60,10 @@ export function getActionTimeCost(actionKey) {
     holdScreening: 8,
     drainPower: 5,
     restorePower: 5,
-    callArrival: 18
+    callArrival: 18,
+    'switchboard-listen': 11,
+    'operator-quarters-check': 15,
+    'operator-quarters-ignore': 4
   };
 
   return costs[actionKey] ?? 0;

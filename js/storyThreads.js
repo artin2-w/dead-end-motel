@@ -194,6 +194,15 @@ const EVIDENCE_CATALOG = [
   { id: 'informant-record',       type: 'corruption', category: 'town', label: 'Informant Record',         desc: 'A typed list of names, amounts, and dates. The motel appears twice. Someone has been reporting activity here for longer than you\'ve been working nights.' },
   { id: 'bagman-visit-note',      type: 'corruption', category: 'town', label: 'Bagman Visit Note',        desc: 'A single index card in the back of the desk. Two words: a name and a room number. Circled. Dated last Thursday.' },
   {
+    id: 'operator-backroom-splinter',
+    type: 'surveillance',
+    category: 'surveillance',
+    label: 'Backroom Frame Splinter',
+    desc: 'Fresh wood fiber on the operator quarters door — pressure mark consistent with someone bracing from inside while you were forward.',
+    uvReactive: true,
+    provenanceHint: 'desk'
+  },
+  {
     id: 'lost-found-object',
     type: 'object',
     category: 'mystery',

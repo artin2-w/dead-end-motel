@@ -100,6 +100,22 @@ export function buildNightSummary(state) {
   if (uvN >= 2) {
     identity.push('UV/blacklight work tied multiple physical threads together — the desk stopped pretending everything was routine paper.');
   }
+  const sb = Number(state?.shiftStats?.switchboardListens || 0);
+  if (sb > 0) {
+    const sour = Number(state?.shiftStats?.switchboardBadIntel || 0) + Number(state?.shiftStats?.switchboardLineNotices || 0);
+    identity.push(
+      `Switchboard listens: ${sb} tap${sb === 1 ? '' : 's'} tonight — intel had weight${sour > 0 ? ', and at least one line fought back' : ''}.`
+    );
+  }
+  if (sb >= 2 && uvN >= 1) {
+    identity.push('UV reads and trunk-line work crossed tonight — the desk treated voices and reactive paper as one investigation.');
+  }
+  if (Number(state?.shiftStats?.operatorHallucinationsTriggered || 0) > 0) {
+    identity.push('Peak strain bent perception once — the log shows a corrected misread, not a lasting lie in the systems.');
+  }
+  if (Number(state?.shiftStats?.operatorQuartersFindings || 0) > 0) {
+    identity.push('The operator quarters monitor delivered a physical strip, not just dread in an empty feed.');
+  }
   const lockerItems = Array.isArray(state?.evidenceLocker?.items) ? state.evidenceLocker.items : [];
   const uvEvidence = lockerItems.filter((it) => it?.uvConfirmed).length;
   const tapeEvidence = lockerItems.filter((it) => it?.tapeSecured).length;

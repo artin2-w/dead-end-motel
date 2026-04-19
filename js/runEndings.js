@@ -368,6 +368,8 @@ function evaluateGrade(snapshot) {
   score += Math.min(3, n(snapshot.tapeSecuredCount, 0));
   if (n(snapshot.uvConfirmedEvidenceCount, 0) >= 3) score += 2;
   if (n(snapshot.forensicClaimDebt, 0) >= 2) score -= 2;
+  if (n(snapshot.switchboardListensTotal, 0) >= 8 && n(snapshot.switchboardBadIntelTotal, 0) >= 5) score -= 1;
+  if (n(snapshot.operatorHallucinationsTotal, 0) >= 2) score -= 1;
   // v0.34 convergence toll / survivor credit
   score -= Math.min(4, n(snapshot.trueCrisisNightsSurvived, 0) * 1.1);
   score += Math.min(3, n(snapshot.convergencePeakTier, 0) * 0.45);
@@ -476,7 +478,13 @@ export function buildRunEndingPackage(state) {
     drifterBurnedEnd: Boolean(state?.roadWorld?.drifterNetwork?.burned),
     houndTrustEndPct: Math.round(n(state?.roadWorld?.motelHound?.trust, 0) * 100),
     roadIntelTipsLastShift: n(state?.shiftStats?.roadIntelTipsShift, 0),
-    houndSilenceLastShift: n(state?.shiftStats?.houndSilenceShift, 0)
+    houndSilenceLastShift: n(state?.shiftStats?.houndSilenceShift, 0),
+    switchboardListensTotal: n(totals.switchboardListens, 0),
+    switchboardBadIntelTotal:
+      n(totals.switchboardBadIntel, 0) + n(totals.switchboardLineNotices, 0) + n(totals.switchboardToneShifts, 0),
+    operatorHallucinationsTotal: n(totals.operatorHallucinationsTriggered, 0),
+    operatorQuartersFindingsTotal: n(totals.operatorQuartersFindings, 0),
+    operatorQuartersChecksTotal: n(totals.operatorQuartersChecked, 0)
   };
 
   const ending = evaluateCategory(snapshot);
@@ -550,8 +558,11 @@ export function buildRunEndingPackage(state) {
     n(snapshot.roadHeatEnd, 0) >= 4
       ? `Outside layer: route heat finished near ${snapshot.roadHeatEnd}/10; watchers ended tier ${snapshot.drifterTierEnd}${snapshot.drifterBurnedEnd ? ' (line burned)' : ''}; hound trust about ${snapshot.houndTrustEndPct}%.`
       : '',
+    n(snapshot.switchboardListensTotal, 0) > 0
+      ? `Switchboard arc: ${snapshot.switchboardListensTotal} total listen${snapshot.switchboardListensTotal === 1 ? '' : 's'} across the run; sour line weight ≈${snapshot.switchboardBadIntelTotal}. Quarters physical finds: ${snapshot.operatorQuartersFindingsTotal}.`
+      : '',
     finaleIntegrationLine
-  ].slice(0, 9);
+  ].slice(0, 10);
 
   const tags = [
     `Difficulty: ${difficultyLabel}`,
@@ -601,8 +612,11 @@ export function buildRunEndingPackage(state) {
     n(snapshot.roadHeatEnd, 0) >= 4 && n(snapshot.roadIntelTipsLastShift, 0) >= 1 ? 'Read the Road' : '',
     snapshot.drifterBurnedEnd ? 'Burned Watchers' : '',
     n(snapshot.houndSilenceLastShift, 0) >= 1 ? 'Hound Went Quiet' : '',
-    n(snapshot.houndTrustEndPct, 0) >= 72 ? 'Lot Stray Loyal' : ''
-  ].filter(Boolean).slice(0, 10);
+    n(snapshot.houndTrustEndPct, 0) >= 72 ? 'Lot Stray Loyal' : '',
+    n(snapshot.switchboardListensTotal, 0) >= 10 ? 'Heavy Wire' : '',
+    n(snapshot.operatorQuartersFindingsTotal, 0) >= 1 ? 'Quarters Tamper' : '',
+    n(snapshot.operatorHallucinationsTotal, 0) >= 2 ? 'Strain Bleed' : ''
+  ].filter(Boolean).slice(0, 12);
 
   return {
     key: ending.key,

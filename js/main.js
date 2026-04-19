@@ -117,6 +117,16 @@ import {
   resetForensicForNewNight
 } from './forensicNoir.js';
 import {
+  normalizeOperatorNoirState,
+  resetOperatorNoirForNewNight,
+  performSwitchboardListen,
+  resolveQuartersChoice,
+  tickOperatorNoirAfterAdvance,
+  maybeTriggerHallucination,
+  buildOperatorUvTraceLines,
+  buildOperatorNoirRenderModel
+} from './operatorNoir.js';
+import {
   evaluateCampaignConvergence,
   recordCampaignConvergenceNight,
   normalizeCampaignCollapseStats,
@@ -371,6 +381,7 @@ import {
   renderCameras,
   renderAnalogPowerExtras,
   renderForensicShiftUi,
+  renderOperatorNoirMount,
   renderNightEventCard,
   renderNightEventOverlay,
   renderCameraSceneOverlay,
@@ -2698,6 +2709,7 @@ function restoreNightStartSnapshot(options = {}) {
   normalizeAnalogSurvivalState(state);
   finalizeAnalogSurvivalState(state);
   normalizeForensicNoirState(state);
+  normalizeOperatorNoirState(state);
   state = normalizeCameraSceneState(state);
   state = normalizeLocationState(state);
   state = normalizePresentationState(state);
@@ -5368,6 +5380,41 @@ function handleFeedMotelHound() {
   renderAll();
 }
 
+function handleOperatorSwitchboardListen(lineId) {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const r = performSwitchboardListen(state, lineId);
+  if (!r.ok) {
+    pushLiveAlert(state, { type: 'warning', message: r.reason || 'Cannot tap that line.', dedupeKey: 'op-listen-fail' });
+    renderAll();
+    return;
+  }
+  pushLiveAlert(state, {
+    type: r.tag === 'misinfo' || r.tag === 'notice' ? 'warning' : 'info',
+    message: r.text,
+    dedupeKey: `op-listen-${state.night}-${state.shiftElapsedMinutes}-${r.lineKey}`
+  });
+  if (progressShift('switchboard-listen', { timeScale: 0.32 })) return;
+  renderAll();
+}
+
+function handleOperatorQuartersResolve(choice) {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const res = resolveQuartersChoice(state, choice);
+  if (!res.ok) {
+    pushLiveAlert(state, { type: 'warning', message: res.reason || 'Nothing pending.', dedupeKey: 'op-q-fail' });
+    renderAll();
+    return;
+  }
+  if (res.log) state.logs.push(res.log);
+  const key = choice === 'check' ? 'operator-quarters-check' : 'operator-quarters-ignore';
+  if (progressShift(key, { timeScale: choice === 'check' ? 0.48 : 0.2 })) return;
+  renderAll();
+}
+
 function buildRenderState() {
   normalizeDeskInspectionState(state);
   normalizeStaffManagementState();
@@ -5556,7 +5603,13 @@ function buildRenderState() {
     analog: getBreakerBoardSummary(state),
     presentationFatigue: getFatigueTier(state),
     blurGuestNamesFromFatigue: shouldFatigueBlurNames(state),
-    forensic: getForensicRenderModel(state),
+    forensic: (() => {
+      const f = getForensicRenderModel(state);
+      return { ...f, uvDeskTraceLines: buildOperatorUvTraceLines(state) };
+    })(),
+    operatorNoir: buildOperatorNoirRenderModel(state),
+    onOperatorSwitchboardListen: handleOperatorSwitchboardListen,
+    onOperatorQuartersResolve: handleOperatorQuartersResolve,
     onToggleUvDeskLens: () => {
       onMeaningfulAction();
       audioController.playUiClick();
@@ -6225,6 +6278,7 @@ function bootstrapState() {
   normalizeDawnAuditorState(state);
   normalizeRoadWorldState(state);
   normalizeForensicNoirState(state);
+  normalizeOperatorNoirState(state);
 }
 function renderAll() {
   evaluatePresentationState();
@@ -6257,6 +6311,7 @@ function renderAll() {
   renderCameras(renderState);
   renderAnalogPowerExtras(renderState);
   renderForensicShiftUi(renderState);
+  renderOperatorNoirMount(renderState);
   renderNightEventOverlay(renderState);
   renderCameraSceneOverlay(renderState);
   renderSpecialEncounterOverlay(renderState);
@@ -8849,6 +8904,16 @@ function progressShift(actionKey, options = {}) {
   tickRoadWorldDuringShift(state, (a) => pushLiveAlert(state, a));
 
   normalizeForensicNoirState(state);
+  normalizeOperatorNoirState(state);
+  tickOperatorNoirAfterAdvance(state, {
+    skipPassiveDrain,
+    actionKey,
+    timeScale: options.timeScale
+  });
+  const opHall = maybeTriggerHallucination(state, { skipPassiveDrain });
+  if (opHall?.alert) {
+    pushLiveAlert(state, opHall.alert);
+  }
   tickDawnAuditor(state, (a) => pushLiveAlert(state, a));
   const tapeTickResult = tickForensicTape(state);
   if (tapeTickResult?.alert) {
@@ -11911,6 +11976,7 @@ function nextNight() {
   state.powerEconomy = buildFreshPowerEconomy();
   resetAnalogForNewShift(state);
   resetForensicForNewNight(state);
+  resetOperatorNoirForNewNight(state);
   if (darkWebContractsEnabled(state)) {
     applyDarkContractRuntime(state, state.endlessRun.selectedDarkContractId);
     applyContractAnalogHooks(state);
@@ -12070,6 +12136,18 @@ function bindEvents() {
       if (e.target.closest('[data-road-feed-hound]')) {
         handleFeedMotelHound();
         e.preventDefault();
+      }
+      const opListen = e.target.closest('[data-operator-listen]');
+      if (opListen && activeScreenId === 'game-screen') {
+        handleOperatorSwitchboardListen(opListen.getAttribute('data-operator-listen'));
+        e.preventDefault();
+        return;
+      }
+      const opQ = e.target.closest('[data-operator-quarters]');
+      if (opQ && activeScreenId === 'game-screen') {
+        handleOperatorQuartersResolve(opQ.getAttribute('data-operator-quarters'));
+        e.preventDefault();
+        return;
       }
     });
   }
