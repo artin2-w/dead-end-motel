@@ -398,8 +398,9 @@ function renderMotelCommandBoard(state) {
   const weather = deriveWeatherState(state);
   const condition = deriveMotelCondition(state);
 
+  const collapseUnstable = Boolean(state?.crisisNight?.trueCrisisNight);
   board.innerHTML =
-    '<div class="mcb-inner">' +
+    '<div class="mcb-inner' + (collapseUnstable ? ' v34-command-unstable' : '') + '">' +
       '<div class="mcb-top-strip">' +
         '<span class="mcb-title">Command</span>' +
         '<span class="mcb-badge ' + badgeClass + '">' + badgeText + '</span>' +
@@ -534,6 +535,9 @@ export function renderTopbar(state) {
     appShell.dataset.neonMode = state?.analog?.neon?.mode || 'bright';
     appShell.dataset.uvDeskLens = state?.forensic?.uvDeskLensActive ? 'on' : 'off';
     appShell.dataset.tapeArchive = state?.forensic?.tapeActive ? 'recording' : 'idle';
+    const _ct = Number(state?.crisisNight?.convergenceTier || 0);
+    appShell.dataset.collapseTier = String(_ct);
+    appShell.dataset.trueCrisis = state?.crisisNight?.trueCrisisNight ? '1' : '0';
   }
 
   const radioBtn = document.getElementById('radio-intercept-btn');
@@ -695,6 +699,11 @@ export function renderTopbar(state) {
       ${state?.nightMoodLine ? `<p class="night-mood-line">${state.nightMoodLine}</p>` : ''}
       ${state?.nightIdentityLine ? `<p class="muted">${state.nightIdentityLine}</p>` : ''}
       ${state?.crisisNight?.active && state?.crisisNight?.note ? `<p class="muted">${state.crisisNight.note}</p>` : ''}
+      ${
+        Number(state?.crisisNight?.convergenceTier || 0) >= 2 && state?.crisisNight?.collapseReadout
+          ? `<p class="v34-convergence-inline muted"><span class="v34-convergence-kicker">Convergence</span> ${state.crisisNight.collapseReadout}</p>`
+          : ''
+      }
     `;
     runIdentityStrip.title = 'Doctrine and faction climate shape subtle bonuses, pressure, and narrative tone.';
   }
@@ -742,9 +751,15 @@ export function renderTopbar(state) {
     const phase = getNightPhaseLabel(nightNum, totalNights);
     const scenarioName = state?.activeScenario?.label || '';
     const _calWeather = deriveWeatherState(state);
+    const collapseChip = state?.crisisNight?.trueCrisisNight
+      ? '<span class="shift-cal-phase-chip v34-cal-collapse">Collapse night</span>'
+      : Number(state?.crisisNight?.convergenceTier || 0) >= 3
+        ? '<span class="shift-cal-phase-chip v34-cal-converge">Convergent</span>'
+        : '';
     calStrip.innerHTML =
       `<span class="shift-cal-night-label">Night ${nightNum}</span>` +
       `<span class="shift-cal-phase-chip ${phase.cls}">${phase.label}</span>` +
+      collapseChip +
       (_calWeather.primary !== 'clear' ? `<span class="shift-cal-weather-chip is-${_calWeather.primary}">${_calWeather.primary.charAt(0).toUpperCase() + _calWeather.primary.slice(1)}</span>` : '') +
       (scenarioName ? `<span class="shift-cal-scenario-label">${scenarioName}</span>` : '');
   }
@@ -3173,11 +3188,15 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
 
   if (campaignForecast) {
     const notes = Array.isArray(state?.campaignPrepForecast) ? state.campaignPrepForecast.slice(0, 4) : [];
+    const collapseLine = state?.collapsePrepBrief ? `<p class="v34-prep-collapse muted">${state.collapsePrepBrief}</p>` : '';
+    const listHtml = notes.length
+      ? `<ul class="prep-notes-list">${notes.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
+      : '';
     campaignForecast.innerHTML = prepSurface(
       'forecast',
       'Campaign outlook',
-      notes.length
-        ? `<ul class="prep-notes-list">${notes.map((line) => `<li><span>${line}</span></li>`).join('')}</ul>`
+      collapseLine || listHtml
+        ? `${collapseLine}${listHtml}`
         : '<p class="muted">No special campaign warnings.</p>'
     );
   }

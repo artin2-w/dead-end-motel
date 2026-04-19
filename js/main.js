@@ -117,6 +117,12 @@ import {
   resetForensicForNewNight
 } from './forensicNoir.js';
 import {
+  evaluateCampaignConvergence,
+  recordCampaignConvergenceNight,
+  normalizeCampaignCollapseStats,
+  buildCollapsePrepBrief
+} from './campaignCollapse.js';
+import {
   normalizeCameraSceneState,
   buildFreshCameraSceneState,
   clearCameraScene,
@@ -625,6 +631,8 @@ function getScenarioModifiers() {
   const crisisRisk = crisis.active && (crisis.kind === 'guest-surge' || crisis.kind === 'hostile-social-night') ? 1 : 0;
   const crisisChain = crisis.active && (crisis.kind === 'stacked-pressure' || crisis.kind === 'guest-surge') ? 1 : 0;
   const crisisPower = crisis.active && crisis.kind === 'utility-fragility' ? 1 : 0;
+  const collapseChain = crisis.active && crisis.trueCrisisNight ? 1 : 0;
+  const collapseRisk = crisis.active && Number(crisis.convergenceTier || 0) >= 3 ? 1 : 0;
   return {
     ...scenario,
     incidentBonus: Math.max(0, Number(scenario.incidentBonus || 0) + Number(milestoneMods.incidentBonus || 0)),
@@ -635,8 +643,9 @@ function getScenarioModifiers() {
       + Number(milestoneMods.riskBonus || 0)
       + Number(runMods.guestRiskBonus || 0)
       + crisisRisk
+      + collapseRisk
     ),
-    chainBonus: Math.max(0, Number(scenario.chainBonus || 0) + Number(bias.chainBonus || 0) + Number(milestoneMods.chainBonus || 0) + crisisChain),
+    chainBonus: Math.max(0, Number(scenario.chainBonus || 0) + Number(bias.chainBonus || 0) + Number(milestoneMods.chainBonus || 0) + crisisChain + collapseChain),
     powerScanPenalty: Math.max(0, Number(scenario.powerScanPenalty || 0) + Number(bias.powerScanPenalty || 0) + crisisPower),
     eventTriggerBonus: Number(runMods.eventTriggerBonus || 0) + Number(state?.phase2Pressure?.eventFrequencyBoost || 0),
     anomalyChanceBonus: Number(runMods.anomalyChanceBonus || 0)
@@ -733,6 +742,7 @@ function getBranchContext(refresh = false) {
 function normalizeCampaignSystems() {
   state.campaign = state.campaign && typeof state.campaign === 'object' ? state.campaign : {};
   state.campaign.length = getCampaignLengthFromRunSetup(state.runSetup);
+  normalizeCampaignCollapseStats(state);
   state = normalizeCampaignState(state);
   state = normalizeFinaleDirectorState(state);
   state.runEnding = state?.runEnding && typeof state.runEnding === 'object' ? state.runEnding : null;
@@ -2767,10 +2777,17 @@ function ensureCrisisNightState(targetState = state) {
   const night = Math.max(1, Number(targetState?.night || 1));
   const existing = targetState.crisisNight && typeof targetState.crisisNight === 'object' ? targetState.crisisNight : {};
   if (existing.night === night && existing.kind) return targetState;
+
+  const campaignLen = Math.max(3, Number(targetState?.campaign?.length || 5));
+  const lateStretch = night >= campaignLen - 1 || night >= Math.max(3, Math.ceil(campaignLen * 0.62));
+  const conv = evaluateCampaignConvergence(targetState);
+
   const options = ['stacked-pressure', 'guest-surge', 'utility-fragility', 'hostile-social-night', 'partial-blackout'];
-  const chance = night >= 4 ? Math.min(0.35, 0.08 + (night - 3) * 0.045) : 0;
-  const active = Math.random() < chance;
-  const kind = active ? options[(night + Math.floor(Math.random() * options.length)) % options.length] : null;
+  let crisisChance = night >= 4 ? Math.min(0.45, 0.08 + (night - 3) * 0.048) : 0;
+  if (lateStretch) crisisChance += 0.055;
+  crisisChance += Math.min(0.12, conv.tier * 0.038);
+  let active = Math.random() < crisisChance;
+  let kind = active ? options[(night + Math.floor(Math.random() * options.length)) % options.length] : null;
   const signature = selectSignatureNight(targetState);
   const signatureKind =
     signature?.id === 'wrong-hallway' ? 'hostile-social-night'
@@ -2779,9 +2796,15 @@ function ensureCrisisNightState(targetState = state) {
     : signature?.id === 'blackout-hostile' ? 'partial-blackout'
     : signature?.id === 'watcher-convergence' ? 'stacked-pressure'
     : null;
-  const finalActive = active || Boolean(signature?.active);
-  const finalKind = signatureKind || kind;
-  const title =
+  let finalActive = active || Boolean(signature?.active);
+  let finalKind = signatureKind || kind;
+
+  if (!finalActive && lateStretch && conv.tier >= 4 && Math.random() < 0.34) {
+    finalActive = true;
+    finalKind = 'stacked-pressure';
+  }
+
+  let title =
     finalKind === 'stacked-pressure'
       ? 'Crisis Night: Pressure Stack'
       : finalKind === 'guest-surge'
@@ -2793,7 +2816,7 @@ function ensureCrisisNightState(targetState = state) {
             : finalKind === 'partial-blackout'
               ? 'Crisis Night: Partial Blackout Risk'
             : '';
-  const note =
+  let note =
     signature?.active
       ? signature.note
       : finalKind === 'stacked-pressure'
@@ -2807,6 +2830,42 @@ function ensureCrisisNightState(targetState = state) {
             : finalKind === 'partial-blackout'
               ? 'Lighting and power stability feel fragile. A local outage could change room control fast.'
             : '';
+
+  const vectorLabels = (conv.vectors || []).map((v) => v.label);
+  const trueCrisisNight = Boolean(
+    finalActive &&
+      (conv.tier >= 4
+        || (lateStretch && conv.tier >= 3 && conv.vectorCount >= 5)
+        || (conv.tier >= 3 && (finalKind === 'stacked-pressure' || finalKind === 'partial-blackout')))
+  );
+
+  if (trueCrisisNight) {
+    if (signature?.active) {
+      note = `${note} Collapse surge — threads tonight: ${conv.readout}.`;
+    } else {
+      title = `Collapse Night — ${title.replace(/^Crisis Night: /, '')}`;
+      note = `${note} Convergence trace: ${conv.readout}. Everything is threading toward one bad hour.`;
+    }
+    targetState.dayShift = targetState.dayShift && typeof targetState.dayShift === 'object' ? targetState.dayShift : {};
+    targetState.dayShift.ownerPressure = Math.min(12, Number(targetState.dayShift.ownerPressure || 0) + 1);
+    const ml = Array.isArray(targetState.dayShift.memoLines) ? targetState.dayShift.memoLines : [];
+    if (!ml.some((m) => String(m).includes('CONVERGENCE MEMO'))) {
+      targetState.dayShift.memoLines = [
+        ...ml,
+        'CONVERGENCE MEMO: ownership wants fewer independent reads while outside heat is this high.'
+      ].slice(-5);
+    }
+  } else if (conv.tier >= 2 && finalActive && !signature?.active) {
+    note = `${note} Undercurrents: ${conv.readout}.`;
+  }
+
+  let panicScale =
+    finalActive && finalKind === 'stacked-pressure' ? 2
+    : finalActive && (finalKind === 'partial-blackout' || finalKind === 'guest-surge') ? 1
+    : 0;
+  if (trueCrisisNight) panicScale = Math.min(3, panicScale + 2);
+  else if (conv.tier >= 3 && finalActive) panicScale = Math.min(3, panicScale + 1);
+
   targetState.crisisNight = {
     active: finalActive,
     night,
@@ -2814,11 +2873,30 @@ function ensureCrisisNightState(targetState = state) {
     title: signature?.active ? signature.title : title,
     note,
     blackoutRisk: finalActive && (finalKind === 'utility-fragility' || finalKind === 'partial-blackout'),
-    panicScale:
-      finalActive && finalKind === 'stacked-pressure' ? 2
-      : finalActive && (finalKind === 'partial-blackout' || finalKind === 'guest-surge') ? 1
-      : 0
+    panicScale,
+    convergenceTier: conv.tier,
+    convergenceVectors: vectorLabels,
+    collapseReadout: conv.readout,
+    lateCampaignStretch: lateStretch,
+    trueCrisisNight
   };
+
+  ensureCrisisEscalationState(targetState);
+  if (trueCrisisNight && targetState.crisisEscalation) {
+    targetState.crisisEscalation.overlapPressureLevel = Math.max(
+      Number(targetState.crisisEscalation.overlapPressureLevel || 0),
+      2
+    );
+  }
+
+  if (trueCrisisNight) {
+    pushLiveAlert(targetState, {
+      type: 'danger',
+      message: 'Collapse night: multiple motel systems are converging — run the desk as a command post.',
+      dedupeKey: `collapse-night-open-${night}`
+    });
+  }
+
   return targetState;
 }
 
@@ -2832,6 +2910,8 @@ function buildNightIdentitySummary(targetState = state) {
   const tags = [];
   if (scenario.label) tags.push(`Scenario: ${scenario.label}`);
   if (crisis.active && crisis.title) tags.push(crisis.title);
+  if (crisis.trueCrisisNight) tags.push('Mood: campaign collapse surge');
+  else if (Number(crisis.convergenceTier || 0) >= 3) tags.push('Mood: convergence-heavy');
   if (signature?.namedThread) tags.push(`Thread: ${signature.namedThread}`);
   if (Number(targetState?.night || 1) <= 2) tags.push('Mood: quiet but wrong');
   if (activePlan === 'paper-crackdown' || (suspect?.documentPatterns || []).length >= 2) tags.push('Mood: inspection-heavy');
@@ -5291,6 +5371,8 @@ function buildRenderState() {
     campaignPrepForecast: [...(campaign.prepForecast || []), ...buildFinaleForeshadowNotes(state)].slice(0, 5),
     campaignSummaryNotes: Array.isArray(state?.campaignSummaryNotes) ? state.campaignSummaryNotes : [],
     crisisNight: state?.crisisNight || null,
+    collapsePrepBrief: buildCollapsePrepBrief(state),
+    campaignCollapseStats: state?.campaignCollapseStats || null,
     signatureNight: state?.signatureNight || null,
     emergencyNight,
     emergencyCommands,
@@ -5423,12 +5505,15 @@ function buildNightMoodLine(targetState = state, ownerBrief = null, emergency = 
   const emergencyState = emergency || getEmergencyNightProfile(targetState);
   const signature = getSignatureNightProfile(targetState);
   const pressure = deriveUiPressureLevel(targetState);
+  const crisis = targetState?.crisisNight || {};
   const parts = [];
+  if (crisis.trueCrisisNight) parts.push('Convergence: collapse-class night');
+  else if (Number(crisis.convergenceTier || 0) >= 3) parts.push('Convergence: multi-vector heat');
   if (brief?.mood) parts.push(`Owner tone: ${brief.mood}`);
   if (signature?.active && signature?.title) parts.push(`Signature frame: ${signature.title}`);
   if (emergencyState?.active && emergencyState?.label) parts.push(`Emergency state: ${emergencyState.label}`);
   parts.push(`Shift pressure: ${String(pressure || 'calm')}`);
-  return parts.slice(0, 3).join(' • ');
+  return parts.slice(0, 4).join(' • ');
 }
 
 function buildShiftPressureSnapshot(summary = null) {
@@ -6915,8 +7000,20 @@ function maybeActivateNemesis(targetState = state) {
 function escalateNemesisPressure(targetState = state) {
   normalizeNemesisState(targetState);
   if (!targetState.nemesis.active || targetState.nemesis.resolvedOutcome) return;
-  targetState.nemesis.pressureLevel = Math.min(3, targetState.nemesis.pressureLevel + 1);
+  const prevLevel = Number(targetState.nemesis.pressureLevel || 0);
+  targetState.nemesis.pressureLevel = Math.min(3, prevLevel + 1);
   targetState.nemesis.lastNight = Math.max(1, Number(targetState.night || 1));
+  if (targetState.nemesis.pressureLevel >= 3 && prevLevel < 3) {
+    const conv = evaluateCampaignConvergence(targetState);
+    if (conv.tier >= 3) {
+      pushLiveAlert(targetState, {
+        type: 'warning',
+        message:
+          'Nemesis climax: the pattern presses hardest while ledger dirt, town eyes, and Room 9 echoes all pull at the same desk.',
+        dedupeKey: `nemesis-convergence-${targetState.night}`
+      });
+    }
+  }
 }
 
 function resolveNemesis(outcome = 'contained', targetState = state) {
@@ -6943,13 +7040,24 @@ function triggerFrontDeskBreachEvent() {
   const night = Math.max(1, Number(state.night || 1));
   const nemesisActive = Boolean(state.nemesis?.active);
   const pressure = state?.uiPressureLevel || 'calm';
-  const eligible = night >= 3 && (['high', 'critical', 'emergency', 'dire'].includes(pressure) || nemesisActive);
+  const collapseBreach =
+    night >= 4 &&
+    (Boolean(state?.crisisNight?.trueCrisisNight) || Number(state?.crisisNight?.convergenceTier || 0) >= 3);
+  const eligible =
+    night >= 3 &&
+    (['high', 'critical', 'emergency', 'dire'].includes(pressure) || nemesisActive || collapseBreach);
   if (!eligible) return;
+
+  const collapseBreachDesc = Boolean(state?.crisisNight?.trueCrisisNight)
+    ? 'Convergence night — the building is already loud elsewhere. Someone uses the chaos to slip the desk rail. They are in the restricted area and your board is exposed.'
+    : collapseBreach
+      ? 'Outside threads are already loud — someone exploits the thin seam at the desk rail. They are in the restricted area; your board is exposed.'
+      : 'Someone has pushed through the desk barrier. They are in the restricted area — they\'ve seen your board. You have seconds to act.';
 
   state.activeNightEvent = {
     id: 'front-desk-breach',
     title: 'Front Desk Breach',
-    description: 'Someone has pushed through the desk barrier. They are in the restricted area — they\'ve seen your board. You have seconds to act.',
+    description: collapseBreachDesc,
     severity: 'high',
     options: [
       {
@@ -10704,10 +10812,12 @@ function endNight(options = {}) {
     });
   }
 
-  // Trigger DOS reboot on high corruption or nemesis pressure 3
+  // Trigger DOS reboot on high corruption, nemesis pressure 3, or collapse-class convergence
   const corruptionLevel = Number(state?.systemOverride?.corruptionLevel || 0);
   const nemesisPressure = Number(state?.nemesis?.pressureLevel || 0);
-  if (corruptionLevel >= 3 || nemesisPressure >= 3) {
+  const collapseShock =
+    Boolean(state?.crisisNight?.trueCrisisNight) && Number(state?.crisisNight?.convergenceTier || 0) >= 3;
+  if (corruptionLevel >= 3 || nemesisPressure >= 3 || collapseShock) {
     triggerDosRebootOverlay();
   }
 
@@ -10790,6 +10900,9 @@ function endNight(options = {}) {
       triggerFrontDeskBreachEvent();
     }
   }
+  if (!state.activeNightEvent && state?.crisisNight?.trueCrisisNight && Math.random() < 0.12) {
+    triggerFrontDeskBreachEvent();
+  }
   if ((state.shiftStats.nightEventsMissed || 0) === 0 && (state.shiftStats.unresolvedLocationScenes || 0) === 0) {
     state.shiftStats.carryoverProblemsContained = (state.shiftStats.carryoverProblemsContained || 0) + 1;
   }
@@ -10805,6 +10918,7 @@ function endNight(options = {}) {
   let _endNightSummary = null;
   let _endNightShouldEndRun = false;
   try {
+    recordCampaignConvergenceNight(state);
     _endNightSummary = buildNightSummary(state);
     state.lastSummary = _endNightSummary;
     state.finalePerformance = buildFinalePerformanceContext(state);
@@ -10866,7 +10980,13 @@ function endNight(options = {}) {
     if (forensicRecall.length) {
       state.summaryIdentityLines.push(`Forensic / objects: ${forensicRecall.join(' · ')}`);
     }
-    state.summaryIdentityLines = state.summaryIdentityLines.filter(Boolean).slice(0, 5);
+    const _ccStats = state?.campaignCollapseStats;
+    if (_ccStats && (Number(_ccStats.trueCrisisNights || 0) >= 1 || Number(_ccStats.peakConvergenceTier || 0) >= 3)) {
+      state.summaryIdentityLines.push(
+        `Campaign convergence: peak tier ${Number(_ccStats.peakConvergenceTier || 0)}, ${Number(_ccStats.trueCrisisNights || 0)} collapse-class night(s) logged.`
+      );
+    }
+    state.summaryIdentityLines = state.summaryIdentityLines.filter(Boolean).slice(0, 6);
     if ((state.shiftStats.nightEventsMissed || 0) === 0 && (state.shiftStats.unresolvedLocationScenes || 0) === 0) {
       applyIdentityImpact({
         doctrine: { stability: 1, compassion: 1 },

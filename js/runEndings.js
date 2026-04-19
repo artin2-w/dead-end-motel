@@ -109,6 +109,10 @@ function evaluateCategory(snapshot) {
   const bagmanPayoffs = n(snapshot.bagmanPayoffs, 0);
   const corruption = n(snapshot.corruption, 0);
   const bagmanFired = Boolean(snapshot.bagmanFired);
+  const failSignals = n(snapshot.failSignals, 0);
+  const convergencePeakTier = n(snapshot.convergencePeakTier, 0);
+  const trueCrisisNightsSurvived = n(snapshot.trueCrisisNightsSurvived, 0);
+  const uvConfirmedEvidenceCount = n(snapshot.uvConfirmedEvidenceCount, 0);
 
   // v0.31 town endings — checked first
   if (bagmanPayoffs >= 2 && dirtyScore >= 3) {
@@ -164,6 +168,29 @@ function evaluateCategory(snapshot) {
   }
   if (dirtyScore >= 3 && rep >= 42 && failSignals <= 1) {
     return { key: 'dirty-but-untouched', title: 'Dirty But Untouched', subtitle: 'Off the Books, Out of Sight' };
+  }
+
+  // v0.34 convergence / collapse endings — specific combinations, checked before generic bases
+  if (townSuspicion >= 5 && rep >= 48 && convergencePeakTier >= 3 && localHostility >= 3) {
+    return {
+      key: 'contained-desk-lost-strip',
+      title: 'Held the Desk, Lost the Strip',
+      subtitle: 'The Motel Survived the Week the Town Stopped Trusting It'
+    };
+  }
+  if (uvConfirmedEvidenceCount >= 3 && rep < 44 && nemesisEscaped) {
+    return {
+      key: 'exposed-and-unmoored',
+      title: 'Exposed and Unmoored',
+      subtitle: 'The Physical Proof Outpaced What You Could Safely Control'
+    };
+  }
+  if (trueCrisisNightsSurvived >= 2 && rep >= 42 && dirtyScore >= 4 && convergencePeakTier >= 3) {
+    return {
+      key: 'collapse-survivor',
+      title: 'Collapse Survivor',
+      subtitle: 'Multiple System Failures Stacked; Dawn Still Opened'
+    };
   }
 
   // v0.27 endings — checked before base categories
@@ -252,6 +279,9 @@ function resolveEndingFamilyFromKey(key = '') {
   if (value.includes('cracking') || value.includes('chaos')) return 'collapse';
   if (value.includes('socially-poisoned')) return 'hostile';
   if (value.includes('harsh-survivor')) return 'controlled';
+  if (value.includes('contained-desk-lost-strip')) return 'hostile';
+  if (value.includes('exposed-and-unmoored')) return 'fragile';
+  if (value.includes('collapse-survivor')) return 'controlled';
   if (value.includes('control') || value.includes('order')) return 'controlled';
   if (value.includes('hostile')) return 'hostile';
   return 'stable';
@@ -336,6 +366,10 @@ function evaluateGrade(snapshot) {
   score += Math.min(3, n(snapshot.tapeSecuredCount, 0));
   if (n(snapshot.uvConfirmedEvidenceCount, 0) >= 3) score += 2;
   if (n(snapshot.forensicClaimDebt, 0) >= 2) score -= 2;
+  // v0.34 convergence toll / survivor credit
+  score -= Math.min(4, n(snapshot.trueCrisisNightsSurvived, 0) * 1.1);
+  score += Math.min(3, n(snapshot.convergencePeakTier, 0) * 0.45);
+  if (n(snapshot.trueCrisisNightsSurvived, 0) >= 2 && snapshot.reputation >= 46) score += 2;
 
   if (score >= 86) return { grade: 'S', label: 'Definitive Campaign Close' };
   if (score >= 75) return { grade: 'A', label: 'Strong Campaign Close' };
@@ -426,7 +460,10 @@ export function buildRunEndingPackage(state) {
     uvConfirmedEvidenceCount: Array.isArray(state?.evidenceLocker?.items)
       ? state.evidenceLocker.items.filter((it) => it?.uvConfirmed).length
       : 0,
-    forensicClaimDebt: n(state?.forensicNoir?.claimDebt, 0)
+    forensicClaimDebt: n(state?.forensicNoir?.claimDebt, 0),
+    convergencePeakTier: n(state?.campaignCollapseStats?.peakConvergenceTier, 0),
+    trueCrisisNightsSurvived: n(state?.campaignCollapseStats?.trueCrisisNights, 0),
+    totalVectorHits: n(state?.campaignCollapseStats?.totalVectorHits, 0)
   };
 
   const ending = evaluateCategory(snapshot);
@@ -491,8 +528,11 @@ export function buildRunEndingPackage(state) {
     rareMoments > 0 ? `Rare run moments surfaced: ${rareMoments}` : '',
     analogFoot ? `Physical desk toll: ${analogFoot}` : '',
     forensicFoot ? `Forensic trace: ${forensicFoot}` : '',
+    n(snapshot.convergencePeakTier, 0) >= 2
+      ? `Convergence arc: peak tier ${snapshot.convergencePeakTier}, ${n(snapshot.trueCrisisNightsSurvived, 0)} collapse-class night(s).`
+      : '',
     finaleIntegrationLine
-  ].slice(0, 6);
+  ].slice(0, 7);
 
   const tags = [
     `Difficulty: ${difficultyLabel}`,
@@ -530,7 +570,9 @@ export function buildRunEndingPackage(state) {
     snapshot.analogStrongStimUses >= 1 ? 'Chemically Stabilized' : '',
     snapshot.tapeSecuredCount >= 2 ? 'Tape Discipline' : '',
     snapshot.uvConfirmedEvidenceCount >= 2 ? 'UV-Confirmed Chain' : '',
-    snapshot.forensicClaimDebt >= 1 ? 'Trace Debt' : ''
+    snapshot.forensicClaimDebt >= 1 ? 'Trace Debt' : '',
+    n(snapshot.trueCrisisNightsSurvived, 0) >= 2 ? 'Collapse Veteran' : '',
+    n(snapshot.convergencePeakTier, 0) >= 4 ? 'Peak Convergence' : ''
   ].filter(Boolean).slice(0, 6);
 
   return {

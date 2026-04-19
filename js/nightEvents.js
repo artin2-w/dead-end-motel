@@ -893,6 +893,8 @@ export function tickNightEvents(state, branchContext = null) {
   else if (minute < 35 && night === 3) triggerChance *= 0.78;
   if (night <= 2) triggerChance *= 0.88;
   if (night >= 4) triggerChance *= 1.06;
+  if (state?.crisisNight?.trueCrisisNight) triggerChance += 0.055;
+  if (Number(state?.crisisNight?.convergenceTier || 0) >= 3) triggerChance += 0.035;
   triggerChance = clamp01(Math.min(0.46, triggerChance));
 
   if (Math.random() > triggerChance) {

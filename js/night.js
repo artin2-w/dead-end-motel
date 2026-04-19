@@ -21,6 +21,15 @@ export function buildNightSummary(state) {
   if (crisis.active && crisis.title) {
     identity.push(`The night developed under ${crisis.title.toLowerCase()}, which made small errors spread faster than usual.`);
   }
+  if (crisis.trueCrisisNight) {
+    identity.push(
+      `Collapse-class convergence: ${crisis.collapseReadout || 'multiple motel systems overlapped until the desk could not pretend the building was still partitioned.'}`
+    );
+  } else if (Number(crisis.convergenceTier || 0) >= 3 && crisis.active) {
+    identity.push(
+      `Late-campaign convergence (tier ${crisis.convergenceTier}) threaded separate hazards into one readable strain.`
+    );
+  }
   if (signature?.active && signature?.title) {
     identity.push(`${signature.title} gave the shift a boss-like structure, with pressure advancing in readable turns instead of one isolated spike.`);
   }
@@ -89,6 +98,14 @@ export function buildNightSummary(state) {
   const uvN = Number(state?.forensicNoir?.uvConfirmationsThisShift || 0);
   if (uvN >= 2) {
     identity.push('UV/blacklight work tied multiple physical threads together — the desk stopped pretending everything was routine paper.');
+  }
+  const lockerItems = Array.isArray(state?.evidenceLocker?.items) ? state.evidenceLocker.items : [];
+  const uvEvidence = lockerItems.filter((it) => it?.uvConfirmed).length;
+  const tapeEvidence = lockerItems.filter((it) => it?.tapeSecured).length;
+  if (uvEvidence >= 2 || tapeEvidence >= 2) {
+    identity.push(
+      'The evidence spine is no longer abstract: UV-confirmed and tape-backed strips mean outside actors can feel how much you actually know.'
+    );
   }
   if (state?.emergencyNight?.active || Number(state?.emergencyState?.commandHistory?.length || 0) > 0) {
     identity.push('The shift crossed into command-state management, where containment choices mattered as much as basic desk reads.');
