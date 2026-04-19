@@ -370,6 +370,8 @@ function evaluateGrade(snapshot) {
   if (n(snapshot.forensicClaimDebt, 0) >= 2) score -= 2;
   if (n(snapshot.switchboardListensTotal, 0) >= 8 && n(snapshot.switchboardBadIntelTotal, 0) >= 5) score -= 1;
   if (n(snapshot.operatorHallucinationsTotal, 0) >= 2) score -= 1;
+  if (n(snapshot.borderBlindWindowsTotal, 0) >= 3 && n(snapshot.borderWitnessEventsTotal, 0) >= 2) score -= 1;
+  if (n(snapshot.borderDropEventsTotal, 0) >= 2 && snapshot.reputation >= 52) score += 1;
   // v0.34 convergence toll / survivor credit
   score -= Math.min(4, n(snapshot.trueCrisisNightsSurvived, 0) * 1.1);
   score += Math.min(3, n(snapshot.convergencePeakTier, 0) * 0.45);
@@ -484,7 +486,11 @@ export function buildRunEndingPackage(state) {
       n(totals.switchboardBadIntel, 0) + n(totals.switchboardLineNotices, 0) + n(totals.switchboardToneShifts, 0),
     operatorHallucinationsTotal: n(totals.operatorHallucinationsTriggered, 0),
     operatorQuartersFindingsTotal: n(totals.operatorQuartersFindings, 0),
-    operatorQuartersChecksTotal: n(totals.operatorQuartersChecked, 0)
+    operatorQuartersChecksTotal: n(totals.operatorQuartersChecked, 0),
+    borderBlindWindowsTotal: n(totals.borderBlindWindows, 0),
+    borderDropEventsTotal: n(totals.borderDropEvents, 0),
+    borderWitnessEventsTotal: n(totals.borderWitnessEvents, 0),
+    borderShaftDispatchesTotal: n(totals.borderShaftDispatches, 0)
   };
 
   const ending = evaluateCategory(snapshot);
@@ -561,8 +567,11 @@ export function buildRunEndingPackage(state) {
     n(snapshot.switchboardListensTotal, 0) > 0
       ? `Switchboard arc: ${snapshot.switchboardListensTotal} total listen${snapshot.switchboardListensTotal === 1 ? '' : 's'} across the run; sour line weight ≈${snapshot.switchboardBadIntelTotal}. Quarters physical finds: ${snapshot.operatorQuartersFindingsTotal}.`
       : '',
+    n(snapshot.borderBlindWindowsTotal, 0) > 0
+      ? `Fog corridor: ${snapshot.borderBlindWindowsTotal} blind window${snapshot.borderBlindWindowsTotal === 1 ? '' : 's'} opened, ${snapshot.borderDropEventsTotal} transfer beat${snapshot.borderDropEventsTotal === 1 ? '' : 's'}, ${snapshot.borderWitnessEventsTotal} witness spike${snapshot.borderWitnessEventsTotal === 1 ? '' : 's'}, ${snapshot.borderShaftDispatchesTotal} shaft dispatch${snapshot.borderShaftDispatchesTotal === 1 ? '' : 'es'}.`
+      : '',
     finaleIntegrationLine
-  ].slice(0, 10);
+  ].slice(0, 11);
 
   const tags = [
     `Difficulty: ${difficultyLabel}`,
@@ -615,8 +624,11 @@ export function buildRunEndingPackage(state) {
     n(snapshot.houndTrustEndPct, 0) >= 72 ? 'Lot Stray Loyal' : '',
     n(snapshot.switchboardListensTotal, 0) >= 10 ? 'Heavy Wire' : '',
     n(snapshot.operatorQuartersFindingsTotal, 0) >= 1 ? 'Quarters Tamper' : '',
-    n(snapshot.operatorHallucinationsTotal, 0) >= 2 ? 'Strain Bleed' : ''
-  ].filter(Boolean).slice(0, 12);
+    n(snapshot.operatorHallucinationsTotal, 0) >= 2 ? 'Strain Bleed' : '',
+    n(snapshot.borderBlindWindowsTotal, 0) >= 4 ? 'Fog Transfer Veteran' : '',
+    n(snapshot.borderWitnessEventsTotal, 0) >= 2 ? 'Witness Heat' : '',
+    n(snapshot.borderShaftDispatchesTotal, 0) >= 3 ? 'Shaft Runner' : ''
+  ].filter(Boolean).slice(0, 14);
 
   return {
     key: ending.key,

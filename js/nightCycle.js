@@ -63,7 +63,11 @@ export function getActionTimeCost(actionKey) {
     callArrival: 18,
     'switchboard-listen': 11,
     'operator-quarters-check': 15,
-    'operator-quarters-ignore': 4
+    'operator-quarters-ignore': 4,
+    'border-blind-open': 12,
+    'border-refuse': 8,
+    'border-log': 7,
+    'border-witness-resolve': 5
   };
 
   return costs[actionKey] ?? 0;

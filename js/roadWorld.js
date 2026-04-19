@@ -106,6 +106,11 @@ const INTEL_TEMPLATES = [
   { kind: 'hunter', text: 'Lookout whisper: two men asking for "a room facing the rear" at two different truck stops.', weight: 0.55 },
   { kind: 'arrival', text: 'CB skip: a group is "running late to a reservation" — vague, but the mile marker sounds like yours.', weight: 0.9 },
   {
+    kind: 'transfer',
+    text: 'Lot rumor: two rigs plan to "kiss bumpers" behind your pump island when the fog thickens — second unit carries the weight.',
+    weight: 0.35
+  },
+  {
     kind: 'room9',
     text: 'Lot regular swears the rear wing "breathes wrong" when trucks downshift — superstitious, but it tracks your sealed line.',
     weight: 0.45
@@ -169,9 +174,14 @@ export function tickRoadWorldDuringShift(state, pushAlert) {
     const baseChance = 0.006 + dn.tier * 0.004 + heat * 0.0015;
     const rel = dn.reliability * (0.85 + trust * 0.15);
     if (Math.random() < baseChance * rel) {
-      const pool = INTEL_TEMPLATES.filter((t) => (t.kind === 'room9' ? r9 >= 2 : true));
+      const pool = INTEL_TEMPLATES.filter((t) => {
+        if (t.kind === 'room9') return r9 >= 2;
+        if (t.kind === 'transfer') return fog && heat >= 3;
+        return true;
+      });
       const pick = pool[Math.floor(Math.random() * Math.max(1, pool.length))];
-      const accurate = Math.random() < clamp(rel * (dn.burned ? 0.3 : 0.72), 0.25, 0.88);
+      let accurate = Math.random() < clamp(rel * (dn.burned ? 0.3 : 0.72), 0.25, 0.88);
+      if (fog && heat > 2 && Math.random() < 0.12) accurate = false;
       if (!accurate) state.shiftStats.roadIntelWrong = n(state.shiftStats.roadIntelWrong, 0) + 1;
       pushIntel(state, pick, accurate);
       if (typeof pushAlert === 'function') {
@@ -376,6 +386,9 @@ export function pickDjCodedAddon(state) {
   if (rot >= 5) lines.push('Local color: some buildings rot from the inside first. The highway feels it before the town admits it.');
   if (n(state?.nemesis?.heat, 0) >= 4) lines.push('Travel advisory: wolves do not honk — they just show up in the mirror twice.');
   if (n(state?.huntNight?.active, 0)) lines.push('Night call: if you are hosting a chase, keep the lobby boring. Boring survives.');
+  if (String(state?.borderTransfer?.phase || '') === 'staging') {
+    lines.push('Coded aside: if two shadows trade weight without headlights, the highway counts it anyway.');
+  }
   if (!lines.length) return '';
   state.roadWorld.djCodedLinesThisRun += 1;
   return lines[Math.floor(Math.random() * lines.length)];

@@ -203,6 +203,41 @@ const EVIDENCE_CATALOG = [
     provenanceHint: 'desk'
   },
   {
+    id: 'border-transfer-slip',
+    type: 'dirty',
+    category: 'dirty',
+    label: 'Fog-Lot Transfer Slip',
+    desc: 'Carbon slip with a time window and a vehicle class — not motel letterhead. Someone treated your blind like a station stop.',
+    uvReactive: true,
+    provenanceHint: 'dirty'
+  },
+  {
+    id: 'witness-note-scribble',
+    type: 'desk',
+    category: 'guest',
+    label: 'Witness Scrawl',
+    desc: 'Handwritten fragments from someone who saw the lot go wrong during a circuit shave — shaky, usable, dangerous.',
+    uvReactive: true,
+    provenanceHint: 'desk'
+  },
+  {
+    id: 'route-token-smudge',
+    type: 'dirty',
+    category: 'dirty',
+    label: 'Route Token Smudge',
+    desc: 'Plastic token stamped with a highway crest you do not recognize — grease still soft from a palm.',
+    uvReactive: true,
+    provenanceHint: 'dirty'
+  },
+  {
+    id: 'cargo-tag-fragment',
+    type: 'dirty',
+    category: 'dirty',
+    label: 'Cargo Tag Fragment',
+    desc: 'Torn tag fiber with a weight class checked twice — freight language on a tourist motel.',
+    provenanceHint: 'dirty'
+  },
+  {
     id: 'lost-found-object',
     type: 'object',
     category: 'mystery',

@@ -110,6 +110,19 @@ export function buildNightSummary(state) {
   if (sb >= 2 && uvN >= 1) {
     identity.push('UV reads and trunk-line work crossed tonight — the desk treated voices and reactive paper as one investigation.');
   }
+  const bb = Number(state?.shiftStats?.borderBlindWindows || 0);
+  const bd = Number(state?.shiftStats?.borderDropEvents || 0);
+  if (bb > 0 || bd > 0) {
+    identity.push(
+      `Route corridor: ${bb} deliberate blind window${bb === 1 ? '' : 's'} on the lot — ${bd} fog-night transfer beat${bd === 1 ? '' : 's'} resolved under asphalt politics.`
+    );
+  }
+  if (Number(state?.shiftStats?.borderWitnessEvents || 0) > 0) {
+    identity.push('A civilian caught the fog strip during a blind — witness pressure became part of the shift math.');
+  }
+  if (Number(state?.shiftStats?.borderShaftDispatches || 0) > 0) {
+    identity.push('Staff ran the maintenance spine instead of the public corridor — faster, darker, and harder on crew nerves.');
+  }
   if (Number(state?.shiftStats?.operatorHallucinationsTriggered || 0) > 0) {
     identity.push('Peak strain bent perception once — the log shows a corrected misread, not a lasting lie in the systems.');
   }

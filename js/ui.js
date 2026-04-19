@@ -5,6 +5,7 @@ import {
 } from './nightCycle.js';
 import { getRoomPresentationMeta } from './presentation.js';
 import { tapeBackupEligible, buildDeskUvObjectLines } from './forensicNoir.js';
+import { roomEligibleForShaftRouting } from './borderTransfer.js';
 
 let _v21SelectedRoomId = null;
 
@@ -504,7 +505,8 @@ export function renderTopbar(state) {
       'atmosphere-system-override',
       'atmosphere-scanner-compromised',
       'atmosphere-hunt-night',
-      'atmosphere-alerts-compromised'
+      'atmosphere-alerts-compromised',
+      'atmosphere-border-transfer'
     );
     appShell.classList.add(`pressure-${state?.uiPressureLevel || 'calm'}`);
     const finaleBand = String(state?.finaleUi?.pressureBand || '');
@@ -527,6 +529,11 @@ export function renderTopbar(state) {
     appShell.classList.toggle('atmosphere-scanner-compromised', Boolean(override.active && override.scannerCompromised));
     appShell.classList.toggle('atmosphere-hunt-night', Boolean(huntNight.active));
     appShell.classList.toggle('atmosphere-alerts-compromised', Boolean(override.active && override.alertsCompromised));
+    const _bt = state?.borderTransferUi;
+    appShell.classList.toggle(
+      'atmosphere-border-transfer',
+      Boolean(_bt?.blindActive || _bt?.stagingActive || (_bt?.witnessPending && _bt?.phase === 'witness'))
+    );
     const _topbarWeather = deriveWeatherState(state);
     const _topbarCondition = deriveMotelCondition(state);
     appShell.dataset.weather = _topbarWeather.primary;
@@ -1748,6 +1755,16 @@ export function renderRooms(
       runnerButton.disabled = !hasPendingRequest;
       bindAtomicActionButton(runnerButton, () => onRoomServiceAction(room.id, 'runner'), { groupRoot: serviceActions });
 
+      let shaftButton = null;
+      if (hasPendingRequest && roomEligibleForShaftRouting(state, room)) {
+        shaftButton = document.createElement('button');
+        shaftButton.className = 'button button-warning v38-shaft-btn';
+        shaftButton.type = 'button';
+        shaftButton.textContent = 'Shaft route';
+        shaftButton.title = 'Send crew via maintenance spine — faster off public glass, darker morale.';
+        bindAtomicActionButton(shaftButton, () => onRoomServiceAction(room.id, 'maintenance-shaft'), { groupRoot: serviceActions });
+      }
+
       const ignoreButton = document.createElement('button');
       ignoreButton.className = 'button button-danger';
       ignoreButton.textContent = ignoreLabel;
@@ -1767,6 +1784,7 @@ export function renderRooms(
       serviceActions.appendChild(maintenanceButton);
       serviceActions.appendChild(securityButton);
       serviceActions.appendChild(runnerButton);
+      if (shaftButton) serviceActions.appendChild(shaftButton);
       serviceActions.appendChild(ignoreButton);
       serviceActions.appendChild(reassignButton);
 
@@ -2315,6 +2333,59 @@ export function renderOperatorNoirMount(state) {
   `;
 }
 
+export function renderBorderTransferMount(state) {
+  const mount = document.getElementById('border-transfer-mount');
+  if (!mount) return;
+  const bt = state?.borderTransferUi;
+  if (!bt || bt.phase === 'idle' || bt.phase === 'resolved') {
+    mount.innerHTML = '';
+    return;
+  }
+  const fogChip = bt.fogDense ? '<span class="v38-fog-chip">Dense fog</span>' : '';
+  if (bt.phase === 'staging') {
+    mount.innerHTML = `
+      <div class="v38-border-card" role="region" aria-label="Border transfer pressure">
+        <div class="v38-border-card-head">
+          <h4>Border drop — staging</h4>
+          ${fogChip}
+        </div>
+        <p class="muted microcopy-line">Two vehicles want a quiet handoff on your asphalt. Outside actors expect a short blind — this uses real breaker draw, not a cheat toggle.</p>
+        <div class="v38-border-actions">
+          <button type="button" class="button button-warning" data-border-staging="blind">Open blind window</button>
+          <button type="button" class="button button-secondary" data-border-staging="refuse">Keep lot lit — refuse</button>
+          <button type="button" class="button button-utility" data-border-staging="log">Log vague scanner memo</button>
+        </div>
+      </div>`;
+    return;
+  }
+  if (bt.phase === 'blind') {
+    mount.innerHTML = `
+      <div class="v38-border-card v38-border-card-blind" role="status">
+        <div class="v38-border-card-head">
+          <h4>Blind window live</h4>
+          ${fogChip}
+        </div>
+        <p class="v38-blind-warning">${bt.blindWarning || 'Parking and camera draw are shaved — restore pending.'}</p>
+      </div>`;
+    return;
+  }
+  if (bt.phase === 'witness' && bt.witnessPending) {
+    mount.innerHTML = `
+      <div class="v38-border-card v38-witness-card" role="region" aria-label="Witness complication">
+        <div class="v38-border-card-head">
+          <h4>Witness on the fog strip</h4>
+        </div>
+        <p class="muted microcopy-line"><strong>${bt.witnessGuest}</strong> saw motion while circuits were shaved. Pick a desk response — fast, not theatrical.</p>
+        <div class="v38-border-actions v38-witness-actions">
+          <button type="button" class="button button-utility" data-border-witness="witness-hush">Hush — cab ($18)</button>
+          <button type="button" class="button button-warning" data-border-witness="witness-bribe-dirty">Bribe — dirty ($14)</button>
+          <button type="button" class="button button-secondary" data-border-witness="witness-eject">Hard eject</button>
+          <button type="button" class="button button-secondary" data-border-witness="witness-log">Log honestly</button>
+        </div>
+      </div>`;
+  }
+}
+
 export function renderCameraSceneOverlay(state) {
   const overlay = document.getElementById('camera-scene-overlay');
   if (!overlay) return;
@@ -2561,6 +2632,14 @@ function buildReportPriorityStrip(state) {
     )} · strain misreads logged ${Number(ss.operatorHallucinationsTriggered || 0)}`;
     strip.appendChild(opLine);
   }
+  if (Number(ss.borderBlindWindows || 0) > 0 || Number(ss.borderDropEvents || 0) > 0 || Number(ss.borderWitnessEvents || 0) > 0) {
+    const bLine = document.createElement('div');
+    bLine.className = 'report-v38-border-line';
+    bLine.textContent = `Route corridor: blind windows ${Number(ss.borderBlindWindows || 0)} · drop events ${Number(
+      ss.borderDropEvents || 0
+    )} · witness spikes ${Number(ss.borderWitnessEvents || 0)} · shaft dispatches ${Number(ss.borderShaftDispatches || 0)}`;
+    strip.appendChild(bLine);
+  }
   return strip;
 }
 
@@ -2623,6 +2702,9 @@ export function renderLogs(state) {
     if (/(\[highway radio\]|\[midnight dj\]|highway companion|route 9|roadside|night shift.*dj|broadcasting from)/.test(v)) return 'radio';
     if (/(\[police\]|\[town\]|officer [a-z]+.*visit|bagman|town.*suspicion|corrupt.*law|police.*payoff|false.*police|informant.*record|town.*saw|bought.*law)/.test(v)) return 'town';
     if (/(switchboard|operator quarters|strain read|back-room|quarters monitor|line still ringing|perception risk|motel switchboard)/i.test(v)) {
+      return 'camera';
+    }
+    if (/\[border\]|\[witness\]|shaft route|fog lot|border transfer|circuit shave/i.test(v)) {
       return 'camera';
     }
     if (/(room 9|sealed corridor|sealed room|contamination|owner.*authorization|owner.*protected|owner.*override|do not enter|heat.*sensor.*corridor|housekeeping.*sealed|maintenance.*room.*scratched|rear.*sealed|feed.*flicker.*sealed|key.*room.*(no|not).*registered|prior shift.*do not)/.test(v)) return 'contamination';
@@ -3372,7 +3454,10 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
       : nextMilestone?.isMilestone
         ? ` • ${nextMilestone.label}`
         : '';
-    meta.textContent = `Prepare for Night ${nextNight}${milestoneText}${state?.nightMoodLine ? ` • ${state.nightMoodLine}` : ''}${state?.nightIdentityLine ? ` • ${state.nightIdentityLine}` : ''}`;
+    const borderPrep = state?.borderPrepLine ? ` • ${state.borderPrepLine}` : '';
+    meta.textContent = `Prepare for Night ${nextNight}${milestoneText}${state?.nightMoodLine ? ` • ${state.nightMoodLine}` : ''}${
+      state?.nightIdentityLine ? ` • ${state.nightIdentityLine}` : ''
+    }${borderPrep}`;
   }
   if (campaign) {
     campaign.textContent = state?.campaignProgress?.completedLabel || 'Campaign progress: 0 / 5 nights completed';

@@ -127,6 +127,19 @@ import {
   buildOperatorNoirRenderModel
 } from './operatorNoir.js';
 import {
+  normalizeBorderTransferState,
+  resetBorderTransferForNewNight,
+  maybeOfferBorderTransferStaging,
+  tickBorderTransferDuringShift,
+  beginBorderBlindWindow,
+  refuseBorderTransfer,
+  logBorderTransferHonest,
+  resolveBorderWitnessChoice,
+  buildBorderTransferRenderModel,
+  buildBorderTransferPrepLine,
+  noteShaftDispatchOutcome
+} from './borderTransfer.js';
+import {
   evaluateCampaignConvergence,
   recordCampaignConvergenceNight,
   normalizeCampaignCollapseStats,
@@ -382,6 +395,7 @@ import {
   renderAnalogPowerExtras,
   renderForensicShiftUi,
   renderOperatorNoirMount,
+  renderBorderTransferMount,
   renderNightEventCard,
   renderNightEventOverlay,
   renderCameraSceneOverlay,
@@ -2710,6 +2724,7 @@ function restoreNightStartSnapshot(options = {}) {
   finalizeAnalogSurvivalState(state);
   normalizeForensicNoirState(state);
   normalizeOperatorNoirState(state);
+  normalizeBorderTransferState(state);
   state = normalizeCameraSceneState(state);
   state = normalizeLocationState(state);
   state = normalizePresentationState(state);
@@ -4338,61 +4353,71 @@ function getServiceActionSpec(room, actionType) {
   const blackout = getBlackoutPressureState(state);
   const activePlan = String(state?.dayShift?.activeNightPlan || state?.dayShift?.selectedPlan || 'balanced');
   const staffProfile = getNightStaffProfile(state);
+  const act = actionType === 'maintenance-shaft' ? 'maintenance' : actionType;
   const preferred = Array.isArray(request?.preferred) ? request.preferred : [];
-  const preferredMatch = preferred.includes(actionType);
+  const preferredMatch = preferred.includes(act);
   const urgency = String(request?.urgency || 'low');
   const mood = service.mood || 'steady';
   const truthState = String(request?.truthState || 'unclear');
   let successChance = 0.72;
-  if (actionType === 'desk') successChance -= 0.1;
-  if (actionType === 'security') successChance += (request?.serviceTag === 'suspicion' || request?.serviceTag === 'disturbance') ? 0.12 : -0.04;
-  if (actionType === 'maintenance') successChance += (request?.serviceTag === 'utility' || request?.serviceTag === 'maintenance') ? 0.14 : -0.05;
-  if (actionType === 'runner') successChance += (request?.serviceTag === 'complaint') ? 0.1 : 0;
+  if (act === 'desk') successChance -= 0.1;
+  if (act === 'security') successChance += (request?.serviceTag === 'suspicion' || request?.serviceTag === 'disturbance') ? 0.12 : -0.04;
+  if (act === 'maintenance') successChance += (request?.serviceTag === 'utility' || request?.serviceTag === 'maintenance') ? 0.14 : -0.05;
+  if (act === 'runner') successChance += (request?.serviceTag === 'complaint') ? 0.1 : 0;
   if (preferredMatch) successChance += 0.08;
   if (urgency === 'high') successChance -= 0.08;
   if (mood === 'volatile') successChance -= 0.08;
   if (service.hallwayChecked) successChance += 0.06;
   if (service.irritation >= 2) successChance -= 0.05;
   if (service.hostility >= 2) successChance -= 0.08;
-  if (truthState === 'false-alarm' && actionType === 'desk') successChance += 0.12;
-  if (truthState === 'false-alarm' && actionType === 'security') successChance -= 0.16;
-  if (truthState === 'real-threat' && actionType === 'desk') successChance -= 0.1;
-  if (truthState === 'real-threat' && actionType === 'security') successChance += 0.08;
+  if (truthState === 'false-alarm' && act === 'desk') successChance += 0.12;
+  if (truthState === 'false-alarm' && act === 'security') successChance -= 0.16;
+  if (truthState === 'real-threat' && act === 'desk') successChance -= 0.1;
+  if (truthState === 'real-threat' && act === 'security') successChance += 0.08;
   successChance += Number(state?.progressionModifiers?.serviceResponseClarity || 0);
-  if (actionType === 'security') successChance += staffProfile.hasSecurity ? 0.08 : -0.08;
-  if (actionType === 'maintenance') successChance += staffProfile.hasMaintenance ? 0.1 : -0.1;
-  if (actionType === 'runner') successChance += staffProfile.hasRunner ? 0.08 : -0.06;
-  if (actionType === 'desk') successChance += staffProfile.hasDeskAssistant ? 0.06 : -0.05;
+  if (act === 'security') successChance += staffProfile.hasSecurity ? 0.08 : -0.08;
+  if (act === 'maintenance') successChance += staffProfile.hasMaintenance ? 0.1 : -0.1;
+  if (act === 'runner') successChance += staffProfile.hasRunner ? 0.08 : -0.06;
+  if (act === 'desk') successChance += staffProfile.hasDeskAssistant ? 0.06 : -0.05;
   successChance += (Number(staffProfile.rosterStrength || 0.5) - 0.5) * 0.22;
-  if (staffProfile.focus === 'security-heavy' && actionType === 'security') successChance += 0.06;
-  if (staffProfile.focus === 'service-heavy' && (actionType === 'runner' || actionType === 'desk')) successChance += 0.06;
-  if (staffProfile.focus === 'cost-saving' && actionType !== 'desk') successChance -= 0.04;
-  if (activePlan === 'service-calm' && (actionType === 'desk' || actionType === 'runner')) successChance += 0.05;
+  if (staffProfile.focus === 'security-heavy' && act === 'security') successChance += 0.06;
+  if (staffProfile.focus === 'service-heavy' && (act === 'runner' || act === 'desk')) successChance += 0.06;
+  if (staffProfile.focus === 'cost-saving' && act !== 'desk') successChance -= 0.04;
+  if (activePlan === 'service-calm' && (act === 'desk' || act === 'runner')) successChance += 0.05;
   successChance -= Number(blackout.servicePenalty || 0);
   successChance = Math.max(0.18, Math.min(0.9, successChance));
-  return {
+  const spec = {
     successChance,
     partialChance: Math.max(0.1, Math.min(0.35, 0.18 + (service.hallwayChecked ? 0.04 : 0) + (truthState === 'unclear' ? 0.06 : 0))),
     overreactionRisk:
-      actionType === 'security' && truthState === 'false-alarm'
+      act === 'security' && truthState === 'false-alarm'
         ? 0.42
-        : actionType === 'maintenance' && truthState === 'false-alarm'
+        : act === 'maintenance' && truthState === 'false-alarm'
           ? 0.2
-          : actionType === 'runner' && truthState === 'real-threat'
+          : act === 'runner' && truthState === 'real-threat'
             ? 0.08
             : Math.max(0, 0.14 - Number(staffProfile.rosterStrength || 0.5) * 0.12),
     moneyCost:
-      actionType === 'security' ? 5
-      : actionType === 'maintenance' ? 4
-      : actionType === 'runner' ? 3
-      : actionType === 'desk' ? 0
+      act === 'security' ? 5
+      : act === 'maintenance' ? 4
+      : act === 'runner' ? 3
+      : act === 'desk' ? 0
       : 0,
     powerCost:
-      actionType === 'maintenance' ? 2
-      : actionType === 'security' ? 1
+      act === 'maintenance' ? 2
+      : act === 'security' ? 1
       : 0,
-    timeAction: actionType === 'desk' ? 'review' : 'dispatch'
+    timeAction: act === 'desk' ? 'review' : 'dispatch'
   };
+  if (actionType === 'maintenance-shaft') {
+    return {
+      ...spec,
+      moneyCost: spec.moneyCost + 2,
+      successChance: Math.min(0.9, spec.successChance + 0.08),
+      overreactionRisk: Math.min(0.52, spec.overreactionRisk + 0.06)
+    };
+  }
+  return spec;
 }
 
 function resolveRoomServiceAction(roomId, actionType) {
@@ -4608,10 +4633,17 @@ function resolveRoomServiceAction(roomId, actionType) {
   }
 
   const spec = getServiceActionSpec(room, actionType);
+  const svcLogType = actionType === 'maintenance-shaft' ? 'shaft maintenance' : actionType;
+  const staffRoleTag =
+    actionType === 'desk'
+      ? 'Desk Assistant'
+      : actionType === 'maintenance-shaft'
+        ? 'Maintenance'
+        : `${actionType.charAt(0).toUpperCase()}${actionType.slice(1)}`;
   if (state.money < spec.moneyCost) {
     pushLiveAlert(state, {
       type: 'warning',
-      message: `Not enough money to send ${actionType}.`,
+      message: `Not enough money to send ${svcLogType}.`,
       dedupeKey: `service-funds-${room.id}-${actionType}`
     });
     renderAll();
@@ -4620,9 +4652,9 @@ function resolveRoomServiceAction(roomId, actionType) {
   state.money = Math.max(0, state.money - spec.moneyCost);
   if (spec.moneyCost > 0) {
     addBudgetCost(
-      actionType === 'maintenance' ? 'repairs' : actionType === 'desk' ? 'refunds' : 'emergencies',
+      actionType === 'maintenance' || actionType === 'maintenance-shaft' ? 'repairs' : actionType === 'desk' ? 'refunds' : 'emergencies',
       spec.moneyCost,
-      `${room.label}: ${actionType} response cost ${formatMoney(spec.moneyCost)}.`
+      `${room.label}: ${svcLogType} response cost ${formatMoney(spec.moneyCost)}.`
     );
   }
   state.power = clampPower(state.power - spec.powerCost);
@@ -4679,11 +4711,11 @@ function resolveRoomServiceAction(roomId, actionType) {
         unresolvedIssues: nextUnresolved,
         requestCooldown: success ? 2 : partial ? 1 : 1,
         responseStatus: success
-          ? `${actionType} resolved ${request.title}`
+          ? `${svcLogType} resolved ${request.title}`
           : partial
-            ? `${actionType} only partly settled ${request.title}`
-            : `${actionType} failed to settle ${request.title}`,
-        serviceHistory: [`${success ? 'Resolved' : partial ? 'Partial' : 'Missed'} via ${actionType}: ${request.title}`, ...currentService.serviceHistory].slice(0, 4),
+            ? `${svcLogType} only partly settled ${request.title}`
+            : `${svcLogType} failed to settle ${request.title}`,
+        serviceHistory: [`${success ? 'Resolved' : partial ? 'Partial' : 'Missed'} via ${svcLogType}: ${request.title}`, ...currentService.serviceHistory].slice(0, 4),
         mood: success ? 'steady' : partial ? 'tense' : 'volatile',
         handledFromDesk: currentService.handledFromDesk + (actionType === 'desk' ? 1 : 0),
         hallwayChecked: false
@@ -4691,13 +4723,13 @@ function resolveRoomServiceAction(roomId, actionType) {
     };
   });
   if (overreaction) {
-    noteStaffOutcome(actionType === 'desk' ? 'Desk Assistant' : actionType.charAt(0).toUpperCase() + actionType.slice(1), `Overreacted at ${room.label}.`, {
+    noteStaffOutcome(staffRoleTag, `Overreacted at ${room.label}.`, {
       fatigue: 0.08,
       morale: -0.04
     });
     registerOvermanagementPenalty(roomId, {
-      reason: `${actionType}-false-alarm`,
-      logLine: `${actionType} hit ${room.label} too hard for what turned out to be more false alarm than threat.`,
+      reason: `${svcLogType}-false-alarm`,
+      logLine: `${svcLogType} hit ${room.label} too hard for what turned out to be more false alarm than threat.`,
       hostility: actionType === 'security' ? 1 : 0,
       rumorPressure: 2,
       reputationLoss: actionType === 'security' ? 2 : 1,
@@ -4710,22 +4742,22 @@ function resolveRoomServiceAction(roomId, actionType) {
         serviceState: {
           ...currentService,
           pendingRequest: null,
-          responseStatus: `${actionType} overreacted to ${request.title}`,
-          serviceHistory: [`Overreacted via ${actionType}: ${request.title}`, ...currentService.serviceHistory].slice(0, 4),
+          responseStatus: `${svcLogType} overreacted to ${request.title}`,
+          serviceHistory: [`Overreacted via ${svcLogType}: ${request.title}`, ...currentService.serviceHistory].slice(0, 4),
           requestCooldown: 2
         }
       };
     });
-    state.logs.push(`${room.label}: ${request.title} was closer to a false alarm, and ${actionType} turned it into a social problem instead of a safety solution.`);
+    state.logs.push(`${room.label}: ${request.title} was closer to a false alarm, and ${svcLogType} turned it into a social problem instead of a safety solution.`);
   } else if (success) {
-    noteStaffOutcome(actionType === 'desk' ? 'Desk Assistant' : actionType.charAt(0).toUpperCase() + actionType.slice(1), `Clean resolution in ${room.label}.`, {
+    noteStaffOutcome(staffRoleTag, `Clean resolution in ${room.label}.`, {
       fatigue: 0.06,
       morale: 0.03
     });
     calmRoomChain(roomId, actionType === 'security' ? 3 : 2);
     state.reputation = clampReputation(state.reputation + 1);
     state.logs.push(
-      `${room.label}: ${actionType} handled ${request.title} cleanly. ${
+      `${room.label}: ${svcLogType} handled ${request.title} cleanly. ${
         truthState === 'false-alarm'
           ? 'The desk read the false alarm correctly and avoided making it worse.'
           : truthState === 'real-threat'
@@ -4741,12 +4773,12 @@ function resolveRoomServiceAction(roomId, actionType) {
       note: `${request.title} was handled cleanly here during the night.`
     });
   } else if (partial) {
-    noteStaffOutcome(actionType === 'desk' ? 'Desk Assistant' : actionType.charAt(0).toUpperCase() + actionType.slice(1), `Partial response in ${room.label}.`, {
+    noteStaffOutcome(staffRoleTag, `Partial response in ${room.label}.`, {
       fatigue: 0.07,
       morale: -0.01
     });
     state.logs.push(
-      `${room.label}: ${actionType} only partly settled ${request.title}. ${
+      `${room.label}: ${svcLogType} only partly settled ${request.title}. ${
         truthState === 'real-threat'
           ? 'The response was not wrong, just incomplete.'
           : 'The guest calmed down somewhat, but the handling still left friction behind.'
@@ -4757,25 +4789,25 @@ function resolveRoomServiceAction(roomId, actionType) {
       registerRoomChainSignal({
         roomId,
         guestName: room.occupiedBy,
-        type: `service-partial-${actionType}-${request.kind}`,
+        type: `service-partial-${svcLogType.replace(/\s+/g, '-')}-${request.kind}`,
         severity: 1
       });
       applyRoomServiceSpillover(room, request, 1, 'partial');
     }
   } else {
-    noteStaffOutcome(actionType === 'desk' ? 'Desk Assistant' : actionType.charAt(0).toUpperCase() + actionType.slice(1), `Failed response in ${room.label}.`, {
+    noteStaffOutcome(staffRoleTag, `Failed response in ${room.label}.`, {
       fatigue: 0.09,
       morale: -0.05
     });
     registerRoomChainSignal({
       roomId,
       guestName: room.occupiedBy,
-      type: `service-fail-${actionType}-${request.kind}`,
+      type: `service-fail-${svcLogType.replace(/\s+/g, '-')}-${request.kind}`,
       severity: request.urgency === 'high' || truthState === 'real-threat' ? 2 : 1
     });
     state.reputation = clampReputation(state.reputation - 1);
     state.logs.push(
-      `${room.label}: ${actionType} failed to calm ${request.title}. ${
+      `${room.label}: ${svcLogType} failed to calm ${request.title}. ${
         truthState === 'real-threat'
           ? 'The threat was real and the weak fit made it spread.'
           : truthState === 'false-alarm'
@@ -4807,9 +4839,16 @@ function resolveRoomServiceAction(roomId, actionType) {
     registerPanicSpend();
   }
   if (checkFailureState()) return;
+  if (actionType === 'maintenance-shaft') {
+    const shaftOk = !overreaction && (success || partial);
+    noteShaftDispatchOutcome(state, shaftOk);
+    if (shaftOk) {
+      bumpRoadHeat(state, 0.06, 'Shaft crew stayed off the public corridor.');
+    }
+  }
   if (progressShift(spec.timeAction, {
     timeScale: actionType === 'desk' ? 0.9 : 1,
-    passiveDrainScale: actionType === 'maintenance' ? 1.1 : 1
+    passiveDrainScale: actionType === 'maintenance' || actionType === 'maintenance-shaft' ? 1.12 : 1
   })) return;
   renderAll();
 }
@@ -5380,6 +5419,47 @@ function handleFeedMotelHound() {
   renderAll();
 }
 
+function handleBorderStagingChoice(choice) {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  if (choice === 'blind') {
+    const r = beginBorderBlindWindow(state);
+    if (!r.ok) {
+      pushLiveAlert(state, { type: 'warning', message: r.reason || 'Cannot open blind.', dedupeKey: 'border-blind-fail' });
+      renderAll();
+      return;
+    }
+    if (progressShift('border-blind-open', { timeScale: 0.42 })) return;
+  } else if (choice === 'refuse') {
+    refuseBorderTransfer(state);
+    if (progressShift('border-refuse', { timeScale: 0.28 })) return;
+  } else if (choice === 'log') {
+    const r = logBorderTransferHonest(state);
+    if (!r.ok) {
+      pushLiveAlert(state, { type: 'warning', message: r.reason || 'Cannot log.', dedupeKey: 'border-log-fail' });
+      renderAll();
+      return;
+    }
+    if (progressShift('border-log', { timeScale: 0.22 })) return;
+  }
+  renderAll();
+}
+
+function handleBorderWitnessChoice(choiceId) {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const r = resolveBorderWitnessChoice(state, choiceId);
+  if (!r.ok) {
+    pushLiveAlert(state, { type: 'warning', message: r.reason || 'No witness branch.', dedupeKey: 'border-witness-fail' });
+    renderAll();
+    return;
+  }
+  if (progressShift('border-witness-resolve', { timeScale: 0.32 })) return;
+  renderAll();
+}
+
 function handleOperatorSwitchboardListen(lineId) {
   if (activeScreenId !== 'game-screen') return;
   onMeaningfulAction();
@@ -5610,6 +5690,8 @@ function buildRenderState() {
     operatorNoir: buildOperatorNoirRenderModel(state),
     onOperatorSwitchboardListen: handleOperatorSwitchboardListen,
     onOperatorQuartersResolve: handleOperatorQuartersResolve,
+    borderTransferUi: buildBorderTransferRenderModel(state),
+    borderPrepLine: buildBorderTransferPrepLine(state),
     onToggleUvDeskLens: () => {
       onMeaningfulAction();
       audioController.playUiClick();
@@ -6279,6 +6361,7 @@ function bootstrapState() {
   normalizeRoadWorldState(state);
   normalizeForensicNoirState(state);
   normalizeOperatorNoirState(state);
+  normalizeBorderTransferState(state);
 }
 function renderAll() {
   evaluatePresentationState();
@@ -6312,6 +6395,7 @@ function renderAll() {
   renderAnalogPowerExtras(renderState);
   renderForensicShiftUi(renderState);
   renderOperatorNoirMount(renderState);
+  renderBorderTransferMount(renderState);
   renderNightEventOverlay(renderState);
   renderCameraSceneOverlay(renderState);
   renderSpecialEncounterOverlay(renderState);
@@ -8902,6 +8986,9 @@ function progressShift(actionKey, options = {}) {
   }
 
   tickRoadWorldDuringShift(state, (a) => pushLiveAlert(state, a));
+  normalizeBorderTransferState(state);
+  maybeOfferBorderTransferStaging(state, (a) => pushLiveAlert(state, a));
+  tickBorderTransferDuringShift(state, (a) => pushLiveAlert(state, a));
 
   normalizeForensicNoirState(state);
   normalizeOperatorNoirState(state);
@@ -11977,6 +12064,7 @@ function nextNight() {
   resetAnalogForNewShift(state);
   resetForensicForNewNight(state);
   resetOperatorNoirForNewNight(state);
+  resetBorderTransferForNewNight(state);
   if (darkWebContractsEnabled(state)) {
     applyDarkContractRuntime(state, state.endlessRun.selectedDarkContractId);
     applyContractAnalogHooks(state);
@@ -12146,6 +12234,18 @@ function bindEvents() {
       const opQ = e.target.closest('[data-operator-quarters]');
       if (opQ && activeScreenId === 'game-screen') {
         handleOperatorQuartersResolve(opQ.getAttribute('data-operator-quarters'));
+        e.preventDefault();
+        return;
+      }
+      const bStage = e.target.closest('[data-border-staging]');
+      if (bStage && activeScreenId === 'game-screen') {
+        handleBorderStagingChoice(bStage.getAttribute('data-border-staging'));
+        e.preventDefault();
+        return;
+      }
+      const bWit = e.target.closest('[data-border-witness]');
+      if (bWit && activeScreenId === 'game-screen') {
+        handleBorderWitnessChoice(bWit.getAttribute('data-border-witness'));
         e.preventDefault();
         return;
       }
