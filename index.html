@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Dead End Motel v0.42</title>
+  <title>Dead End Motel v0.43</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -29,12 +29,13 @@
   <link rel="stylesheet" href="styles/v40-basement.css" />
   <link rel="stylesheet" href="styles/v41-polish.css" />
   <link rel="stylesheet" href="styles/v42-mobile-command.css" />
+  <link rel="stylesheet" href="styles/v43-control-surface.css" />
 </head>
 <body>
-  <div id="app" class="app-shell screen-main-menu v42-root">
-    <header class="topbar topbar-v20 v42-topbar" role="banner">
+  <div id="app" class="app-shell screen-main-menu v42-root v43-root">
+    <header class="topbar topbar-v20 v42-topbar v43-topbar" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.42</p>
+        <p class="eyebrow">Dead End Motel v0.43</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -72,9 +73,9 @@
     </header>
 
     <main class="v42-main">
-      <section id="main-menu" class="screen active v41-main-menu">
+      <section id="main-menu" class="screen active v41-main-menu v43-main-menu">
         <div class="v41-menu-atmosphere" aria-hidden="true"></div>
-        <div class="hero-card v41-menu-shell">
+        <div class="hero-card v41-menu-shell v43-menu-shell">
           <div class="v41-menu-layout">
             <div class="v41-menu-hero">
               <header class="v41-menu-brand">
@@ -250,10 +251,10 @@
           </div>
         </section>
 
-        <div id="motel-command-board" class="motel-command-board" aria-label="Motel command overview"></div>
+        <div id="motel-command-board" class="motel-command-board v43-command-strip-wrap" aria-label="Motel command overview"></div>
 
-        <div class="layout-grid v41-shift-grid">
-          <section id="frontdesk-panel" class="panel panel-v41 panel-v41--desk active-panel">
+        <div class="layout-grid v41-shift-grid v43-shift-grid">
+          <section id="frontdesk-panel" class="panel panel-v41 panel-v41--desk v43-desk-panel active-panel">
             <div class="panel-header">
               <div>
                 <p class="section-tag">Reception</p>
@@ -261,44 +262,51 @@
               </div>
               <button id="spawn-guest-btn" type="button" class="button button-secondary v41-reception-call">Call next arrival</button>
             </div>
-            <p id="frontdesk-intake-line" class="muted microcopy-line"></p>
-            <p class="muted microcopy-line">Desk flow: read → verify if needed → decide.</p>
-            <div id="forensic-shift-mount" class="v33-forensic-mount" aria-live="polite"></div>
-            <div id="operator-noir-mount" class="v37-operator-mount" aria-live="polite"></div>
-            <div id="border-transfer-mount" class="v38-border-mount" aria-live="polite"></div>
-            <div id="lost-found-mount" class="v33-lost-found-mount"></div>
-            <div class="desk-scanner-card intelligence-feed-card">
-              <div class="panel-header split-space">
-                <div>
-                  <p class="section-tag">Local Scanner</p>
-                  <h4>Police / Incident Feed</h4>
+            <p id="frontdesk-intake-line" class="muted microcopy-line v43-desk-intake"></p>
+            <p class="muted microcopy-line v43-desk-flow-hint">Desk flow: read → verify → decide.</p>
+            <div class="v43-desk-grid">
+              <div class="v43-desk-primary">
+                <div id="guest-queue" class="card-list v43-guest-queue"></div>
+                <div class="v43-desk-rooms-wrap">
+                  <div class="panel-header split-space v43-rooms-header">
+                    <div>
+                      <p class="section-tag">Rooms</p>
+                      <h3>Room Status</h3>
+                    </div>
+                  </div>
+                  <div id="room-list" class="room-grid"></div>
                 </div>
               </div>
-              <div id="desk-scanner-feed" class="scanner-feed-list"></div>
-              <div class="scanner-intercept-strip">
-                <button id="radio-intercept-btn" class="radio-intercept-btn" hidden>Intercept Scanner</button>
-                <span id="radio-intercept-hint" class="radio-intercept-hint"></span>
-              </div>
-              <details class="scanner-legend-drawer">
-                <summary>Legend</summary>
-                <dl class="scanner-legend" aria-label="Feed line types">
-                  <div><dt class="legend-tone-vehicle">Vehicle</dt><dd>Lot &amp; route</dd></div>
-                  <div><dt class="legend-tone-group">Group</dt><dd>Family / pairs</dd></div>
-                  <div><dt class="legend-tone-desk">Desk</dt><dd>Paper &amp; stories</dd></div>
-                  <div><dt class="legend-tone-emergency">Urgent</dt><dd>Utility / unrest</dd></div>
-                  <div><dt class="legend-tone-planted">Planted</dt><dd>Compromised line</dd></div>
-                </dl>
-              </details>
+              <aside class="v43-desk-support" aria-label="Desk intelligence and feeds">
+                <div id="forensic-shift-mount" class="v33-forensic-mount" aria-live="polite"></div>
+                <div id="operator-noir-mount" class="v37-operator-mount" aria-live="polite"></div>
+                <div id="border-transfer-mount" class="v38-border-mount" aria-live="polite"></div>
+                <div id="lost-found-mount" class="v33-lost-found-mount"></div>
+                <div class="desk-scanner-card intelligence-feed-card v43-scanner-surface">
+                  <div class="panel-header split-space">
+                    <div>
+                      <p class="section-tag">Local Scanner</p>
+                      <h4>Police / Incident Feed</h4>
+                    </div>
+                  </div>
+                  <div id="desk-scanner-feed" class="scanner-feed-list"></div>
+                  <div class="scanner-intercept-strip">
+                    <button id="radio-intercept-btn" class="radio-intercept-btn" hidden>Intercept Scanner</button>
+                    <span id="radio-intercept-hint" class="radio-intercept-hint"></span>
+                  </div>
+                  <details class="scanner-legend-drawer">
+                    <summary>Legend</summary>
+                    <dl class="scanner-legend" aria-label="Feed line types">
+                      <div><dt class="legend-tone-vehicle">Vehicle</dt><dd>Lot &amp; route</dd></div>
+                      <div><dt class="legend-tone-group">Group</dt><dd>Family / pairs</dd></div>
+                      <div><dt class="legend-tone-desk">Desk</dt><dd>Paper &amp; stories</dd></div>
+                      <div><dt class="legend-tone-emergency">Urgent</dt><dd>Utility / unrest</dd></div>
+                      <div><dt class="legend-tone-planted">Planted</dt><dd>Compromised line</dd></div>
+                    </dl>
+                  </details>
+                </div>
+              </aside>
             </div>
-            <div id="guest-queue" class="card-list"></div>
-
-            <div class="panel-header split-space">
-              <div>
-                <p class="section-tag">Rooms</p>
-                <h3>Room Status</h3>
-              </div>
-            </div>
-            <div id="room-list" class="room-grid"></div>
           </section>
 
           <section id="cameras-panel" class="panel panel-v41 panel-v41--cameras">
@@ -320,8 +328,10 @@
                 <h3>Shared Space Pressure</h3>
               </div>
             </div>
-            <p class="muted microcopy-line">Live situation board: pressure routes, spillover, and what to do next.</p>
-            <div id="shared-space-grid" class="shared-space-grid shared-space-board"></div>
+            <p class="muted microcopy-line v43-spaces-lede">Live situation board: pressure routes, spillover, and what to do next.</p>
+            <div id="shared-space-board" class="v43-spaces-board-outer">
+              <div id="shared-space-grid" class="shared-space-grid shared-space-board"></div>
+            </div>
           </section>
 
           <section id="basement-panel" class="panel">
@@ -375,8 +385,8 @@
               <button id="dispatch-staff-btn" class="button button-utility">Dispatch Staff</button>
               <button id="end-night-btn" class="button button-primary">End Night</button>
             </div>
-            <p class="muted microcopy-line">Review and dispatch advance time most when real room pressure exists; empty paperwork barely moves the clock.</p>
-            <div id="incident-log" class="log-list"></div>
+            <p class="muted microcopy-line v43-report-hint">Review and dispatch advance time when pressure exists; empty paperwork barely moves the clock.</p>
+            <div id="incident-log" class="log-list v43-incident-log"></div>
           </section>
         </div>
       </section>
@@ -574,6 +584,7 @@
         </div>
       </section>
     </main>
+    <div id="v43-guest-sticky-rail" class="v43-guest-sticky-rail" hidden aria-live="polite"></div>
   </div>
 
   <div id="night-event-overlay" class="camera-scene-overlay" aria-hidden="true"></div>

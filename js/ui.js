@@ -409,7 +409,7 @@ function renderMotelCommandBoard(state) {
 
   const collapseUnstable = Boolean(state?.crisisNight?.trueCrisisNight);
   board.innerHTML =
-    '<div class="mcb-inner v41-mcb-core' + (collapseUnstable ? ' v34-command-unstable' : '') + '">' +
+    '<div class="mcb-inner v41-mcb-core v43-command-surface' + (collapseUnstable ? ' v34-command-unstable' : '') + '">' +
       '<div class="mcb-top-strip">' +
         '<span class="mcb-title">Command</span>' +
         '<span class="mcb-badge ' + badgeClass + '">' + badgeText + '</span>' +
@@ -1240,6 +1240,84 @@ function bindAtomicActionButton(button, handler, { groupRoot = null } = {}) {
   }, { passive: false });
 }
 
+export function syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGuest }) {
+  const rail = document.getElementById('v43-guest-sticky-rail');
+  const app = document.getElementById('app');
+  if (!rail || !app) return;
+
+  const mq =
+    typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 900px)') : { matches: false };
+  const isMobile = Boolean(mq.matches);
+  const isGame = app.classList.contains('screen-game-screen');
+  const panel = String(app.dataset.activePanel || '');
+  const isFrontDesk = panel === 'frontdesk-panel';
+  const guests = Array.isArray(state?.guests) ? state.guests : [];
+
+  const hide = () => {
+    rail.hidden = true;
+    rail.innerHTML = '';
+    app.removeAttribute('data-v43-sticky-guest');
+  };
+
+  if (!isGame || !isFrontDesk || !isMobile || !guests.length) {
+    hide();
+    return;
+  }
+
+  const first = guests[0];
+  const guestId = first?.id;
+  if (guestId == null) {
+    hide();
+    return;
+  }
+
+  const name = String(first?.name || 'Guest').slice(0, 26);
+  rail.hidden = false;
+  app.setAttribute('data-v43-sticky-guest', '1');
+  rail.innerHTML = `
+    <div class="v43-sticky-rail-inner" role="region">
+      <p class="v43-sticky-rail-label"></p>
+      <div class="v43-sticky-rail-actions"></div>
+    </div>`;
+  const railInner = rail.querySelector('.v43-sticky-rail-inner');
+  const labelEl = rail.querySelector('.v43-sticky-rail-label');
+  if (labelEl) labelEl.textContent = name;
+  if (railInner) railInner.setAttribute('aria-label', `Desk decisions for ${name}`);
+
+  const row = rail.querySelector('.v43-sticky-rail-actions');
+  if (!row) return;
+
+  const roomValue = () => {
+    const sel = document.querySelector('#guest-queue .guest-card .guest-room-select');
+    return sel?.value || null;
+  };
+
+  const checkIn = document.createElement('button');
+  checkIn.type = 'button';
+  checkIn.className = 'button button-primary';
+  checkIn.textContent = 'Check In';
+  checkIn.title = 'Assign room now.';
+  bindAtomicActionButton(checkIn, () => onCheckIn(guestId, roomValue()), { groupRoot: row });
+
+  const flagBtn = document.createElement('button');
+  flagBtn.type = 'button';
+  flagBtn.className = 'button button-secondary';
+  flagBtn.textContent = 'Flag';
+  flagBtn.title = 'Mark for monitoring.';
+  bindAtomicActionButton(flagBtn, () => onFlagGuest(guestId), { groupRoot: row });
+
+  const rejectBtn = document.createElement('button');
+  rejectBtn.type = 'button';
+  rejectBtn.className = 'button button-danger';
+  rejectBtn.textContent = 'Reject';
+  rejectBtn.title = 'Turn the guest away.';
+  bindAtomicActionButton(rejectBtn, () => onRejectGuest(guestId), { groupRoot: row });
+
+  row.appendChild(checkIn);
+  row.appendChild(flagBtn);
+  row.appendChild(rejectBtn);
+}
+
 export function renderGuests(
   state,
   onCheckIn,
@@ -1259,6 +1337,7 @@ export function renderGuests(
   if (!state.guests.length) {
     queue.innerHTML =
       '<div class="v41-empty-queue" role="status"><p class="v41-empty-queue-title">Queue clear</p><p class="v41-empty-queue-copy muted">No bodies at the glass. Call the next arrival when intake has breath — empty is relief, not safety.</p></div>';
+    syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGuest });
     return;
   }
 
@@ -1272,7 +1351,7 @@ export function renderGuests(
     const uvLens = Boolean(state?.forensic?.uvDeskLensActive);
     const latentUv =
       uvLens && !guest.uvInspected && (guest.flagged || guest.riskLevel === 'High' || Boolean(guest.contradictoryClue));
-    card.className = `guest-card guest-card-v20 v41-guest-tile ${emphasisClass}${latentUv ? ' v33-latent-uv' : ''}${
+    card.className = `guest-card guest-card-v20 v41-guest-tile v43-guest-card ${emphasisClass}${latentUv ? ' v33-latent-uv' : ''}${
       uvLens ? ' v33-blacklight-context' : ''
     }`.trim();
     card.dataset.risk = (guest.riskLevel || 'Low').toLowerCase();
@@ -1337,6 +1416,19 @@ export function renderGuests(
           </div>`
         : '';
 
+    const secondarySignalsInner = `
+        ${buildSignalChips(guest)}
+        ${guest?.contradictoryClue ? '<span class="guest-meta-chip guest-meta-chip-contradiction">Mixed Cues</span>' : ''}
+        ${Number(guest?.expectedStayNights || 0) > 0 ? `<span class="guest-meta-chip guest-stay-chip" title="Expected stay length if approved.">Stay: ${guest.expectedStayNights}N</span>` : ''}
+        ${guest?.scannerMatches?.length ? '<span class="guest-meta-chip guest-meta-chip-scanner">Scanner Link</span>' : ''}
+        ${guest?.forgeryProfile?.isForged ? '<span class="guest-meta-chip guest-meta-chip-contradiction">Forgery Risk</span>' : ''}
+        ${factionId ? `<span class="v26-faction-tag faction-${factionFmtId}" title="${factionVisibleMark}">${guest.factionProfile.label}${factionVisibleMark ? `<span class="v26-faction-mark"> • ${factionVisibleMark.slice(0, 28)}</span>` : ''}</span>` : ''}
+        ${(linkedRole || linkedKind) ? `<span class="v26-group-role-chip ${roleChipClass}">${roleChipLabel}</span>` : ''}
+        ${guest?.vehicleProfile ? '<span class="guest-meta-chip guest-meta-chip-scanner">Vehicle Read</span>' : ''}
+        ${guest?.idInspected ? '<span class="guest-meta-chip guest-meta-chip-verified">ID Read</span>' : ''}
+        ${guest?.uvInspected ? '<span class="guest-meta-chip guest-meta-chip-uv">UV Used</span>' : ''}
+      `;
+
     card.innerHTML = `
       <div class="guest-card-header">
         <div class="guest-arch-avatar guest-arch-risk-${riskLower}" title="${guest.archetypeLabel || 'Unknown Pattern'}">${archetypeInitial}</div>
@@ -1351,32 +1443,39 @@ export function renderGuests(
       </div>
       ${namedPresenceHtml}
       ${memoryEchoHtml}
-      <div class="guest-chip-row guest-chip-row-primary">
-        <span class="risk-badge ${getRiskBadgeClass(guest.riskLevel || 'Low')}" title="Risk estimates incident chance after check-in.">Risk: ${guest.riskLevel || 'Low'}</span>
-        <span class="policy-badge ${getPolicyBadgeClass(guest.policyRecommendation || 'Approve')}" title="Policy is guidance, not a forced action.">${(guest.policyRecommendation || 'Approve').toUpperCase()}</span>
-        <span class="guest-meta-chip">Mood: ${guest.mood}</span>
-        <span class="guest-meta-chip guest-meta-chip-archetype">${guest.archetypeLabel || 'Unknown Pattern'}</span>
-      </div>
-      <div class="v24-verdict-strip">
+      <div class="v24-verdict-strip v43-verdict-strip">
         <span class="v24-verdict-chip v24-verdict-chip-risk-${riskLower}" title="Risk level">Risk ${guest.riskLevel || 'Low'}</span>
         <span class="v24-verdict-chip v24-verdict-chip-policy-${policyLower}" title="Policy recommendation">${(guest.policyRecommendation || 'APPROVE').toUpperCase()}</span>
+        <span class="v43-guest-mood-chip" title="Mood">Mood: ${guest.mood}</span>
+        <span class="v43-guest-arch-chip" title="Pattern">${guest.archetypeLabel || 'Unknown'}</span>
         ${decSig > 0 ? `<span class="v24-verdict-chip v24-verdict-chip-${decChipClass}" title="Deception signal">Deception ×${decSig}</span>` : ''}
         ${contCount > 0 ? `<span class="v24-verdict-chip v24-verdict-chip-${contChipClass}" title="Contradictions found">${contCount} Contradiction${contCount > 1 ? 's' : ''}</span>` : ''}
         ${guest?.forgeryProfile?.isForged ? '<span class="v24-verdict-chip v24-verdict-chip-dec-high" title="Forgery risk detected">Forgery Risk</span>' : ''}
       </div>
-      <div class="guest-chip-row guest-chip-row-secondary">
-        ${buildSignalChips(guest)}
-        ${guest?.contradictoryClue ? '<span class="guest-meta-chip guest-meta-chip-contradiction">Mixed Cues</span>' : ''}
-        ${Number(guest?.expectedStayNights || 0) > 0 ? `<span class="guest-meta-chip guest-stay-chip" title="Expected stay length if approved.">Stay: ${guest.expectedStayNights}N</span>` : ''}
-        ${guest?.scannerMatches?.length ? '<span class="guest-meta-chip guest-meta-chip-scanner">Scanner Link</span>' : ''}
-        ${guest?.forgeryProfile?.isForged ? '<span class="guest-meta-chip guest-meta-chip-contradiction">Forgery Risk</span>' : ''}
-        ${factionId ? `<span class="v26-faction-tag faction-${factionFmtId}" title="${factionVisibleMark}">${guest.factionProfile.label}${factionVisibleMark ? `<span class="v26-faction-mark"> • ${factionVisibleMark.slice(0, 28)}</span>` : ''}</span>` : ''}
-        ${(linkedRole || linkedKind) ? `<span class="v26-group-role-chip ${roleChipClass}">${roleChipLabel}</span>` : ''}
-        ${guest?.vehicleProfile ? '<span class="guest-meta-chip guest-meta-chip-scanner">Vehicle Read</span>' : ''}
-        ${guest?.idInspected ? '<span class="guest-meta-chip guest-meta-chip-verified">ID Read</span>' : ''}
-        ${guest?.uvInspected ? '<span class="guest-meta-chip guest-meta-chip-uv">UV Used</span>' : ''}
+      <p class="guest-case-strapline v43-guest-strapline">${strapline}</p>
+      <div class="guest-action-stack v42-guest-action-stack v43-guest-action-stack">
+        <div class="action-group action-group-decide">
+          <p class="action-group-label">Desk decision</p>
+          <div class="action-group-body guest-action-row"></div>
+        </div>
+        <div class="action-group action-group-investigate">
+          <p class="action-group-label">Investigation</p>
+          <div class="action-group-body guest-action-row-secondary"></div>
+        </div>
       </div>
-      <p class="guest-case-strapline">${strapline}</p>
+      <div class="guest-detail-block guest-room-choice-block v43-guest-room-block">
+        <p class="guest-room-choice-label">Room release matters tonight.</p>
+        <div class="guest-room-choice-row">
+          <select class="guest-room-select" aria-label="Recommended room for ${guest.name}">
+            ${(guest?.roomAssignmentOptions?.length
+              ? guest.roomAssignmentOptions
+              : [{ roomId: '', label: 'Auto assign first vacant room', reasons: ['standard fit'] }])
+              .map((option) => `<option value="${option.roomId}">${option.label}${option?.reasons?.length ? ` • ${option.reasons.join(', ')}` : ''}</option>`)
+              .join('')}
+          </select>
+          <p class="guest-room-choice-hint muted">${guest?.roomAssignmentOptions?.[0] ? `Best fit: ${guest.roomAssignmentOptions[0].label} (${guest.roomAssignmentOptions[0].reasons.join(', ')}).` : 'Auto assignment will use the first vacant room.'}</p>
+        </div>
+      </div>
       ${(guest?.inspectionHeadline || contradictionLines.length || recommendedQuestions.length)
         ? `<div class="guest-case-read ${[contradictionLines.length >= 3 ? 'is-hot' : '', scannerFriction ? 'has-scanner-friction' : ''].filter(Boolean).join(' ')}">
             <div class="guest-case-read-header">
@@ -1445,35 +1544,18 @@ export function renderGuests(
           </div>
         </div>
       </details>
-      <div class="guest-detail-block guest-room-choice-block">
-        <p class="guest-room-choice-label">Room release matters tonight.</p>
-        <div class="guest-room-choice-row">
-          <select class="guest-room-select" aria-label="Recommended room for ${guest.name}">
-            ${(guest?.roomAssignmentOptions?.length
-              ? guest.roomAssignmentOptions
-              : [{ roomId: '', label: 'Auto assign first vacant room', reasons: ['standard fit'] }])
-              .map((option) => `<option value="${option.roomId}">${option.label}${option?.reasons?.length ? ` • ${option.reasons.join(', ')}` : ''}</option>`)
-              .join('')}
-          </select>
-          <p class="guest-room-choice-hint muted">${guest?.roomAssignmentOptions?.[0] ? `Best fit: ${guest.roomAssignmentOptions[0].label} (${guest.roomAssignmentOptions[0].reasons.join(', ')}).` : 'Auto assignment will use the first vacant room.'}</p>
+      <details class="v43-guest-signals-drawer">
+        <summary>More desk signals</summary>
+        <div class="guest-chip-row guest-chip-row-secondary v43-guest-secondary-chips">
+          ${secondarySignalsInner}
         </div>
-      </div>
+      </details>
       ${(guest.priorHistoryLine || guest.threadMemoryLine)
         ? `<div class="guest-history-block">
             ${guest.priorHistoryLine ? `<p class="guest-history-line">${guest.priorHistoryLine}</p>` : ''}
             ${guest.threadMemoryLine ? `<p class="guest-history-line">${guest.threadMemoryLine}</p>` : ''}
           </div>`
         : ''}
-      <div class="guest-action-stack v42-guest-action-stack">
-        <div class="action-group action-group-decide">
-          <p class="action-group-label">Desk decision</p>
-          <div class="action-group-body guest-action-row"></div>
-        </div>
-        <div class="action-group action-group-investigate">
-          <p class="action-group-label">Investigation</p>
-          <div class="action-group-body guest-action-row-secondary"></div>
-        </div>
-      </div>
     `;
 
     const actions = card.querySelector('.guest-action-row');
@@ -1571,6 +1653,7 @@ export function renderGuests(
 
     queue.appendChild(card);
   });
+  syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGuest });
 }
 
 export function renderNightEventCard(state) {
@@ -1690,7 +1773,7 @@ export function renderRooms(
     const roomHasPendingRequest = Boolean(room?.serviceState?.pendingRequest);
     const roomChainHigh = Number(room?.chainPressure || 0) >= 4;
     const isSelectedRoom = _v21SelectedRoomId === room.id;
-    card.className = `room-card ${getRoomConditionClass(room.condition || 'Stable')} room-tone-${presentation.tone} ${presentation.shouldPulse ? 'is-critical-pulse' : ''} ${room.occupied ? 'room-card-occupied' : 'room-card-vacant'} ${lockedOut ? 'room-card-locked' : ''} ${systemNoise ? 'room-card-system-noise' : ''} ${isSelectedRoom ? 'room-card-focused' : ''}`.trim();
+    card.className = `room-card v43-room-surface ${getRoomConditionClass(room.condition || 'Stable')} room-tone-${presentation.tone} ${presentation.shouldPulse ? 'is-critical-pulse' : ''} ${room.occupied ? 'room-card-occupied' : 'room-card-vacant'} ${lockedOut ? 'room-card-locked' : ''} ${systemNoise ? 'room-card-system-noise' : ''} ${isSelectedRoom ? 'room-card-focused' : ''}`.trim();
     if (lockedOut) {
       card.innerHTML = `
         <div class="room-card-header">
@@ -1932,7 +2015,7 @@ export function renderSharedSpaces(state) {
   const grid = document.getElementById('shared-space-grid');
   if (!grid) return;
   grid.innerHTML = '';
-  grid.classList.add('v42-shared-board');
+  grid.classList.add('v42-shared-board', 'v43-tactical-board');
 
   const _ssWeather = deriveWeatherState(state);
   const OUTDOOR_ZONE_IDS = [2, 6];
@@ -1963,7 +2046,7 @@ export function renderSharedSpaces(state) {
     const weatherHintText = isOutdoor && _ssWeather.primary !== 'clear'
       ? (WEATHER_HINT_TEXT[_ssWeather.primary]?.[zoneNumeric] || null)
       : null;
-    card.className = `room-card shared-space-card v41-zone-card ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'} ${emergencyPriority ? 'is-emergency-priority' : ''} ${systemNoise ? 'shared-space-system-noise' : ''} ${linkedScanner ? 'has-linked-scanner' : ''}`.trim();
+    card.className = `room-card shared-space-card v41-zone-card v43-zone-module ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'} ${emergencyPriority ? 'is-emergency-priority' : ''} ${systemNoise ? 'shared-space-system-noise' : ''} ${linkedScanner ? 'has-linked-scanner' : ''}`.trim();
     card.dataset.zoneId = String(space.zoneId || 0);
     card.innerHTML = `
       <div class="shared-space-zones">
@@ -2124,7 +2207,7 @@ export function renderCameras(state) {
     const anomalyChipLabel = getAnomalyChipLabel();
 
     const card = document.createElement('article');
-    card.className = `camera-card v41-camera-tile ${getCameraStatusClass(camera.status)} ${actionable ? 'is-actionable' : ''} ${isBlind ? 'camera-card-blind' : ''} ${cameraInterference >= 2 ? 'camera-card-glitch' : ''} ${cameraInterference >= 3 ? 'camera-card-flicker' : ''} ${camera.contaminationMark ? 'v30-cam-contaminated' : ''}`.trim();
+    card.className = `camera-card v41-camera-tile v43-camera-tile ${getCameraStatusClass(camera.status)} ${actionable ? 'is-actionable' : ''} ${isBlind ? 'camera-card-blind' : ''} ${cameraInterference >= 2 ? 'camera-card-glitch' : ''} ${cameraInterference >= 3 ? 'camera-card-flicker' : ''} ${camera.contaminationMark ? 'v30-cam-contaminated' : ''}`.trim();
     card.dataset.camStatus = camStatusNorm;
     const sabotageType = camera.sabotageType || null;
     if (sabotageType) card.dataset.sabotageType = sabotageType;
@@ -2815,7 +2898,7 @@ function buildLogItem(entry) {
 export function renderLogs(state) {
   const list = document.getElementById('incident-log');
   list.innerHTML = '';
-  list.className = 'log-list log-list-v20 log-list-v24';
+  list.className = 'log-list log-list-v20 log-list-v24 v43-incident-log';
 
   list.appendChild(buildReportPriorityStrip(state));
 

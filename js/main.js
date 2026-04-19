@@ -435,7 +435,8 @@ import {
   renderHelpOverlay,
   renderSettingsOverlay,
   setActivePanel as setActivePanelUi,
-  setActiveScreen as setActiveScreenUi
+  setActiveScreen as setActiveScreenUi,
+  syncGuestStickyRail
 } from './ui.js';
 import './tutorial.js';
 import './guestUIEnhancer.js';
@@ -594,6 +595,11 @@ function setActiveScreen(screenId) {
   activeScreenId = nextScreenId;
   setActiveScreenUi(nextScreenId);
   isScreenTransitionInProgress = false;
+  syncGuestStickyRail(state, {
+    onCheckIn: checkInGuest,
+    onFlagGuest: flagGuest,
+    onRejectGuest: rejectGuest
+  });
 }
 
 function setActivePanel(panelId, options = {}) {
@@ -606,6 +612,13 @@ function setActivePanel(panelId, options = {}) {
     return next;
   });
   setActivePanelUi(panelId);
+  if (activeScreenId === 'game-screen') {
+    syncGuestStickyRail(state, {
+      onCheckIn: checkInGuest,
+      onFlagGuest: flagGuest,
+      onRejectGuest: rejectGuest
+    });
+  }
 }
 
 function setTutorialMode(mode) {

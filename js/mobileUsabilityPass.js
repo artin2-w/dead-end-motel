@@ -10,8 +10,14 @@ function applyMobileUsabilityPass() {
     guestQueue.classList.toggle('phase3-mobile-queue', isNarrow);
   }
 
+  const isStickyRail = window.matchMedia('(max-width: 900px)').matches;
   if (isNarrow) {
     document.querySelectorAll('#guest-queue .guest-action-row .button, #guest-queue .guest-action-row-secondary .button').forEach((button) => {
+      button.classList.add('phase3-tap-button');
+    });
+  }
+  if (isStickyRail) {
+    document.querySelectorAll('#v43-guest-sticky-rail .v43-sticky-rail-actions .button').forEach((button) => {
       button.classList.add('phase3-tap-button');
     });
   }
@@ -35,7 +41,7 @@ function applyMobileUsabilityPass() {
         const target = event.target;
         if (!(target instanceof Element)) return;
         const actionable = target.closest(
-          '.button, .tab-button, .camera-scene-action-btn, .guest-action-row button, .guest-action-row-secondary button, .report-panel-actions button, .room-service-row button, .room-tactical-row button'
+          '.button, .tab-button, .camera-scene-action-btn, .guest-action-row button, .guest-action-row-secondary button, .v43-sticky-rail-actions button, .report-panel-actions button, .room-service-row button, .room-tactical-row button'
         );
         if (!actionable) return;
         const now = Date.now();

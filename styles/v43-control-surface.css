@@ -1,0 +1,570 @@
+/**
+ * Dead End Motel v0.43 — Control surface / tactical presentation
+ * Scoped overrides; preserves gameplay DOM. Palette roles tightened in-place.
+ */
+
+/* -------------------------------------------------------------------------- */
+/* Global rhythm (in-shift + menus where safe)                                */
+/* -------------------------------------------------------------------------- */
+
+.v43-root.screen-game-screen .v42-main,
+.v43-root.screen-game-screen .layout-grid {
+  letter-spacing: 0.01em;
+}
+
+.v43-root .microcopy-line {
+  margin-top: 0.25rem;
+  margin-bottom: 0.35rem;
+  line-height: 1.35;
+}
+
+.v43-root .panel-header {
+  margin-bottom: 0.5rem;
+  gap: 0.5rem;
+}
+
+.v43-root.screen-game-screen .panel-v41 {
+  border-radius: var(--radius-md, 12px);
+}
+
+.v43-root.screen-game-screen .button.button-secondary:not(.v41-reception-call) {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.88rem;
+  border-radius: 10px;
+}
+
+.v43-root.screen-game-screen .button.button-utility {
+  padding: 0.42rem 0.65rem;
+  font-size: 0.82rem;
+  border-radius: 8px;
+}
+
+.v43-root.screen-game-screen .button.button-danger,
+.v43-root.screen-game-screen .button.button-destructive {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Main menu — denser hero, stronger primary CTA                              */
+/* -------------------------------------------------------------------------- */
+
+.v43-main-menu .v43-menu-shell {
+  max-width: 1120px;
+}
+
+.v43-main-menu .v41-menu-primary-block .button.button-primary {
+  font-size: 1.05rem;
+  padding: 0.85rem 1.35rem;
+  box-shadow: 0 0 0 1px rgba(110, 231, 255, 0.25), 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+.v43-main-menu .v41-menu-cluster {
+  margin-top: 0.65rem;
+}
+
+.v43-main-menu .v41-menu-cluster-danger {
+  padding: 0.55rem 0.65rem;
+  margin-top: 0.75rem;
+}
+
+.v43-main-menu .v41-menu-cluster-danger .button.button-destructive {
+  width: 100%;
+  max-width: 320px;
+  padding: 0.5rem 0.85rem;
+}
+
+.v43-main-menu .v41-menu-guidance {
+  font-size: 0.82rem;
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 900px) {
+  .v43-main-menu .v41-menu-layout {
+    gap: 0.75rem;
+  }
+
+  .v43-main-menu .v41-menu-hero {
+    gap: 0.5rem;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Front Desk — desktop split + support column                               */
+/* -------------------------------------------------------------------------- */
+
+.v43-desk-panel .v43-desk-intake,
+.v43-desk-panel .v43-desk-flow-hint {
+  font-size: 0.82rem;
+}
+
+.v43-desk-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 0.35rem;
+}
+
+.v43-desk-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.v43-desk-support {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.v43-desk-support .intelligence-feed-card,
+.v43-desk-support .v33-forensic-mount,
+.v43-desk-support .v37-operator-mount,
+.v43-desk-support .v38-border-mount,
+.v43-desk-support .v33-lost-found-mount {
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+}
+
+.v43-scanner-surface .panel-header {
+  margin-bottom: 0.35rem;
+}
+
+.v43-rooms-header {
+  padding-top: 0.15rem;
+  margin-bottom: 0.35rem !important;
+}
+
+.v43-rooms-header h3 {
+  font-size: 1rem;
+}
+
+@media (min-width: 960px) {
+  .v43-desk-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.12fr) minmax(280px, 0.88fr);
+    gap: 1rem 1.1rem;
+    align-items: start;
+  }
+
+  .v43-desk-support {
+    position: sticky;
+    top: calc(env(safe-area-inset-top, 0px) + 4.75rem);
+    max-height: calc(100vh - 5.5rem);
+    overflow: auto;
+    padding-right: 0.15rem;
+  }
+}
+
+/* Guest card hierarchy */
+.v43-guest-card .guest-card-header h4 {
+  font-size: 1.05rem;
+}
+
+.v43-verdict-strip {
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.v43-guest-strapline {
+  font-size: 0.88rem;
+  margin: 0.35rem 0 0.45rem;
+  color: var(--text-soft, #94a3b8);
+}
+
+.v43-guest-action-stack .action-group-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.78;
+}
+
+.v43-guest-room-block {
+  padding: 0.5rem 0.55rem;
+  margin-top: 0.35rem;
+}
+
+.v43-guest-card .guest-case-read {
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+}
+
+.v43-guest-card details.guest-notes-drawer,
+.v43-guest-card details.guest-inspection-drawer,
+.v43-guest-card details.v43-guest-signals-drawer {
+  margin-top: 0.45rem;
+  font-size: 0.88rem;
+}
+
+.v43-guest-secondary-chips {
+  gap: 0.3rem;
+  opacity: 0.92;
+}
+
+.v43-guest-secondary-chips .guest-meta-chip,
+.v43-guest-secondary-chips .v26-faction-tag {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 6px;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Mobile sticky guest decision rail                                          */
+/* -------------------------------------------------------------------------- */
+
+.v43-guest-sticky-rail {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: none;
+  padding: 0.45rem 0.55rem calc(0.45rem + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(9, 11, 18, 0) 0%, rgba(9, 11, 18, 0.92) 28%, rgba(9, 11, 18, 0.97) 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
+.v43-guest-sticky-rail:not([hidden]) {
+  display: block;
+}
+
+.v43-sticky-rail-inner {
+  pointer-events: auto;
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.v43-sticky-rail-label {
+  margin: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-soft, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v43-sticky-rail-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.35rem;
+}
+
+.v43-sticky-rail-actions .button {
+  padding: 0.55rem 0.35rem;
+  font-size: 0.82rem;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+@media (min-width: 901px) {
+  .v43-guest-sticky-rail {
+    display: none !important;
+  }
+
+  #app.screen-game-screen[data-v43-sticky-guest="1"] .v42-main {
+    padding-bottom: 0;
+  }
+}
+
+#app.screen-game-screen[data-v43-sticky-guest="1"] .v42-main {
+  padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Command strip — clearer command surface                                   */
+/* -------------------------------------------------------------------------- */
+
+.v43-command-strip-wrap {
+  margin-bottom: 0.35rem;
+}
+
+.v43-command-surface.mcb-inner {
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid rgba(110, 231, 255, 0.14);
+  background: linear-gradient(165deg, rgba(17, 24, 39, 0.95), rgba(9, 11, 18, 0.88));
+}
+
+.v43-command-surface .mcb-top-strip {
+  margin-bottom: 0.35rem;
+}
+
+.v43-command-surface .mcb-title {
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent, #6ee7ff);
+}
+
+.v43-command-surface .mcb-env-strip {
+  margin-bottom: 0.45rem;
+  gap: 0.4rem;
+}
+
+.v43-command-surface .mcb-stats {
+  margin-top: 0.45rem;
+  font-size: 0.82rem;
+}
+
+@media (min-width: 960px) {
+  .v43-command-strip-wrap .v43-command-surface.mcb-inner {
+    padding: 0.75rem 0.95rem;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Shared Spaces — tactical board                                            */
+/* -------------------------------------------------------------------------- */
+
+.v43-spaces-board-outer {
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.22);
+  padding: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.v43-spaces-lede {
+  font-size: 0.82rem;
+  margin-bottom: 0.25rem !important;
+}
+
+#shared-space-grid.v43-tactical-board {
+  gap: 0.55rem;
+}
+
+.v43-zone-module.shared-space-card {
+  border-radius: 10px;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(17, 24, 39, 0.55);
+  box-shadow: none;
+}
+
+.v43-zone-module .shared-space-head h4 {
+  font-size: 0.98rem;
+}
+
+.v43-zone-module .room-pressure-row {
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0.35rem 0;
+}
+
+.v43-zone-module .room-state-chip {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.38rem;
+  border-radius: 6px;
+}
+
+.v43-zone-module .shared-space-headline {
+  font-size: 0.9rem;
+  margin: 0.25rem 0;
+}
+
+.v43-zone-module .action-group {
+  margin-top: 0.45rem;
+}
+
+.v43-zone-module .room-service-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+}
+
+.v43-zone-module .room-service-row .button:nth-child(1) {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 960px) {
+  #shared-space-grid.v43-tactical-board {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem 0.55rem;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 720px) {
+  .v43-zone-module .room-service-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Cameras — surveillance wall                                                */
+/* -------------------------------------------------------------------------- */
+
+#cameras-panel .camera-grid {
+  gap: 0.45rem;
+}
+
+.v43-camera-tile.camera-card {
+  padding: 0.45rem 0.5rem 0.55rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(8, 10, 16, 0.92);
+}
+
+.v43-camera-tile .camera-preview {
+  border-radius: 8px;
+  min-height: 72px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 0 24px rgba(0, 0, 0, 0.45),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.v43-camera-tile h4 {
+  font-size: 0.92rem;
+  margin: 0.35rem 0 0.15rem;
+}
+
+.v43-camera-tile .camera-meta {
+  font-size: 0.78rem;
+  margin: 0.12rem 0;
+  line-height: 1.3;
+}
+
+.v43-camera-tile .camera-investigate-btn {
+  margin-top: 0.35rem;
+  width: 100%;
+}
+
+.v43-camera-tile.is-actionable {
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+@media (min-width: 960px) {
+  #cameras-panel .camera-grid {
+    gap: 0.5rem 0.55rem;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Rooms — tighter blocks                                                     */
+/* -------------------------------------------------------------------------- */
+
+.v43-room-surface.room-card {
+  padding: 0.55rem 0.6rem;
+  border-radius: 10px;
+}
+
+.v43-room-surface .room-card-header {
+  margin-bottom: 0.35rem;
+}
+
+.v43-room-surface .room-card-header h4 {
+  font-size: 0.95rem;
+}
+
+.v43-room-surface.room-card-vacant,
+.v43-room-surface.room-card-locked {
+  opacity: 0.88;
+  padding: 0.45rem 0.55rem;
+}
+
+.v43-room-surface .room-tactical-row,
+.v43-room-surface .room-service-row {
+  gap: 0.35rem;
+}
+
+@media (max-width: 900px) {
+  .v43-room-surface .room-tactical-row,
+  .v43-room-surface .room-service-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .v43-room-surface .room-tactical-row .button,
+  .v43-room-surface .room-service-row .button {
+    width: 100%;
+    min-height: 2.65rem;
+    font-size: 0.82rem;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Power — industrial console                                                  */
+/* -------------------------------------------------------------------------- */
+
+#power-panel.panel-v41--power .v32-breaker-board,
+#power-panel.panel-v41--power .v41-breaker-shell {
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+}
+
+#power-panel.panel-v41--power .v32-breaker-hint {
+  font-size: 0.78rem;
+  margin: 0.25rem 0 0.4rem;
+}
+
+#power-panel.panel-v41--power .v32-breaker-grid {
+  gap: 0.35rem;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Report — payoff rhythm                                                      */
+/* -------------------------------------------------------------------------- */
+
+.v43-incident-log .report-section {
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.v43-incident-log .report-section:last-child {
+  border-bottom: none;
+}
+
+.v43-incident-log .report-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.15rem 0 0.35rem;
+}
+
+.v43-incident-log .report-section-title {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent, #6ee7ff);
+}
+
+.v43-incident-log .report-section-count {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-main, #f1f5f9);
+}
+
+.v43-incident-log .log-item {
+  padding: 0.35rem 0.4rem;
+  gap: 0.45rem;
+  align-items: flex-start;
+}
+
+.v43-incident-log .log-pill {
+  font-size: 0.62rem;
+  padding: 0.08rem 0.28rem;
+  border-radius: 4px;
+}
+
+.v43-incident-log .log-text {
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+#report-panel.panel-v41--report .report-panel-actions .button.button-primary {
+  font-size: 1rem;
+  padding: 0.75rem 1.2rem;
+}
