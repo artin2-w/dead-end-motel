@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dead End Motel v0.41</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Dead End Motel v0.42</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -28,12 +28,13 @@
   <link rel="stylesheet" href="styles/v39-winter.css" />
   <link rel="stylesheet" href="styles/v40-basement.css" />
   <link rel="stylesheet" href="styles/v41-polish.css" />
+  <link rel="stylesheet" href="styles/v42-mobile-command.css" />
 </head>
 <body>
-  <div id="app" class="app-shell screen-main-menu">
-    <header class="topbar topbar-v20" role="banner">
+  <div id="app" class="app-shell screen-main-menu v42-root">
+    <header class="topbar topbar-v20 v42-topbar" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.41</p>
+        <p class="eyebrow">Dead End Motel v0.42</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -70,7 +71,7 @@
       </div>
     </header>
 
-    <main>
+    <main class="v42-main">
       <section id="main-menu" class="screen active v41-main-menu">
         <div class="v41-menu-atmosphere" aria-hidden="true"></div>
         <div class="hero-card v41-menu-shell">
@@ -369,7 +370,7 @@
                 <h3>Night Report</h3>
               </div>
             </div>
-            <div class="report-panel-actions report-actions">
+            <div class="report-panel-actions report-actions v42-report-actions">
               <button id="review-incidents-btn" class="button button-secondary">Review Incidents</button>
               <button id="dispatch-staff-btn" class="button button-utility">Dispatch Staff</button>
               <button id="end-night-btn" class="button button-primary">End Night</button>

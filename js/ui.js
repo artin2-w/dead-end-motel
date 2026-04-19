@@ -1464,7 +1464,7 @@ export function renderGuests(
             ${guest.threadMemoryLine ? `<p class="guest-history-line">${guest.threadMemoryLine}</p>` : ''}
           </div>`
         : ''}
-      <div class="guest-action-stack">
+      <div class="guest-action-stack v42-guest-action-stack">
         <div class="action-group action-group-decide">
           <p class="action-group-label">Desk decision</p>
           <div class="action-group-body guest-action-row"></div>
@@ -1704,7 +1704,7 @@ export function renderRooms(
     }
     card.innerHTML = room.occupied
       ? `
-        <div class="room-card-v20-surface">
+        <div class="room-card-v20-surface v42-room-body">
           <div class="room-card-header">
             <h4>${room.label}</h4>
             <span class="room-condition-pill">${room.condition || 'Stable'}</span>
@@ -1752,7 +1752,7 @@ export function renderRooms(
                 : ''}
             </div>
           </details>
-          <div class="room-action-stack">
+          <div class="room-action-stack v42-room-action-stack">
             <div class="action-group">
               <p class="action-group-label">Service response</p>
               <div class="action-group-body room-service-row"></div>
@@ -1776,12 +1776,12 @@ export function renderRooms(
       const v20Surface = card.querySelector('.room-card-v20-surface');
       if (v20Surface) {
         const detailPanel = document.createElement('div');
-        detailPanel.className = 'room-detail-panel';
+        detailPanel.className = 'room-detail-panel v42-room-detail';
         card.replaceChild(detailPanel, v20Surface);
         detailPanel.appendChild(v20Surface);
 
         const overviewRow = document.createElement('div');
-        overviewRow.className = 'room-overview-row';
+        overviewRow.className = 'room-overview-row v42-room-overview';
         overviewRow.innerHTML =
           '<div class="room-overview-identity">' +
             '<h4>' + room.label + '</h4>' +
@@ -1932,6 +1932,7 @@ export function renderSharedSpaces(state) {
   const grid = document.getElementById('shared-space-grid');
   if (!grid) return;
   grid.innerHTML = '';
+  grid.classList.add('v42-shared-board');
 
   const _ssWeather = deriveWeatherState(state);
   const OUTDOOR_ZONE_IDS = [2, 6];
@@ -2057,7 +2058,9 @@ function getCameraStatusClass(status) {
 
 export function renderCameras(state) {
   const grid = document.getElementById('camera-grid');
+  if (!grid) return;
   grid.innerHTML = '';
+  grid.classList.add('v42-camera-grid');
   grid.classList.remove('camera-grid-glitch-light', 'camera-grid-glitch-heavy', 'camera-grid-scanline',
     'weather-clear', 'weather-fog', 'weather-cold', 'weather-rain', 'weather-storm');
   const cameraInterference = Number(state?.cameraInterferenceLevel || 0);
@@ -2218,7 +2221,7 @@ export function renderAnalogPowerExtras(state) {
             : String(analog.neon?.mode || '');
 
   root.innerHTML = `
-    <div class="v32-breaker-board v41-breaker-shell">
+    <div class="v32-breaker-board v41-breaker-shell v42-breaker-tight">
       <div class="v32-breaker-header">
         <span class="v32-breaker-title">Breaker board</span>
         <span class="v32-breaker-load ${analog.load > analog.budget ? 'is-over' : ''}" title="Load units vs safe budget under current weather and grid strain">
