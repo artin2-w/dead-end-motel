@@ -1,0 +1,75 @@
+/* v0.40 — Basement syndicate board + failure dead-drop */
+
+.v40-basement-mount {
+  margin-top: 0.5rem;
+}
+
+.v40-basement-card {
+  border: 1px solid rgba(140, 100, 160, 0.28);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  background: linear-gradient(165deg, rgba(18, 12, 22, 0.95), rgba(10, 8, 14, 0.9));
+}
+
+.v40-basement-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.v40-basement-heat {
+  font-size: 0.72rem;
+  color: rgba(240, 190, 210, 0.88);
+}
+
+.v40-basement-grid-echo {
+  font-size: 0.68rem;
+  color: rgba(200, 210, 230, 0.65);
+}
+
+.v40-basement-incident {
+  margin: 0.35rem 0;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(80, 40, 60, 0.35);
+  border: 1px solid rgba(200, 120, 140, 0.25);
+}
+
+.v40-basement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.v40-basement-actions .button {
+  font-size: 0.7rem !important;
+  padding: 0.24rem 0.45rem !important;
+}
+
+.v40-failure-dead-drop {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.55rem;
+  border-radius: 8px;
+  border: 1px dashed rgba(200, 180, 140, 0.35);
+  background: rgba(20, 16, 12, 0.55);
+}
+
+.v40-failure-dead-drop h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  color: rgba(230, 210, 180, 0.9);
+}
+
+.v40-dead-drop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.v40-dead-drop-actions .button {
+  font-size: 0.68rem !important;
+}

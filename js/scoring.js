@@ -83,7 +83,16 @@ const DEFAULT_SHIFT_STATS = {
   dawnIncineratorRuns: 0,
   dawnAuditorBlackmails: 0,
   fourAmFixerInvoked: 0,
-  room9FreezeSpikes: 0
+  room9FreezeSpikes: 0,
+  basementSkims: 0,
+  basementIncidentsSpawned: 0,
+  basementIncidentsResolved: 0,
+  basementSplitUpstairs: 0,
+  basementSplitDownstairs: 0,
+  basementDelayed: 0,
+  deadDropSealed: 0,
+  deadDropFound: 0,
+  deadDropCompromised: 0
 };
 
 function clampScore(value) {

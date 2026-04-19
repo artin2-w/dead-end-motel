@@ -71,7 +71,9 @@ export function getActionTimeCost(actionKey) {
     'dawn-shredder': 6,
     'dawn-incinerator': 11,
     'dawn-blackmail': 8,
-    'four-am-fixer': 4
+    'four-am-fixer': 4,
+    'basement-skim': 10,
+    'basement-resolve': 8
   };
 
   return costs[actionKey] ?? 0;

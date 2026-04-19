@@ -172,6 +172,20 @@ export function buildNightSummary(state) {
   if (Number(state?.shiftStats?.room9FreezeSpikes || 0) > 0) {
     identity.push('Deep freeze breached the sealed wing once — black water memory in the hallway, not just a story.');
   }
+  if (Number(state?.shiftStats?.basementSkims || 0) > 0 || Number(state?.shiftStats?.basementIncidentsResolved || 0) > 0) {
+    identity.push(
+      `Basement engine: ${Number(state.shiftStats.basementSkims || 0)} skim pull(s), ${Number(state.shiftStats.basementIncidentsResolved || 0)} downstairs incident(s) steered — the syndicate floor paid and punished in the same breath.`
+    );
+  }
+  if (Number(state?.shiftStats?.deadDropFound || 0) > 0) {
+    identity.push('Desk vent inheritance: a prior manager left you something — the motel remembered before you did.');
+  }
+  if (Number(state?.shiftStats?.deadDropSealed || 0) > 0) {
+    identity.push('One last fold into the vent before the lights died — a sealed drop for whoever inherits the desk next.');
+  }
+  if (Number(state?.shiftStats?.deadDropCompromised || 0) > 0) {
+    identity.push('Someone else found your inheritance thread first — the law smelled old panic in the vent.');
+  }
 
   const rw = state?.roadWorld;
   if (rw && typeof rw === 'object') {

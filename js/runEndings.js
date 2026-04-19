@@ -377,6 +377,9 @@ function evaluateGrade(snapshot) {
   if (n(snapshot.fourAmFixerInvokedTotal, 0) >= 1) score -= 1;
   if (n(snapshot.room9FreezeSpikesTotal, 0) >= 1) score -= 1;
   if (n(snapshot.dawnShredderPassesTotal, 0) >= 4) score -= 1;
+  if (n(snapshot.basementSkimsTotal, 0) >= 4) score -= 1;
+  if (n(snapshot.basementDelayedTotal, 0) >= 2) score -= 1;
+  if (n(snapshot.deadDropCompromisedTotal, 0) >= 1) score -= 1;
   // v0.34 convergence toll / survivor credit
   score -= Math.min(4, n(snapshot.trueCrisisNightsSurvived, 0) * 1.1);
   score += Math.min(3, n(snapshot.convergencePeakTier, 0) * 0.45);
@@ -500,7 +503,13 @@ export function buildRunEndingPackage(state) {
     dawnIncineratorRunsTotal: n(totals.dawnIncineratorRuns, 0),
     dawnAuditorBlackmailsTotal: n(totals.dawnAuditorBlackmails, 0),
     fourAmFixerInvokedTotal: n(totals.fourAmFixerInvoked, 0),
-    room9FreezeSpikesTotal: n(totals.room9FreezeSpikes, 0)
+    room9FreezeSpikesTotal: n(totals.room9FreezeSpikes, 0),
+    basementSkimsTotal: n(totals.basementSkims, 0),
+    basementIncidentsResolvedTotal: n(totals.basementIncidentsResolved, 0),
+    basementDelayedTotal: n(totals.basementDelayed, 0),
+    deadDropFoundTotal: n(totals.deadDropFound, 0),
+    deadDropCompromisedTotal: n(totals.deadDropCompromised, 0),
+    deadDropSealedTotal: n(totals.deadDropSealed, 0)
   };
 
   const ending = evaluateCategory(snapshot);
@@ -589,8 +598,14 @@ export function buildRunEndingPackage(state) {
     n(snapshot.room9FreezeSpikesTotal, 0) > 0
       ? `Deep-freeze horror: ${snapshot.room9FreezeSpikesTotal} sealed-line breach(es) under cold load.`
       : '',
+    n(snapshot.basementSkimsTotal, 0) + n(snapshot.basementIncidentsResolvedTotal, 0) > 0
+      ? `Basement syndicate: ${snapshot.basementSkimsTotal} skim(s), ${snapshot.basementIncidentsResolvedTotal} incident(s) resolved, ${snapshot.basementDelayedTotal} delayed call(s) that bought rumor.`
+      : '',
+    n(snapshot.deadDropSealedTotal, 0) + n(snapshot.deadDropFoundTotal, 0) > 0
+      ? `Manager dead drops: ${snapshot.deadDropSealedTotal} sealed in failure, ${snapshot.deadDropFoundTotal} inherited on later runs${snapshot.deadDropCompromisedTotal ? `, ${snapshot.deadDropCompromisedTotal} compromised by wrong hands` : ''}.`
+      : '',
     finaleIntegrationLine
-  ].slice(0, 14);
+  ].slice(0, 16);
 
   const tags = [
     `Difficulty: ${difficultyLabel}`,
@@ -651,8 +666,12 @@ export function buildRunEndingPackage(state) {
     n(snapshot.dawnIncineratorRunsTotal, 0) >= 2 ? 'Burned the Proof' : '',
     n(snapshot.fourAmFixerInvokedTotal, 0) >= 1 ? 'Fixer Debtor' : '',
     n(snapshot.room9FreezeSpikesTotal, 0) >= 1 ? 'Freeze Breach' : '',
-    n(snapshot.dawnShredderPassesTotal, 0) >= 3 ? 'Shredded Truth' : ''
-  ].filter(Boolean).slice(0, 18);
+    n(snapshot.dawnShredderPassesTotal, 0) >= 3 ? 'Shredded Truth' : '',
+    n(snapshot.basementSkimsTotal, 0) >= 5 ? 'Basement King' : '',
+    n(snapshot.basementIncidentsResolvedTotal, 0) >= 4 ? 'Underground Operator' : '',
+    n(snapshot.deadDropFoundTotal, 0) >= 1 ? 'Dead-Drop Survivor' : '',
+    n(snapshot.deadDropCompromisedTotal, 0) >= 1 ? 'Inherited Debt' : ''
+  ].filter(Boolean).slice(0, 22);
 
   return {
     key: ending.key,

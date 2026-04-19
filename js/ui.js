@@ -1044,11 +1044,51 @@ export function renderTopbar(state) {
   setTabBadge('cameras-tab-badge', unresolvedCameraCount);
   setTabBadge('spaces-tab-badge', sharedSpaceAttention);
   setTabBadge('report-tab-badge', reportAttention);
+  const basementTabBtn = document.getElementById('basement-tab-btn');
+  const bsUi = state?.basementUi;
+  if (basementTabBtn) {
+    basementTabBtn.hidden = !bsUi?.unlocked;
+    if (bsUi?.unlocked) {
+      const bBadge = bsUi.incident ? 2 : Number(bsUi.heat || 0) >= 5.5 ? 1 : 0;
+      setTabBadge('basement-tab-badge', bBadge);
+    } else {
+      setTabBadge('basement-tab-badge', 0);
+    }
+  }
 
   setPanelAttention('frontdesk-panel', (state?.guests?.length || 0) > 0);
   setPanelAttention('cameras-panel', unresolvedCameraCount > 0);
   setPanelAttention('spaces-panel', sharedSpaceAttention > 0);
   setPanelAttention('report-panel', reportAttention > 0);
+  setPanelAttention('basement-panel', Boolean(bsUi?.unlocked && (bsUi.incident || Number(bsUi.heat || 0) >= 4)));
+
+  const basementMount = document.getElementById('basement-board-mount');
+  if (basementMount) {
+    if (bsUi?.unlocked) {
+      const inc = bsUi.incident;
+      const incBlock = inc
+        ? `<div class="v40-basement-incident"><strong>${inc.label}</strong>${inc.split ? '<span class="muted"> · upstairs corridor also tightening</span>' : ''}</div>
+          <div class="v40-basement-actions">
+            <button type="button" class="button button-secondary" data-basement-focus="upstairs">Pull cover upstairs</button>
+            <button type="button" class="button button-secondary" data-basement-focus="basement">Hands downstairs</button>
+            <button type="button" class="button button-utility" data-basement-focus="delay">Delay / freeze</button>
+          </div>`
+        : '<p class="muted">No active downstairs crisis — the hole is quiet, not honest.</p>';
+      basementMount.innerHTML = `<div class="v40-basement-card">
+        <div class="v40-basement-head">
+          <span class="section-tag">Syndicate floor</span>
+          <span class="v40-basement-heat">Heat ${bsUi.heat}/10 · ${bsUi.heatLabel}</span>
+        </div>
+        <p class="muted v40-basement-grid-echo">Hidden draw echoes on breakers (~${bsUi.breakerEcho} budget pressure).</p>
+        ${incBlock}
+        <div class="v40-basement-actions">
+          <button type="button" class="button button-warning" data-basement-skim ${bsUi.skimmedTonight ? 'disabled' : ''}>Off-book skim</button>
+        </div>
+      </div>`;
+    } else {
+      basementMount.innerHTML = '<p class="muted">Basement not in play — keep dirty ledger quiet or push deeper corruption to open the trap.</p>';
+    }
+  }
 
   if (appShell) {
     const overlays = getOverlayOpenState(state);
@@ -2710,6 +2750,22 @@ function buildReportPriorityStrip(state) {
     )} · fixer ${Number(ss.fourAmFixerInvoked || 0)} · Room 9 freeze spike ${Number(ss.room9FreezeSpikes || 0)}`;
     strip.appendChild(wLine);
   }
+  if (
+    Number(ss.basementSkims || 0) > 0 ||
+    Number(ss.basementIncidentsResolved || 0) > 0 ||
+    Number(ss.deadDropFound || 0) > 0 ||
+    Number(ss.deadDropSealed || 0) > 0 ||
+    Number(ss.deadDropCompromised || 0) > 0
+  ) {
+    const bm = document.createElement('div');
+    bm.className = 'report-v40-basement-line';
+    bm.textContent = `Below grade: skims ${Number(ss.basementSkims || 0)} · downstairs incidents resolved ${Number(
+      ss.basementIncidentsResolved || 0
+    )} · dead drop sealed ${Number(ss.deadDropSealed || 0)} · inherited find ${Number(ss.deadDropFound || 0)} · vent compromised ${Number(
+      ss.deadDropCompromised || 0
+    )}`;
+    strip.appendChild(bm);
+  }
   return strip;
 }
 
@@ -2777,6 +2833,7 @@ export function renderLogs(state) {
     if (/\[border\]|\[witness\]|shaft route|fog lot|border transfer|circuit shave/i.test(v)) {
       return 'camera';
     }
+    if (/\[basement\]|\[dead drop\]/i.test(v)) return 'dirty';
     if (/(room 9|sealed corridor|sealed room|contamination|owner.*authorization|owner.*protected|owner.*override|do not enter|heat.*sensor.*corridor|housekeeping.*sealed|maintenance.*room.*scratched|rear.*sealed|feed.*flicker.*sealed|key.*room.*(no|not).*registered|prior shift.*do not)/.test(v)) return 'contamination';
     if (/(staff.*refused|mutiny|inside.*job|inside.*leak|compromised.*staff|staff.*falsif|dispatch.*inconsistency|internal.*irregularity|staff walkout|forced back.*work|staff.*bonus|dismissed.*shift|log entry.*crossed|repair ticket exceeded|dispatch timing.*slow|zone clear.*camera|filed as resolved.*room pressure)/.test(v)) return 'staff';
     if (/(off-book|unlogged stay|hidden payment|walk-in|dead drop|vending drop|hunters.*desk|hunters arrived|sheltered|shadow reputation|dirty cash|off-book stay|torn ledger|stained cash|hidden guest)/.test(v)) return 'dirty';
@@ -2848,7 +2905,7 @@ export function renderLogs(state) {
   });
 }
 
-export function renderFailure(failure) {
+export function renderFailure(failure, extra = null) {
   const failureCard = document.querySelector('#failure-screen .hero-card');
   if (failureCard) {
     failureCard.classList.add('failure-polish-card');
@@ -2857,6 +2914,23 @@ export function renderFailure(failure) {
   document.getElementById('failure-reason').textContent = failure?.reason || 'Motel Failure';
   document.getElementById('failure-text').textContent =
     failure?.text || 'The motel could not sustain operations for the rest of the night.';
+  const ddMount = document.getElementById('failure-dead-drop-mount');
+  if (ddMount) {
+    const offer = extra?.deadDropOffer;
+    if (offer?.eligible) {
+      ddMount.hidden = false;
+      const buttons = (offer.choices || [])
+        .map(
+          (c) =>
+            `<button type="button" class="button button-secondary" data-dead-drop-seal="${String(c.id || '').replace(/"/g, '')}">${c.label}</button>`
+        )
+        .join('');
+      ddMount.innerHTML = `<h4>Dead manager drop</h4><p class="muted">Seal one thing in the desk vent for a future run — optional, small, haunted.</p><div class="v40-dead-drop-actions">${buttons}</div>`;
+    } else {
+      ddMount.hidden = !offer?.reason;
+      ddMount.innerHTML = offer?.reason ? `<p class="muted">${offer.reason}</p>` : '';
+    }
+  }
   const retryBtn = document.getElementById('restart-night-btn');
   if (retryBtn) {
     retryBtn.title = 'Restore the exact frozen opening state of the current night.';
@@ -3526,9 +3600,10 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
         : '';
     const borderPrep = state?.borderPrepLine ? ` • ${state.borderPrepLine}` : '';
     const winterPrep = state?.finalWinterPrepLine ? ` • ${state.finalWinterPrepLine}` : '';
+    const basementPrep = state?.basementPrepLine ? ` • ${state.basementPrepLine}` : '';
     meta.textContent = `Prepare for Night ${nextNight}${milestoneText}${state?.nightMoodLine ? ` • ${state.nightMoodLine}` : ''}${
       state?.nightIdentityLine ? ` • ${state.nightIdentityLine}` : ''
-    }${borderPrep}${winterPrep}`;
+    }${borderPrep}${winterPrep}${basementPrep}`;
   }
   if (campaign) {
     campaign.textContent = state?.campaignProgress?.completedLabel || 'Campaign progress: 0 / 5 nights completed';

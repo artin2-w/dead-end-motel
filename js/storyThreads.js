@@ -238,6 +238,15 @@ const EVIDENCE_CATALOG = [
     provenanceHint: 'dirty'
   },
   {
+    id: 'prior-manager-vent-slip',
+    type: 'desk',
+    category: 'mystery',
+    label: 'Prior Manager Vent Slip',
+    desc: 'Grease-pencil on thermal paper, folded thin — a name crossed out and "basement counts twice" underlined once.',
+    uvReactive: true,
+    provenanceHint: 'desk'
+  },
+  {
     id: 'lost-found-object',
     type: 'object',
     category: 'mystery',

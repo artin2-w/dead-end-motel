@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dead End Motel v0.39</title>
+  <title>Dead End Motel v0.40</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -26,12 +26,13 @@
   <link rel="stylesheet" href="styles/v37-operator.css" />
   <link rel="stylesheet" href="styles/v38-border.css" />
   <link rel="stylesheet" href="styles/v39-winter.css" />
+  <link rel="stylesheet" href="styles/v40-basement.css" />
 </head>
 <body>
   <div id="app" class="app-shell screen-main-menu">
     <header class="topbar topbar-v20" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.39</p>
+        <p class="eyebrow">Dead End Motel v0.40</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -144,6 +145,10 @@
             <span id="spaces-tab-badge" class="tab-attention-badge" hidden>0</span>
           </button>
           <button class="tab-button" data-panel="power-panel">Power</button>
+          <button type="button" class="tab-button" data-panel="basement-panel" id="basement-tab-btn" hidden>
+            <span>Basement</span>
+            <span id="basement-tab-badge" class="tab-attention-badge" hidden>0</span>
+          </button>
           <button class="tab-button" data-panel="report-panel">
             <span>Report</span>
             <span id="report-tab-badge" class="tab-attention-badge" hidden>0</span>
@@ -281,6 +286,17 @@
             </div>
             <p class="muted microcopy-line">Live situation board: pressure routes, spillover, and what to do next.</p>
             <div id="shared-space-grid" class="shared-space-grid shared-space-board"></div>
+          </section>
+
+          <section id="basement-panel" class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="section-tag">Below Grade</p>
+                <h3>Basement Syndicate</h3>
+              </div>
+            </div>
+            <p class="muted microcopy-line">Off-book floor — high dirty money, real violence, grid drag. Optional until the ledger pulls you under.</p>
+            <div id="basement-board-mount" class="v40-basement-mount" aria-live="polite"></div>
           </section>
 
           <section id="power-panel" class="panel">
@@ -463,6 +479,7 @@
             <p id="failure-text" class="failure-text">
               The motel lost all usable power and operations failed across the property.
             </p>
+            <div id="failure-dead-drop-mount" class="v40-failure-dead-drop" hidden></div>
           </div>
           <div class="hero-actions">
             <button id="restart-night-btn" class="button button-primary">Retry Current Night</button>

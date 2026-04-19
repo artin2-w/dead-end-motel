@@ -97,6 +97,11 @@ export function getBreakerBudget(state) {
   if (w === 'fog') b -= 1;
   const boil = Number(state?.finalWinter?.boilerStrain || 0);
   if (boil >= 8) b -= 1;
+  const bs = state?.basementSyndicate;
+  if (bs && typeof bs === 'object' && bs.unlockedEver) {
+    const bh = Number(bs.heat || 0);
+    b -= Math.min(2, Math.floor(bh / 3) + (bs.incident ? 1 : 0));
+  }
   b -= blackoutStrainLevel(state);
   const pressure = state?.uiPressureLevel || 'calm';
   if (pressure === 'emergency' || pressure === 'dire') b -= 1;

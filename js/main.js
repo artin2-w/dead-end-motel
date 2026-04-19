@@ -155,6 +155,17 @@ import {
   buildFinalWinterPrepLine
 } from './finalWinter.js';
 import {
+  normalizeBasementSyndicate,
+  evaluateBasementUnlock,
+  tickBasementSyndicateDuringShift,
+  resolveBasementIncidentFocus,
+  takeBasementSkim,
+  resetBasementNightFlags,
+  buildBasementRenderModel,
+  buildBasementPrepLine
+} from './basementSyndicate.js';
+import { buildDeadDropFailureOffer, sealManagerDeadDrop, tryRevealManagerDeadDrop } from './deadDropLegacy.js';
+import {
   evaluateCampaignConvergence,
   recordCampaignConvergenceNight,
   normalizeCampaignCollapseStats,
@@ -5460,6 +5471,51 @@ function handleFourAmFixer() {
   renderAll();
 }
 
+function handleBasementFocus(focus) {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  ensureCrisisEscalationState(state);
+  const res = resolveBasementIncidentFocus(state, String(focus || ''));
+  if (!res.ok) {
+    pushLiveAlert(state, { type: 'warning', message: res.reason || 'No basement incident.', dedupeKey: 'basement-focus-fail' });
+    renderAll();
+    return;
+  }
+  if (progressShift('basement-resolve', { timeScale: 0.45, skipPassiveDrain: false })) return;
+  renderAll();
+}
+
+function handleBasementSkim() {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const res = takeBasementSkim(state);
+  if (!res.ok) {
+    pushLiveAlert(state, { type: 'warning', message: res.reason || 'Cannot skim.', dedupeKey: 'basement-skim-fail' });
+    renderAll();
+    return;
+  }
+  if (progressShift('basement-skim', { timeScale: 0.55, skipPassiveDrain: false })) return;
+  renderAll();
+}
+
+function handleDeadDropSeal(choiceId) {
+  if (activeScreenId !== 'failure-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const res = sealManagerDeadDrop(metaState, String(choiceId || ''), state);
+  metaState = res.meta;
+  saveMetaSafe();
+  if (!res.ok) {
+    pushLiveAlert(state, { type: 'warning', message: res.reason || 'Cannot seal drop.', dedupeKey: 'dead-drop-fail' });
+    renderAll();
+    return;
+  }
+  pushLiveAlert(state, { type: 'info', message: 'Dead drop sealed in the vent — a future manager may inherit it.', dedupeKey: 'dead-drop-ok' });
+  renderAll();
+}
+
 function handleFundDrifterNetwork() {
   if (activeScreenId !== 'game-screen') return;
   onMeaningfulAction();
@@ -5759,6 +5815,9 @@ function buildRenderState() {
     })(),
     winterUi: buildFinalWinterRenderModel(state),
     finalWinterPrepLine: buildFinalWinterPrepLine(state),
+    basementUi: buildBasementRenderModel(state),
+    basementPrepLine: buildBasementPrepLine(state),
+    deadDropFailureOffer: buildDeadDropFailureOffer(metaState, state),
     roadWorldUi: (() => {
       normalizeRoadWorldState(state);
       return {
@@ -6400,6 +6459,15 @@ function bootstrapState() {
   normalizeIdentitySystems();
   normalizeRunMemoryState();
   normalizeCampaignSystems();
+  normalizeBasementSyndicate(state);
+  evaluateBasementUnlock(state);
+  if (saved && Number(state.night) >= 2) {
+    const _ddrBoot = tryRevealManagerDeadDrop(metaState, state);
+    if (_ddrBoot.meta) {
+      metaState = _ddrBoot.meta;
+      saveMetaSafe();
+    }
+  }
   refreshProgressionDerivedState();
   state.autoIncidentCooldown =
     typeof state.autoIncidentCooldown === 'number' ? state.autoIncidentCooldown : 0;
@@ -6512,6 +6580,9 @@ function renderAll() {
   renderHelpOverlay(renderState);
   renderSettingsOverlay(renderState);
   renderLogs(state);
+  if (activeScreenId === 'failure-screen' && state?.failedState) {
+    renderFailure(state.failedState, { deadDropOffer: buildDeadDropFailureOffer(metaState, state) });
+  }
   if (window.DeadEndPhase2?.decorateUi) {
     window.DeadEndPhase2.decorateUi();
   }
@@ -6779,6 +6850,8 @@ function startShift() {
   state = normalizeRoomServiceState(state);
   refreshIntakeBudgetForNight(state);
   normalizeFinalWinterState(state);
+  normalizeBasementSyndicate(state);
+  evaluateBasementUnlock(state);
   normalizeIntakeState(state);
   normalizeDeskInspectionState(state);
   ensureCrisisNightState(state);
@@ -8997,7 +9070,7 @@ function checkFailureState() {
     dedupeKey: `failure-${failure.code || 'unknown'}-${state.night}`
   });
   audioController.playFailure();
-  renderFailure(failure);
+  renderFailure(failure, { deadDropOffer: buildDeadDropFailureOffer(metaState, state) });
   setActiveScreen('failure-screen');
   return true;
 }
@@ -9092,6 +9165,7 @@ function progressShift(actionKey, options = {}) {
   }
   tickDawnAuditor(state, (a) => pushLiveAlert(state, a));
   tickFinalWinterDuringShift(state, (a) => pushLiveAlert(state, a));
+  tickBasementSyndicateDuringShift(state, (a) => pushLiveAlert(state, a));
   const tapeTickResult = tickForensicTape(state);
   if (tapeTickResult?.alert) {
     pushLiveAlert(state, tapeTickResult.alert);
@@ -12097,6 +12171,7 @@ function nextNight() {
   cleanupTransientUiState('next-night');
   updateOnboarding((current) => markTutorialEvent(current, 'prep-opened'));
   state.night += 1;
+  state.deadDropRevealRolledNight = null;
   applyFixerDebtIfDue(state);
   state.failedState = null;
   state.pendingRunCompletion = false;
@@ -12147,6 +12222,11 @@ function nextNight() {
   refreshIntakeBudgetForNight(state);
   applyRivalSkimToIntake(state);
   normalizeIntakeState(state);
+  normalizeBasementSyndicate(state);
+  if (state.basementSyndicate?.unlockedEver) {
+    state.basementSyndicate.heat = Math.max(0, n(state.basementSyndicate.heat, 0) - 0.55);
+  }
+  resetBasementNightFlags(state);
   ensureCrisisNightState(state);
   state.activeEvents = [];
   state.incidents = [];
@@ -12159,6 +12239,11 @@ function nextNight() {
   resetBorderTransferForNewNight(state);
   resetFinalWinterPerNight(state);
   bumpRivalPressureOnPrep(state);
+  const _ddrNext = tryRevealManagerDeadDrop(metaState, state);
+  if (_ddrNext.meta) {
+    metaState = _ddrNext.meta;
+    saveMetaSafe();
+  }
   if (darkWebContractsEnabled(state)) {
     applyDarkContractRuntime(state, state.endlessRun.selectedDarkContractId);
     applyContractAnalogHooks(state);
@@ -12248,6 +12333,15 @@ function nextNight() {
 
 function bindEvents() {
   const moveToMainMenuSafely = () => {
+    if (activeScreenId === 'failure-screen') {
+      if (!confirmIfNeeded('Return to main menu? This failed run will be logged in your archive.')) {
+        return;
+      }
+      tryRecordCampaignFailureMeta();
+      setActiveScreen('main-menu');
+      renderAll();
+      return;
+    }
     const riskyScreens = new Set(['game-screen', 'summary-screen', 'night-prep-screen']);
     if (!riskyScreens.has(activeScreenId)) {
       setActiveScreen('main-menu');
@@ -12325,6 +12419,20 @@ function bindEvents() {
       }
       if (e.target.closest('[data-four-am-fixer]')) {
         handleFourAmFixer();
+        e.preventDefault();
+      }
+      const bsf = e.target.closest('[data-basement-focus]');
+      if (bsf && activeScreenId === 'game-screen') {
+        handleBasementFocus(bsf.getAttribute('data-basement-focus'));
+        e.preventDefault();
+      }
+      if (e.target.closest('[data-basement-skim]') && activeScreenId === 'game-screen') {
+        handleBasementSkim();
+        e.preventDefault();
+      }
+      const dds = e.target.closest('[data-dead-drop-seal]');
+      if (dds && activeScreenId === 'failure-screen') {
+        handleDeadDropSeal(dds.getAttribute('data-dead-drop-seal'));
         e.preventDefault();
       }
       if (e.target.closest('[data-road-fund-drifters]')) {

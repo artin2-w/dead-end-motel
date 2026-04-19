@@ -53,7 +53,9 @@ const DEFAULT_META_STATE = Object.freeze({
     money: 0
   },
   lastRunReward: null,
-  lastUpdatedAt: 0
+  lastUpdatedAt: 0,
+  /** @type {null | { kind: string, cash?: number, evidenceTemplateId?: string|null, noteLine?: string, sourceNight?: number, bagmanTagged?: boolean }} */
+  managerDeadDrop: null
 });
 
 const META_PERK_CATALOG = Object.freeze([
@@ -269,7 +271,19 @@ export function normalizeMetaState(rawMeta = {}) {
     selectedPerkId: base.selectedPerkId ? String(base.selectedPerkId) : null,
     bestCampaignStats: normalizeBestStats(base.bestCampaignStats),
     lastRunReward: base.lastRunReward && typeof base.lastRunReward === 'object' ? base.lastRunReward : null,
-    lastUpdatedAt: Math.max(0, clamp(base.lastUpdatedAt, 0))
+    lastUpdatedAt: Math.max(0, clamp(base.lastUpdatedAt, 0)),
+    managerDeadDrop: (() => {
+      const d = base.managerDeadDrop;
+      if (!d || typeof d !== 'object') return null;
+      return {
+        kind: String(d.kind || 'note'),
+        cash: Math.max(0, Math.min(55, toNumber(d.cash, 0))),
+        evidenceTemplateId: d.evidenceTemplateId ? String(d.evidenceTemplateId) : null,
+        noteLine: String(d.noteLine || '').slice(0, 240),
+        sourceNight: Math.max(0, toNumber(d.sourceNight, 0)),
+        bagmanTagged: Boolean(d.bagmanTagged)
+      };
+    })()
   };
 
   if (normalized.selectedPerkId && !normalized.purchasedPerkIds.includes(normalized.selectedPerkId)) {
