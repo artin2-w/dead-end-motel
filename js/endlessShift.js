@@ -1,8 +1,10 @@
 /**
  * v0.35 — Endless shift mode, dark-web contracts, dawn auditor / exposure.
+ * v0.39 — Winter ledger audits + trace exposure hooks (finalWinter).
  */
 
 import { SHIFT_DURATION_MINUTES } from './nightCycle.js';
+import { maybeRollWinterLedgerAudit, dawnExposureAdjustments } from './finalWinter.js';
 
 const DAWN_CLEANUP_START = SHIFT_DURATION_MINUTES - 16;
 const DAWN_WARNING_AT = SHIFT_DURATION_MINUTES - 22;
@@ -190,7 +192,9 @@ export function normalizeDawnAuditorState(state) {
     cleanupWindow: Boolean(da.cleanupWindow),
     cleanupUsed: n(da.cleanupUsed, 0),
     exposureEstimate: n(da.exposureEstimate, 0),
-    outcomeBand: String(da.outcomeBand || '')
+    outcomeBand: String(da.outcomeBand || ''),
+    kind: String(da.kind || ''),
+    blackmailUsed: Boolean(da.blackmailUsed)
   };
   return state;
 }
@@ -261,9 +265,14 @@ export function rollDawnAuditor(state) {
     cleanupWindow: false,
     cleanupUsed: 0,
     exposureEstimate: 0,
-    outcomeBand: ''
+    outcomeBand: '',
+    kind: '',
+    blackmailUsed: false
   };
-  if (!darkWebContractsEnabled(state)) return;
+  if (!darkWebContractsEnabled(state)) {
+    maybeRollWinterLedgerAudit(state);
+    return;
+  }
   const dirty = n(state?.dirtyLedger?.dirtyScore, n(state?.dirtyLedger?.totalDirtyMoney, 0) / 25);
   const town = n(state?.townState?.townSuspicion, 0);
   const locker = Array.isArray(state?.evidenceLocker?.items) ? state.evidenceLocker.items.length : 0;
@@ -271,8 +280,12 @@ export function rollDawnAuditor(state) {
   const heat = dirty * 1.2 + town * 0.45 + locker * 0.35 + missed * 1.5;
   let chance = Math.min(0.5, 0.07 + heat * 0.028);
   chance += n(state?.contractRuntime?.auditorChanceBonus, 0);
-  if (Math.random() > chance) return;
+  if (Math.random() > chance) {
+    maybeRollWinterLedgerAudit(state);
+    return;
+  }
   state.dawnAuditor.active = true;
+  state.dawnAuditor.kind = 'broker';
   state.logs.push('Anonymous tip: an outside inspector may walk the lobby at dawn looking for visible mess.');
 }
 
@@ -318,7 +331,8 @@ export function computeDawnExposure(state) {
     unresolved * 1.1;
   score -= uv * 1.1;
   if (n(state?.shiftStats?.nightEventsResolved, 0) >= 2) score -= 1.2;
-  if (n(state?.dawnAuditor?.cleanupUsed, 0) >= 1) score -= 3.5;
+  if (n(state?.dawnAuditor?.cleanupUsed, 0) >= 1 && !state?.dawnAuditor?.blackmailUsed) score -= 3.5;
+  score += dawnExposureAdjustments(state);
   return Math.max(0, Math.round(score * 10) / 10);
 }
 
@@ -368,6 +382,9 @@ export function resolveDawnAuditorAtDawn(state) {
     lines.push('Dawn auditor: severe — visible mess and paperwork trail draw real heat.');
     state.endlessRun = state.endlessRun || {};
     state.endlessRun.auditorFails = n(state.endlessRun.auditorFails, 0) + 1;
+  }
+  if (state.dawnAuditor.blackmailUsed) {
+    lines.push('Dawn ledger: leverage burned — the inspector chose silence over paperwork.');
   }
   state.dawnAuditor.outcomeBand = band;
   state.dawnAuditor.active = false;

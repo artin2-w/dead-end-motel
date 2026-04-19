@@ -372,6 +372,11 @@ function evaluateGrade(snapshot) {
   if (n(snapshot.operatorHallucinationsTotal, 0) >= 2) score -= 1;
   if (n(snapshot.borderBlindWindowsTotal, 0) >= 3 && n(snapshot.borderWitnessEventsTotal, 0) >= 2) score -= 1;
   if (n(snapshot.borderDropEventsTotal, 0) >= 2 && snapshot.reputation >= 52) score += 1;
+  if (n(snapshot.dawnAuditorBlackmailsTotal, 0) >= 1) score -= 2;
+  if (n(snapshot.dawnIncineratorRunsTotal, 0) >= 2) score -= 1;
+  if (n(snapshot.fourAmFixerInvokedTotal, 0) >= 1) score -= 1;
+  if (n(snapshot.room9FreezeSpikesTotal, 0) >= 1) score -= 1;
+  if (n(snapshot.dawnShredderPassesTotal, 0) >= 4) score -= 1;
   // v0.34 convergence toll / survivor credit
   score -= Math.min(4, n(snapshot.trueCrisisNightsSurvived, 0) * 1.1);
   score += Math.min(3, n(snapshot.convergencePeakTier, 0) * 0.45);
@@ -490,7 +495,12 @@ export function buildRunEndingPackage(state) {
     borderBlindWindowsTotal: n(totals.borderBlindWindows, 0),
     borderDropEventsTotal: n(totals.borderDropEvents, 0),
     borderWitnessEventsTotal: n(totals.borderWitnessEvents, 0),
-    borderShaftDispatchesTotal: n(totals.borderShaftDispatches, 0)
+    borderShaftDispatchesTotal: n(totals.borderShaftDispatches, 0),
+    dawnShredderPassesTotal: n(totals.dawnShredderPasses, 0),
+    dawnIncineratorRunsTotal: n(totals.dawnIncineratorRuns, 0),
+    dawnAuditorBlackmailsTotal: n(totals.dawnAuditorBlackmails, 0),
+    fourAmFixerInvokedTotal: n(totals.fourAmFixerInvoked, 0),
+    room9FreezeSpikesTotal: n(totals.room9FreezeSpikes, 0)
   };
 
   const ending = evaluateCategory(snapshot);
@@ -570,8 +580,17 @@ export function buildRunEndingPackage(state) {
     n(snapshot.borderBlindWindowsTotal, 0) > 0
       ? `Fog corridor: ${snapshot.borderBlindWindowsTotal} blind window${snapshot.borderBlindWindowsTotal === 1 ? '' : 's'} opened, ${snapshot.borderDropEventsTotal} transfer beat${snapshot.borderDropEventsTotal === 1 ? '' : 's'}, ${snapshot.borderWitnessEventsTotal} witness spike${snapshot.borderWitnessEventsTotal === 1 ? '' : 's'}, ${snapshot.borderShaftDispatchesTotal} shaft dispatch${snapshot.borderShaftDispatchesTotal === 1 ? '' : 'es'}.`
       : '',
+    n(snapshot.dawnShredderPassesTotal, 0) + n(snapshot.dawnIncineratorRunsTotal, 0) + n(snapshot.dawnAuditorBlackmailsTotal, 0) > 0
+      ? `Final winter ledger: ${snapshot.dawnShredderPassesTotal} shred passes, ${snapshot.dawnIncineratorRunsTotal} furnace runs, ${snapshot.dawnAuditorBlackmailsTotal} blackmail beat(s) on dawn inspectors.`
+      : '',
+    n(snapshot.fourAmFixerInvokedTotal, 0) > 0
+      ? `4 AM fixer invoked ${snapshot.fourAmFixerInvokedTotal} time(s) — panic converted to off-book obligation.`
+      : '',
+    n(snapshot.room9FreezeSpikesTotal, 0) > 0
+      ? `Deep-freeze horror: ${snapshot.room9FreezeSpikesTotal} sealed-line breach(es) under cold load.`
+      : '',
     finaleIntegrationLine
-  ].slice(0, 11);
+  ].slice(0, 14);
 
   const tags = [
     `Difficulty: ${difficultyLabel}`,
@@ -627,8 +646,13 @@ export function buildRunEndingPackage(state) {
     n(snapshot.operatorHallucinationsTotal, 0) >= 2 ? 'Strain Bleed' : '',
     n(snapshot.borderBlindWindowsTotal, 0) >= 4 ? 'Fog Transfer Veteran' : '',
     n(snapshot.borderWitnessEventsTotal, 0) >= 2 ? 'Witness Heat' : '',
-    n(snapshot.borderShaftDispatchesTotal, 0) >= 3 ? 'Shaft Runner' : ''
-  ].filter(Boolean).slice(0, 14);
+    n(snapshot.borderShaftDispatchesTotal, 0) >= 3 ? 'Shaft Runner' : '',
+    n(snapshot.dawnAuditorBlackmailsTotal, 0) >= 1 ? 'Blackmailed Dawn' : '',
+    n(snapshot.dawnIncineratorRunsTotal, 0) >= 2 ? 'Burned the Proof' : '',
+    n(snapshot.fourAmFixerInvokedTotal, 0) >= 1 ? 'Fixer Debtor' : '',
+    n(snapshot.room9FreezeSpikesTotal, 0) >= 1 ? 'Freeze Breach' : '',
+    n(snapshot.dawnShredderPassesTotal, 0) >= 3 ? 'Shredded Truth' : ''
+  ].filter(Boolean).slice(0, 18);
 
   return {
     key: ending.key,

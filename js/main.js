@@ -140,6 +140,21 @@ import {
   noteShaftDispatchOutcome
 } from './borderTransfer.js';
 import {
+  normalizeFinalWinterState,
+  resetFinalWinterPerNight,
+  bumpRivalPressureOnPrep,
+  applyRivalSkimToIntake,
+  tickFinalWinterDuringShift,
+  hasAuditorBlackmailLeverage,
+  applyDeskShredderPass,
+  applyBasementIncineratorPass,
+  applyAuditorBlackmailPass,
+  applyFourAmFixer,
+  applyFixerDebtIfDue,
+  buildFinalWinterRenderModel,
+  buildFinalWinterPrepLine
+} from './finalWinter.js';
+import {
   evaluateCampaignConvergence,
   recordCampaignConvergenceNight,
   normalizeCampaignCollapseStats,
@@ -831,6 +846,7 @@ function normalizeCampaignSystems() {
   state.metaRunState.rerollAvailable = Boolean(state.metaRunState.rerollAvailable);
   state.metaRunState.rerollUsed = Boolean(state.metaRunState.rerollUsed);
   state.metaRunState.clueBoost = Boolean(state.metaRunState.clueBoost);
+  state.metaRunState.fourAmFixerUsed = Boolean(state.metaRunState.fourAmFixerUsed);
   state.runSetup = normalizeRunSetup(state?.runSetup || createDefaultRunSetup());
   normalizeEndlessRunState(state);
   normalizeContractRuntime(state);
@@ -5388,6 +5404,62 @@ function handleDawnAuditorCleanup() {
   renderAll();
 }
 
+function handleDawnShredder() {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const res = applyDeskShredderPass(state);
+  if (!res.ok) {
+    pushLiveAlert(state, { type: 'warning', message: res.reason || 'Cannot shred.', dedupeKey: 'dawn-shred-fail' });
+    renderAll();
+    return;
+  }
+  if (progressShift('dawn-shredder', { timeScale: 0.12, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+function handleDawnIncinerator() {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const res = applyBasementIncineratorPass(state);
+  if (!res.ok) {
+    pushLiveAlert(state, { type: 'warning', message: res.reason || 'Cannot run furnace.', dedupeKey: 'dawn-incin-fail' });
+    renderAll();
+    return;
+  }
+  if (progressShift('dawn-incinerator', { timeScale: 0.18, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+function handleDawnBlackmail() {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const res = applyAuditorBlackmailPass(state);
+  if (!res.ok) {
+    pushLiveAlert(state, { type: 'warning', message: res.reason || 'No leverage play available.', dedupeKey: 'dawn-bm-fail' });
+    renderAll();
+    return;
+  }
+  if (progressShift('dawn-blackmail', { timeScale: 0.14, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
+function handleFourAmFixer() {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  const res = applyFourAmFixer(state);
+  if (!res.ok) {
+    pushLiveAlert(state, { type: 'warning', message: res.reason || 'Fixer unavailable.', dedupeKey: 'fixer-fail' });
+    renderAll();
+    return;
+  }
+  if (progressShift('four-am-fixer', { timeScale: 0.1, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
 function handleFundDrifterNetwork() {
   if (activeScreenId !== 'game-screen') return;
   onMeaningfulAction();
@@ -5662,16 +5734,31 @@ function buildRenderState() {
     })(),
     dawnAuditorUi: (() => {
       normalizeDawnAuditorState(state);
+      normalizeFinalWinterState(state);
       const da = state.dawnAuditor || {};
       return {
         active: Boolean(da.active),
         warned: Boolean(da.warned),
         cleanupWindow: Boolean(da.cleanupWindow),
         cleanupUsed: Number(da.cleanupUsed || 0),
+        kind: String(da.kind || ''),
+        blackmailUsed: Boolean(da.blackmailUsed),
         exposurePreview: da.active ? computeDawnExposure(state) : null,
-        onCleanup: handleDawnAuditorCleanup
+        onCleanup: handleDawnAuditorCleanup,
+        blackmailAvailable:
+          Boolean(da.active && da.cleanupWindow) &&
+          hasAuditorBlackmailLeverage(state) &&
+          !da.blackmailUsed &&
+          Number(da.cleanupUsed || 0) < 1,
+        canShred: Boolean(da.active && da.cleanupWindow && Number(state.finalWinter?.shredderUses || 0) < 2),
+        canIncinerate: Boolean(da.active && da.cleanupWindow && Number(state.finalWinter?.incineratorUses || 0) < 1),
+        onShred: handleDawnShredder,
+        onIncinerate: handleDawnIncinerator,
+        onBlackmail: handleDawnBlackmail
       };
     })(),
+    winterUi: buildFinalWinterRenderModel(state),
+    finalWinterPrepLine: buildFinalWinterPrepLine(state),
     roadWorldUi: (() => {
       normalizeRoadWorldState(state);
       return {
@@ -6530,7 +6617,8 @@ function startFreshCampaignRun() {
     rerollAvailable: false,
     rerollUsed: false,
     clueBoost: false,
-    selectedPerkId: null
+    selectedPerkId: null,
+    fourAmFixerUsed: false
   };
   state.runSetup = createDefaultRunSetup();
   state.runModifiers = getRunSetupModifierProfile(state.runSetup);
@@ -6674,7 +6762,7 @@ function startShift() {
     rollDawnAuditor(state);
   } else {
     clearContractRuntime(state);
-    normalizeDawnAuditorState(state);
+    rollDawnAuditor(state);
   }
   state.runModifiers = mergeDarkContractIntoRunModifiers(
     getRunSetupModifierProfile(state.runSetup),
@@ -6690,6 +6778,7 @@ function startShift() {
   state.rooms = applyRoomUnlockFlags(state.rooms || [], state.night);
   state = normalizeRoomServiceState(state);
   refreshIntakeBudgetForNight(state);
+  normalizeFinalWinterState(state);
   normalizeIntakeState(state);
   normalizeDeskInspectionState(state);
   ensureCrisisNightState(state);
@@ -9002,6 +9091,7 @@ function progressShift(actionKey, options = {}) {
     pushLiveAlert(state, opHall.alert);
   }
   tickDawnAuditor(state, (a) => pushLiveAlert(state, a));
+  tickFinalWinterDuringShift(state, (a) => pushLiveAlert(state, a));
   const tapeTickResult = tickForensicTape(state);
   if (tapeTickResult?.alert) {
     pushLiveAlert(state, tapeTickResult.alert);
@@ -12007,6 +12097,7 @@ function nextNight() {
   cleanupTransientUiState('next-night');
   updateOnboarding((current) => markTutorialEvent(current, 'prep-opened'));
   state.night += 1;
+  applyFixerDebtIfDue(state);
   state.failedState = null;
   state.pendingRunCompletion = false;
   normalizeEndlessRunState(state);
@@ -12054,6 +12145,7 @@ function nextNight() {
     }
   });
   refreshIntakeBudgetForNight(state);
+  applyRivalSkimToIntake(state);
   normalizeIntakeState(state);
   ensureCrisisNightState(state);
   state.activeEvents = [];
@@ -12065,6 +12157,8 @@ function nextNight() {
   resetForensicForNewNight(state);
   resetOperatorNoirForNewNight(state);
   resetBorderTransferForNewNight(state);
+  resetFinalWinterPerNight(state);
+  bumpRivalPressureOnPrep(state);
   if (darkWebContractsEnabled(state)) {
     applyDarkContractRuntime(state, state.endlessRun.selectedDarkContractId);
     applyContractAnalogHooks(state);
@@ -12073,7 +12167,7 @@ function nextNight() {
     rollDawnAuditor(state);
   } else {
     clearContractRuntime(state);
-    normalizeDawnAuditorState(state);
+    rollDawnAuditor(state);
   }
   applyNightStartProgression(state);
   applyDayShiftPlanForNightStart();
@@ -12215,6 +12309,22 @@ function bindEvents() {
       }
       if (e.target.closest('[data-dawn-auditor-cleanup]')) {
         handleDawnAuditorCleanup();
+        e.preventDefault();
+      }
+      if (e.target.closest('[data-dawn-shredder]')) {
+        handleDawnShredder();
+        e.preventDefault();
+      }
+      if (e.target.closest('[data-dawn-incinerator]')) {
+        handleDawnIncinerator();
+        e.preventDefault();
+      }
+      if (e.target.closest('[data-dawn-blackmail]')) {
+        handleDawnBlackmail();
+        e.preventDefault();
+      }
+      if (e.target.closest('[data-four-am-fixer]')) {
+        handleFourAmFixer();
         e.preventDefault();
       }
       if (e.target.closest('[data-road-fund-drifters]')) {

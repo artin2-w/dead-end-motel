@@ -1,0 +1,83 @@
+/* v0.39 — Final winter: dawn tools, boiler bar, deep-freeze shell */
+
+.v39-winter-strip {
+  margin: 0.25rem 0 0.45rem;
+}
+
+.v39-winter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(160, 190, 220, 0.18);
+  background: linear-gradient(95deg, rgba(16, 22, 32, 0.92), rgba(10, 14, 22, 0.88));
+  font-size: 0.72rem;
+  color: rgba(210, 225, 245, 0.82);
+}
+
+.v39-winter-bar.deep-freeze {
+  border-color: rgba(120, 170, 220, 0.35);
+  box-shadow: 0 0 0 1px rgba(100, 160, 220, 0.08) inset;
+}
+
+.v39-boiler {
+  font-weight: 600;
+  color: rgba(255, 200, 160, 0.88);
+}
+
+.v39-rival {
+  color: rgba(200, 210, 230, 0.75);
+}
+
+.v39-fixer-btn {
+  margin-left: auto;
+  font-size: 0.68rem !important;
+  border-color: rgba(200, 90, 90, 0.45) !important;
+}
+
+.v39-dawn-auditor-card .v35-dawn-auditor-copy {
+  max-width: 52rem;
+}
+
+.v39-dawn-kind {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(180, 210, 240, 0.12);
+  color: rgba(220, 235, 250, 0.75);
+}
+
+.v39-dawn-kind--broker {
+  background: rgba(200, 160, 90, 0.15);
+  color: rgba(255, 220, 180, 0.85);
+}
+
+.v39-dawn-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.4rem 0 0.25rem;
+}
+
+.v39-tool-btn {
+  font-size: 0.68rem !important;
+  padding: 0.22rem 0.45rem !important;
+}
+
+.v39-tool-btn--risk {
+  border-color: rgba(200, 120, 120, 0.4) !important;
+}
+
+.report-v39-winter-line {
+  margin-top: 0.35rem;
+  font-size: 0.74rem;
+  color: rgba(190, 210, 235, 0.72);
+}
+
+.app-shell.atmosphere-deep-winter:not(.screen-main-menu) {
+  box-shadow: inset 0 0 120px rgba(40, 70, 110, 0.12);
+}

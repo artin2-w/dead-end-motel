@@ -506,7 +506,8 @@ export function renderTopbar(state) {
       'atmosphere-scanner-compromised',
       'atmosphere-hunt-night',
       'atmosphere-alerts-compromised',
-      'atmosphere-border-transfer'
+      'atmosphere-border-transfer',
+      'atmosphere-deep-winter'
     );
     appShell.classList.add(`pressure-${state?.uiPressureLevel || 'calm'}`);
     const finaleBand = String(state?.finaleUi?.pressureBand || '');
@@ -533,6 +534,11 @@ export function renderTopbar(state) {
     appShell.classList.toggle(
       'atmosphere-border-transfer',
       Boolean(_bt?.blindActive || _bt?.stagingActive || (_bt?.witnessPending && _bt?.phase === 'witness'))
+    );
+    const _wui = state?.winterUi;
+    appShell.classList.toggle(
+      'atmosphere-deep-winter',
+      Boolean(_wui?.coldNight && (Number(_wui?.freezeTier || 0) >= 2 || Number(_wui?.boilerStrain || 0) >= 6.5))
     );
     const _topbarWeather = deriveWeatherState(state);
     const _topbarCondition = deriveMotelCondition(state);
@@ -664,24 +670,74 @@ export function renderTopbar(state) {
         da.exposurePreview != null
           ? `<span class="v35-exposure">Exposure index ~<strong>${da.exposurePreview}</strong> (lower is safer)</span>`
           : '';
-      parts.push(`<div class="v35-dawn-auditor-card" role="region" aria-label="Dawn inspection pressure">
+      const kindPill =
+        da.kind === 'winter'
+          ? '<span class="v39-dawn-kind">Winter ledger</span>'
+          : da.kind === 'broker'
+            ? '<span class="v39-dawn-kind v39-dawn-kind--broker">Broker audit</span>'
+            : '';
+      const toolRow =
+        da.cleanupWindow && da.active
+          ? `<div class="v39-dawn-tools">
+            <button type="button" class="button button-secondary v39-tool-btn" data-dawn-shredder ${da.canShred ? '' : 'disabled'}>Desk shredder</button>
+            <button type="button" class="button button-secondary v39-tool-btn" data-dawn-incinerator ${da.canIncinerate ? '' : 'disabled'}>Basement furnace</button>
+            <button type="button" class="button button-secondary v39-tool-btn v39-tool-btn--risk" data-dawn-blackmail ${da.blackmailAvailable ? '' : 'disabled'}>Blackmail leverage</button>
+          </div>`
+          : '';
+      parts.push(`<div class="v35-dawn-auditor-card v39-dawn-auditor-card" role="region" aria-label="Dawn inspection pressure">
         <div class="v35-dawn-auditor-header">
-          <span class="v35-dawn-auditor-title">Dawn auditor window</span>
+          <span class="v35-dawn-auditor-title">Dawn cleanup</span>
+          ${kindPill}
           ${da.warned ? '<span class="v35-dawn-badge">6:00 inspection rumored</span>' : '<span class="v35-dawn-badge v35-dawn-badge--quiet">Watch the lobby optics</span>'}
         </div>
-        <p class="muted v35-dawn-auditor-copy">Outside eyes may walk the desk story. Reduce visible mess, stabilize logs, and secure evidence before dawn closes the ledger.</p>
+        <p class="muted v35-dawn-auditor-copy">Outside eyes may walk the desk story. Shred burns time and noise; the furnace eats proof and grid; blackmail spends your soul, not your wallet.</p>
         ${exp}
+        ${toolRow}
         ${
           cleanupReady
-            ? `<div class="v35-cleanup-row"><button type="button" class="button button-secondary v35-cleanup-btn" data-dawn-auditor-cleanup>Concealment pass (−$14, −2 rep)</button><span class="muted v35-cleanup-hint">One quick pass this window — buys exposure room.</span></div>`
+            ? `<div class="v35-cleanup-row"><button type="button" class="button button-secondary v35-cleanup-btn" data-dawn-auditor-cleanup>Concealment pass (−$14, −2 rep)</button><span class="muted v35-cleanup-hint">One concealment pass this window — stacks with shredder/furnace if you dare.</span></div>`
             : da.cleanupUsed >= 1
-              ? '<p class="muted v35-cleanup-used">Concealment pass already spent tonight.</p>'
+              ? '<p class="muted v35-cleanup-used">Concealment / blackmail pass already spent tonight.</p>'
               : '<p class="muted v35-cleanup-wait">Cleanup window opens in the final stretch before 6:00.</p>'
         }
       </div>`);
     }
     v35Ext.innerHTML = parts.join('');
     v35Ext.hidden = parts.length === 0;
+  }
+
+  let v39Winter = document.getElementById('v39-winter-strip');
+  if (!v39Winter) {
+    const anchor = document.getElementById('v35-shift-extensions');
+    if (anchor && anchor.parentNode) {
+      v39Winter = document.createElement('div');
+      v39Winter.id = 'v39-winter-strip';
+      v39Winter.className = 'v39-winter-strip';
+      v39Winter.setAttribute('aria-live', 'polite');
+      anchor.parentNode.insertBefore(v39Winter, anchor.nextSibling);
+    }
+  }
+  if (v39Winter) {
+    const w = state?.winterUi;
+    const onGame = Boolean(document.getElementById('app')?.classList?.contains('screen-game-screen'));
+    if (onGame && w && (w.coldNight || w.rivalPressure >= 1 || w.boilerStrain >= 2)) {
+      const fz = w.freezeTier >= 2 ? 'deep-freeze' : w.coldNight ? 'cold' : '';
+      v39Winter.innerHTML = `
+        <div class="v39-winter-bar ${fz}" role="region" aria-label="Winter and rival pressure">
+          <span class="v39-boiler">Boiler ${w.boilerStrain.toFixed(1)}/10</span>
+          <span class="v39-rival">Rival skim ${w.rivalPressure.toFixed(1)}/5</span>
+          <span class="v39-trace muted">Dawn trace +${w.tracePreview.toFixed(1)}</span>
+          ${
+            w.fixerAvailable
+              ? `<button type="button" class="button button-secondary v39-fixer-btn" data-four-am-fixer>4 AM fixer (one/run)</button>`
+              : ''
+          }
+        </div>`;
+      v39Winter.hidden = false;
+    } else {
+      v39Winter.innerHTML = '';
+      v39Winter.hidden = true;
+    }
   }
 
   const v36Road = document.getElementById('v36-road-world-strip');
@@ -2640,6 +2696,20 @@ function buildReportPriorityStrip(state) {
     )} · witness spikes ${Number(ss.borderWitnessEvents || 0)} · shaft dispatches ${Number(ss.borderShaftDispatches || 0)}`;
     strip.appendChild(bLine);
   }
+  if (
+    Number(ss.dawnShredderPasses || 0) > 0 ||
+    Number(ss.dawnIncineratorRuns || 0) > 0 ||
+    Number(ss.dawnAuditorBlackmails || 0) > 0 ||
+    Number(ss.fourAmFixerInvoked || 0) > 0 ||
+    Number(ss.room9FreezeSpikes || 0) > 0
+  ) {
+    const wLine = document.createElement('div');
+    wLine.className = 'report-v39-winter-line';
+    wLine.textContent = `Winter dawn: shred ${Number(ss.dawnShredderPasses || 0)} · furnace ${Number(ss.dawnIncineratorRuns || 0)} · blackmail ${Number(
+      ss.dawnAuditorBlackmails || 0
+    )} · fixer ${Number(ss.fourAmFixerInvoked || 0)} · Room 9 freeze spike ${Number(ss.room9FreezeSpikes || 0)}`;
+    strip.appendChild(wLine);
+  }
   return strip;
 }
 
@@ -3455,9 +3525,10 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
         ? ` • ${nextMilestone.label}`
         : '';
     const borderPrep = state?.borderPrepLine ? ` • ${state.borderPrepLine}` : '';
+    const winterPrep = state?.finalWinterPrepLine ? ` • ${state.finalWinterPrepLine}` : '';
     meta.textContent = `Prepare for Night ${nextNight}${milestoneText}${state?.nightMoodLine ? ` • ${state.nightMoodLine}` : ''}${
       state?.nightIdentityLine ? ` • ${state.nightIdentityLine}` : ''
-    }${borderPrep}`;
+    }${borderPrep}${winterPrep}`;
   }
   if (campaign) {
     campaign.textContent = state?.campaignProgress?.completedLabel || 'Campaign progress: 0 / 5 nights completed';

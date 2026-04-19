@@ -67,7 +67,11 @@ export function getActionTimeCost(actionKey) {
     'border-blind-open': 12,
     'border-refuse': 8,
     'border-log': 7,
-    'border-witness-resolve': 5
+    'border-witness-resolve': 5,
+    'dawn-shredder': 6,
+    'dawn-incinerator': 11,
+    'dawn-blackmail': 8,
+    'four-am-fixer': 4
   };
 
   return costs[actionKey] ?? 0;

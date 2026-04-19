@@ -95,6 +95,8 @@ export function getBreakerBudget(state) {
   if (w === 'storm') b -= 2;
   if (w === 'cold') b -= 1;
   if (w === 'fog') b -= 1;
+  const boil = Number(state?.finalWinter?.boilerStrain || 0);
+  if (boil >= 8) b -= 1;
   b -= blackoutStrainLevel(state);
   const pressure = state?.uiPressureLevel || 'calm';
   if (pressure === 'emergency' || pressure === 'dire') b -= 1;

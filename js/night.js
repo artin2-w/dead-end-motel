@@ -158,6 +158,20 @@ export function buildNightSummary(state) {
   } else if (audBand === 'severe') {
     identity.push('Dawn inspection: severe read — traces, optics, or paperwork looked too compromised to hand-wave.');
   }
+  if (Number(state?.shiftStats?.dawnShredderPasses || 0) > 0 || Number(state?.shiftStats?.dawnIncineratorRuns || 0) > 0) {
+    identity.push(
+      `Truth disposal: ${Number(state.shiftStats.dawnShredderPasses || 0)} shredder pass(es), ${Number(state.shiftStats.dawnIncineratorRuns || 0)} furnace run(s) — the desk chose what survived the cold morning air.`
+    );
+  }
+  if (Number(state?.shiftStats?.dawnAuditorBlackmails || 0) > 0) {
+    identity.push('Dawn leverage: corruption evidence bought silence from the clipboard — the building got colder, not cleaner.');
+  }
+  if (Number(state?.shiftStats?.fourAmFixerInvoked || 0) > 0) {
+    identity.push('A one-call fixer scrubbed catastrophe into debt — dirty cash arrived like interest on panic.');
+  }
+  if (Number(state?.shiftStats?.room9FreezeSpikes || 0) > 0) {
+    identity.push('Deep freeze breached the sealed wing once — black water memory in the hallway, not just a story.');
+  }
 
   const rw = state?.roadWorld;
   if (rw && typeof rw === 'object') {

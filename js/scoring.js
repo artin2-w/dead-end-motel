@@ -78,7 +78,12 @@ const DEFAULT_SHIFT_STATS = {
   borderDropEvents: 0,
   borderWitnessEvents: 0,
   borderWitnessResolutions: 0,
-  borderShaftDispatches: 0
+  borderShaftDispatches: 0,
+  dawnShredderPasses: 0,
+  dawnIncineratorRuns: 0,
+  dawnAuditorBlackmails: 0,
+  fourAmFixerInvoked: 0,
+  room9FreezeSpikes: 0
 };
 
 function clampScore(value) {
