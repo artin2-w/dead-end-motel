@@ -232,6 +232,9 @@ export function setActiveScreen(screenId) {
       'screen-run-ending-screen'
     );
     appShell.classList.add(`screen-${screenId}`);
+    if (screenId === 'main-menu') {
+      appShell.removeAttribute('data-active-panel');
+    }
   }
 }
 
@@ -244,6 +247,11 @@ export function setActivePanel(panelId) {
     button.classList.toggle('active', button.dataset.panel === panelId);
     button.setAttribute('aria-pressed', button.dataset.panel === panelId ? 'true' : 'false');
   });
+
+  const appShell = document.getElementById('app');
+  if (appShell && panelId) {
+    appShell.dataset.activePanel = String(panelId);
+  }
 }
 
 function deriveWeatherState(state) {
@@ -401,7 +409,7 @@ function renderMotelCommandBoard(state) {
 
   const collapseUnstable = Boolean(state?.crisisNight?.trueCrisisNight);
   board.innerHTML =
-    '<div class="mcb-inner' + (collapseUnstable ? ' v34-command-unstable' : '') + '">' +
+    '<div class="mcb-inner v41-mcb-core' + (collapseUnstable ? ' v34-command-unstable' : '') + '">' +
       '<div class="mcb-top-strip">' +
         '<span class="mcb-title">Command</span>' +
         '<span class="mcb-badge ' + badgeClass + '">' + badgeText + '</span>' +
@@ -1250,7 +1258,7 @@ export function renderGuests(
 
   if (!state.guests.length) {
     queue.innerHTML =
-      '<div class="log-item">No guests waiting. Use Call Next Arrival when you have intake slots and queue space.</div>';
+      '<div class="v41-empty-queue" role="status"><p class="v41-empty-queue-title">Queue clear</p><p class="v41-empty-queue-copy muted">No bodies at the glass. Call the next arrival when intake has breath — empty is relief, not safety.</p></div>';
     return;
   }
 
@@ -1264,7 +1272,7 @@ export function renderGuests(
     const uvLens = Boolean(state?.forensic?.uvDeskLensActive);
     const latentUv =
       uvLens && !guest.uvInspected && (guest.flagged || guest.riskLevel === 'High' || Boolean(guest.contradictoryClue));
-    card.className = `guest-card guest-card-v20 ${emphasisClass}${latentUv ? ' v33-latent-uv' : ''}${
+    card.className = `guest-card guest-card-v20 v41-guest-tile ${emphasisClass}${latentUv ? ' v33-latent-uv' : ''}${
       uvLens ? ' v33-blacklight-context' : ''
     }`.trim();
     card.dataset.risk = (guest.riskLevel || 'Low').toLowerCase();
@@ -1954,7 +1962,7 @@ export function renderSharedSpaces(state) {
     const weatherHintText = isOutdoor && _ssWeather.primary !== 'clear'
       ? (WEATHER_HINT_TEXT[_ssWeather.primary]?.[zoneNumeric] || null)
       : null;
-    card.className = `room-card shared-space-card ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'} ${emergencyPriority ? 'is-emergency-priority' : ''} ${systemNoise ? 'shared-space-system-noise' : ''} ${linkedScanner ? 'has-linked-scanner' : ''}`.trim();
+    card.className = `room-card shared-space-card v41-zone-card ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'} ${emergencyPriority ? 'is-emergency-priority' : ''} ${systemNoise ? 'shared-space-system-noise' : ''} ${linkedScanner ? 'has-linked-scanner' : ''}`.trim();
     card.dataset.zoneId = String(space.zoneId || 0);
     card.innerHTML = `
       <div class="shared-space-zones">
@@ -2113,7 +2121,7 @@ export function renderCameras(state) {
     const anomalyChipLabel = getAnomalyChipLabel();
 
     const card = document.createElement('article');
-    card.className = `camera-card ${getCameraStatusClass(camera.status)} ${actionable ? 'is-actionable' : ''} ${isBlind ? 'camera-card-blind' : ''} ${cameraInterference >= 2 ? 'camera-card-glitch' : ''} ${cameraInterference >= 3 ? 'camera-card-flicker' : ''} ${camera.contaminationMark ? 'v30-cam-contaminated' : ''}`.trim();
+    card.className = `camera-card v41-camera-tile ${getCameraStatusClass(camera.status)} ${actionable ? 'is-actionable' : ''} ${isBlind ? 'camera-card-blind' : ''} ${cameraInterference >= 2 ? 'camera-card-glitch' : ''} ${cameraInterference >= 3 ? 'camera-card-flicker' : ''} ${camera.contaminationMark ? 'v30-cam-contaminated' : ''}`.trim();
     card.dataset.camStatus = camStatusNorm;
     const sabotageType = camera.sabotageType || null;
     if (sabotageType) card.dataset.sabotageType = sabotageType;
@@ -2210,7 +2218,7 @@ export function renderAnalogPowerExtras(state) {
             : String(analog.neon?.mode || '');
 
   root.innerHTML = `
-    <div class="v32-breaker-board">
+    <div class="v32-breaker-board v41-breaker-shell">
       <div class="v32-breaker-header">
         <span class="v32-breaker-title">Breaker board</span>
         <span class="v32-breaker-load ${analog.load > analog.budget ? 'is-over' : ''}" title="Load units vs safe budget under current weather and grid strain">
@@ -2671,7 +2679,7 @@ function buildReportPriorityStrip(state) {
   const hasIssues = hostileRooms > 0 || unresolvedCams > 0 || hotZones > 0 || powerCritical || tenseRooms >= 2 || pendingCalls >= 2;
 
   const strip = document.createElement('div');
-  strip.className = `report-priority-strip ${hasIssues ? '' : 'is-all-clear'}`.trim();
+  strip.className = `report-priority-strip v41-report-strip ${hasIssues ? '' : 'is-all-clear'}`.trim();
 
   const titleEl = document.createElement('div');
   titleEl.className = 'report-priority-title';
@@ -2958,7 +2966,7 @@ function getSummaryBreakdownLineClass(line = '') {
 export function renderSummary(summary, state, outcomeFlavor = null) {
   const summaryCard = document.querySelector('#summary-screen .hero-card');
   if (summaryCard) {
-    summaryCard.classList.add('summary-polish-card', 'summary-hero-v20');
+    summaryCard.classList.add('summary-polish-card', 'summary-hero-v20', 'v41-summary-payoff');
   }
   document.getElementById('summary-title').textContent = summary.title;
   document.getElementById('summary-text').textContent = summary.text;
@@ -4434,6 +4442,48 @@ export function renderMainMenuMetaSurface(state, handlers = {}) {
   const campaignModeSelect = document.getElementById('main-menu-campaign-mode-select');
   const contractList = document.getElementById('main-menu-contract-list');
   const runSetupSummary = document.getElementById('main-menu-run-setup-summary');
+  const startHint = document.getElementById('main-menu-start-hint');
+  const situationCards = document.getElementById('main-menu-situation-cards');
+  const endlessBtn = document.getElementById('main-menu-endless-btn');
+  const surf = state?.mainMenuSurface;
+
+  if (startHint && surf?.primaryStartHint) {
+    startHint.textContent = `Tonight's frame: ${surf.primaryStartHint}`;
+  } else if (startHint) {
+    startHint.textContent = '';
+  }
+  if (startGameButton && surf?.primaryStartLabel) {
+    startGameButton.textContent = surf.primaryStartLabel;
+  }
+  if (situationCards && surf) {
+    const esc = (s) =>
+      String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    const chips = (surf.conditionChips || [])
+      .map((c) => `<span class="v41-sit-chip v41-sit-chip--${String(c.tone || 'calm').replace(/[^a-z-]/g, '')}">${esc(c.label)}</span>`)
+      .join('');
+    const frag = surf.hasLastFragment
+      ? `<p class="v41-sit-fragment muted">${esc(surf.lastNightFragment)}</p>`
+      : '<p class="v41-sit-fragment muted v41-sit-quiet">No inherited summary thread yet — quiet paper, loud possibilities.</p>';
+    situationCards.innerHTML = `
+      <article class="v41-sit-card v41-sit-card--ledger">
+        <h3 class="v41-sit-card-title">${surf.campaignHeadline}</h3>
+        <p class="v41-sit-card-line muted">${surf.modeLine}</p>
+        <div class="v41-sit-chip-row">${chips || '<span class="v41-sit-chip v41-sit-chip--calm">Ledger calm on the surface</span>'}</div>
+      </article>
+      <article class="v41-sit-card v41-sit-card--memory">
+        <h3 class="v41-sit-card-title">Last night echo</h3>
+        ${frag}
+      </article>
+    `;
+  }
+  if (endlessBtn && surf) {
+    endlessBtn.disabled = Boolean(surf.endlessModeActive);
+    endlessBtn.textContent = surf.endlessModeActive ? 'Endless (active in setup)' : 'Survival (Endless setup)';
+  }
 
   const archive = state?.metaArchive || {};
   const perks = Array.isArray(state?.metaPerks) ? state.metaPerks : [];

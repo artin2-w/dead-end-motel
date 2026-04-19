@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dead End Motel v0.40</title>
+  <title>Dead End Motel v0.41</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -27,12 +27,13 @@
   <link rel="stylesheet" href="styles/v38-border.css" />
   <link rel="stylesheet" href="styles/v39-winter.css" />
   <link rel="stylesheet" href="styles/v40-basement.css" />
+  <link rel="stylesheet" href="styles/v41-polish.css" />
 </head>
 <body>
   <div id="app" class="app-shell screen-main-menu">
     <header class="topbar topbar-v20" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.40</p>
+        <p class="eyebrow">Dead End Motel v0.41</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -70,22 +71,59 @@
     </header>
 
     <main>
-      <section id="main-menu" class="screen active">
-        <div class="hero-card">
-          <div>
-            <p class="section-tag">Night Desk Campaign</p>
-            <h2>Welcome to the last motel before nowhere.</h2>
-            <p class="muted">
-              Check guests in, watch the cameras, manage power, and survive the night shift.
-            </p>
-            <div class="hero-actions">
-              <button id="start-game-btn" class="button button-primary">Start Campaign Shift</button>
-              <button id="start-guided-btn" class="button button-secondary">Start Guided First Run</button>
-              <button id="start-standard-btn" class="button button-secondary">Start Standard Run</button>
-              <button id="new-night-btn" class="button button-secondary">Reset Current Night</button>
-              <button id="menu-settings-btn" class="button button-secondary" type="button">Settings</button>
+      <section id="main-menu" class="screen active v41-main-menu">
+        <div class="v41-menu-atmosphere" aria-hidden="true"></div>
+        <div class="hero-card v41-menu-shell">
+          <div class="v41-menu-layout">
+            <div class="v41-menu-hero">
+              <header class="v41-menu-brand">
+                <p class="section-tag v41-menu-kicker">Night desk campaign</p>
+                <h2 class="v41-menu-title">The last desk before nowhere.</h2>
+                <p class="v41-menu-lede muted">
+                  Run the ledger under bad weather, bad law, and worse guests. Same deep systems — clearer command surface.
+                </p>
+              </header>
+
+              <div class="v41-menu-primary-block">
+                <button id="start-game-btn" type="button" class="button button-primary v41-btn-shift-primary">Start campaign shift</button>
+                <p id="main-menu-start-hint" class="v41-menu-start-hint muted" aria-live="polite"></p>
+                <p class="v41-menu-guidance muted">
+                  Primary action uses your current Run Setup (length, difficulty, contracts). Tune it in the rail before you commit.
+                </p>
+              </div>
+
+              <div class="v41-menu-cluster v41-menu-cluster-training">
+                <p class="v41-cluster-label muted">Training</p>
+                <div class="v41-menu-btn-row">
+                  <button id="start-guided-btn" type="button" class="button button-secondary">Guided first run</button>
+                  <button id="start-standard-btn" type="button" class="button button-secondary">Standard opening</button>
+                </div>
+              </div>
+
+              <div class="v41-menu-cluster v41-menu-cluster-tools">
+                <p class="v41-cluster-label muted">Modes &amp; maintenance</p>
+                <div class="v41-menu-btn-row v41-menu-btn-row-wrap">
+                  <button id="main-menu-endless-btn" type="button" class="button button-secondary v41-btn-endless">Survival (Endless setup)</button>
+                  <button id="new-night-btn" type="button" class="button button-utility">Reset current night</button>
+                  <button id="menu-settings-btn" type="button" class="button button-secondary">Settings</button>
+                </div>
+              </div>
+
+              <div class="v41-menu-cluster v41-menu-cluster-danger">
+                <p class="v41-cluster-label v41-cluster-label-danger">Destructive</p>
+                <button id="main-menu-reset-campaign-btn" type="button" class="button button-destructive">Reset entire campaign</button>
+                <p class="v41-reset-hint muted">Wipes this save slot to Night 1. Archive perks, points, and endings stay.</p>
+              </div>
+
+              <details class="mobile-menu-section v41-menu-briefing" id="main-menu-briefing-section" data-mobile-default="closed">
+                <summary>First shift briefing</summary>
+                <div id="main-menu-onboarding" class="main-menu-onboarding"></div>
+              </details>
             </div>
-            <div id="main-menu-meta-surface" class="main-menu-meta-surface">
+
+            <aside class="v41-menu-rail" aria-label="Situation and archive">
+              <div id="main-menu-situation-cards" class="v41-situation-cards" aria-live="polite"></div>
+              <div id="main-menu-meta-surface" class="main-menu-meta-surface v41-meta-surface">
               <details class="mobile-menu-section main-menu-run-setup" id="main-menu-run-setup-section" data-mobile-default="open" open>
                 <summary>Run Setup</summary>
                 <div class="mobile-menu-section-body">
@@ -121,17 +159,14 @@
                   <ul id="main-menu-archive-list" class="main-menu-archive-list"></ul>
                 </div>
               </details>
-            </div>
-            <details class="mobile-menu-section" id="main-menu-briefing-section" data-mobile-default="closed">
-              <summary>First Shift Briefing</summary>
-              <div id="main-menu-onboarding" class="main-menu-onboarding"></div>
-            </details>
+              </div>
+            </aside>
           </div>
         </div>
       </section>
 
       <section id="game-screen" class="screen">
-        <nav class="panel-tabs">
+        <nav class="panel-tabs v41-panel-tabs" aria-label="Shift panels">
           <button class="tab-button active" data-panel="frontdesk-panel">
             <span>Front Desk</span>
             <span id="frontdesk-tab-badge" class="tab-attention-badge" hidden>0</span>
@@ -155,7 +190,7 @@
           </button>
         </nav>
 
-        <section class="shift-status-card">
+        <section class="shift-status-card v41-shift-ribbon">
           <div id="tutorial-hint-card" class="tutorial-hint-card" hidden></div>
           <div id="panel-intro-chip" class="panel-intro-chip" hidden></div>
           <div class="shift-primary-block">
@@ -216,14 +251,14 @@
 
         <div id="motel-command-board" class="motel-command-board" aria-label="Motel command overview"></div>
 
-        <div class="layout-grid">
-          <section id="frontdesk-panel" class="panel active-panel">
+        <div class="layout-grid v41-shift-grid">
+          <section id="frontdesk-panel" class="panel panel-v41 panel-v41--desk active-panel">
             <div class="panel-header">
               <div>
                 <p class="section-tag">Reception</p>
                 <h3>Guest Queue</h3>
               </div>
-              <button id="spawn-guest-btn" class="button button-secondary">Call Next Arrival</button>
+              <button id="spawn-guest-btn" type="button" class="button button-secondary v41-reception-call">Call next arrival</button>
             </div>
             <p id="frontdesk-intake-line" class="muted microcopy-line"></p>
             <p class="muted microcopy-line">Desk flow: read → verify if needed → decide.</p>
@@ -265,7 +300,7 @@
             <div id="room-list" class="room-grid"></div>
           </section>
 
-          <section id="cameras-panel" class="panel">
+          <section id="cameras-panel" class="panel panel-v41 panel-v41--cameras">
             <div class="panel-header">
               <div>
                 <p class="section-tag">Surveillance</p>
@@ -277,7 +312,7 @@
             <div id="camera-grid" class="camera-grid"></div>
           </section>
 
-          <section id="spaces-panel" class="panel">
+          <section id="spaces-panel" class="panel panel-v41 panel-v41--spaces">
             <div class="panel-header">
               <div>
                 <p class="section-tag">Living Motel Spaces</p>
@@ -299,7 +334,7 @@
             <div id="basement-board-mount" class="v40-basement-mount" aria-live="polite"></div>
           </section>
 
-          <section id="power-panel" class="panel">
+          <section id="power-panel" class="panel panel-v41 panel-v41--power">
             <div class="panel-header">
               <div>
                 <p class="section-tag">Maintenance</p>
@@ -327,7 +362,7 @@
             <p id="power-economy-meta" class="power-economy-meta muted"></p>
           </section>
 
-          <section id="report-panel" class="panel">
+          <section id="report-panel" class="panel panel-v41 panel-v41--report">
             <div class="panel-header">
               <div>
                 <p class="section-tag">Incident Log</p>
@@ -422,7 +457,7 @@
         </div>
       </section>
 
-      <section id="night-prep-screen" class="screen">
+      <section id="night-prep-screen" class="screen v41-prep-screen">
         <div class="hero-card night-prep-card night-prep-v20">
           <div>
             <div class="prep-primary-block">

@@ -654,6 +654,45 @@ function getSelectedMetaPerkLabel(meta = metaState) {
   return selected?.title || 'None';
 }
 
+function buildMainMenuSurfacePresentation() {
+  const night = Math.max(1, Number(state?.night || 1));
+  const setup = normalizeRunSetup(state?.runSetup || createDefaultRunSetup());
+  const modeCatalog = getCampaignModeCatalog();
+  const diffCatalog = getDifficultyCatalog();
+  const modeEntry = modeCatalog.find((m) => m.id === setup.campaignMode);
+  const diffEntry = diffCatalog.find((d) => d.id === setup.difficultyId);
+  const scenario = String(state?.activeScenario?.label || 'Standard Shift');
+  const lines = Array.isArray(state?.storyMemory?.lastNightSummary) ? state.storyMemory.lastNightSummary : [];
+  const idLines = Array.isArray(state?.summaryIdentityLines) ? state.summaryIdentityLines : [];
+  const lastFrag = String(lines[0] || idLines[0] || '').trim().slice(0, 200);
+  const town = state?.townState || {};
+  const dirty = state?.dirtyLedger || {};
+  const corp = Number(town.corruption || 0);
+  const susp = Number(town.townSuspicion || 0);
+  const chips = [];
+  if (corp >= 2) chips.push({ tone: 'corrupt', label: 'Town corruption live' });
+  else if (corp >= 1) chips.push({ tone: 'warn', label: 'Corruption creeping' });
+  if (susp >= 5) chips.push({ tone: 'police', label: 'Law heat high' });
+  else if (susp >= 3) chips.push({ tone: 'police', label: 'Law watching' });
+  const dirtyN = Number(dirty.totalDirtyMoney || 0);
+  if (dirtyN >= 40) chips.push({ tone: 'dirty', label: 'Dirty ledger heavy' });
+  else if (dirtyN >= 15) chips.push({ tone: 'dirty', label: 'Off-books drift' });
+  if (Boolean(state?.basementSyndicate?.unlockedEver)) chips.push({ tone: 'basement', label: 'Basement syndicate open' });
+  if (metaState?.managerDeadDrop && typeof metaState.managerDeadDrop === 'object') {
+    chips.push({ tone: 'legacy', label: 'Vent inheritance pending' });
+  }
+  return {
+    primaryStartLabel: night > 1 ? `Continue — Night ${night}` : 'Start campaign shift',
+    primaryStartHint: scenario,
+    campaignHeadline: `Active ledger · Night ${night}`,
+    modeLine: `${modeEntry?.label || setup.campaignMode} · ${diffEntry?.label || setup.difficultyId}`,
+    conditionChips: chips,
+    lastNightFragment: lastFrag,
+    hasLastFragment: Boolean(lastFrag),
+    endlessModeActive: setup.campaignMode === 'endless'
+  };
+}
+
 function getMetaSurfaceState() {
   const archive = buildMetaArchiveSummary(metaState);
   const perks = getMetaPerkCatalog(metaState);
@@ -667,7 +706,8 @@ function getMetaSurfaceState() {
     runSetupSummary: buildRunSetupSummary(runSetup),
     runDifficultyCatalog: getDifficultyCatalog(),
     runContractCatalog: getContractCatalog(),
-    runCampaignModeCatalog: getCampaignModeCatalog()
+    runCampaignModeCatalog: getCampaignModeCatalog(),
+    mainMenuSurface: buildMainMenuSurfacePresentation()
   };
 }
 
@@ -6607,9 +6647,46 @@ function renderAll() {
   saveState(state);
 }
 
-function startFreshCampaignRun() {
-  if (!confirmIfNeeded('Begin a fresh campaign from Night 1? Current run progress will be replaced. Archive progression and settings are kept.')) {
+function handleQuickEndlessSetup() {
+  if (activeScreenId !== 'main-menu') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  if (
+    !confirmIfNeeded(
+      'Switch Run Setup to Endless Shift (survival)? Your saved motel is unchanged until you start a shift. No finale cadence — waves, contracts, and scoring stack.'
+    )
+  ) {
     return;
+  }
+  setRunCampaignModeFromMenu('endless');
+}
+
+function handleMainMenuResetCampaign() {
+  if (activeScreenId !== 'main-menu') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  if (
+    !confirmIfNeeded(
+      'Reset entire campaign to Night 1?\n\n• Deletes this SAVE SLOT (nights, money, rooms, evidence in the active ledger).\n• Keeps archive meta: perks, points, discovered endings, settings.\n• Cannot be undone.'
+    )
+  ) {
+    return;
+  }
+  if (!confirmIfNeeded('Second confirmation: wipe this run completely and return to a clean Night 1 motel?')) {
+    return;
+  }
+  startFreshCampaignRun({ skipConfirm: true });
+}
+
+function startFreshCampaignRun(options = {}) {
+  if (!options?.skipConfirm) {
+    if (
+      !confirmIfNeeded(
+        'Begin a fresh campaign from Night 1? Current run progress will be replaced. Archive progression and settings are kept.'
+      )
+    ) {
+      return;
+    }
   }
   onMeaningfulAction();
   audioController.playUiClick();
@@ -12390,6 +12467,8 @@ function bindEvents() {
   document.getElementById('audio-toggle-btn').addEventListener('click', toggleAudio);
   document.getElementById('open-help-btn').addEventListener('click', () => toggleHelpOverlay(true));
   document.getElementById('main-menu-reroll-btn').addEventListener('click', rerollFirstNightScenario);
+  document.getElementById('main-menu-reset-campaign-btn')?.addEventListener('click', handleMainMenuResetCampaign);
+  document.getElementById('main-menu-endless-btn')?.addEventListener('click', handleQuickEndlessSetup);
 
   const appRoot = document.getElementById('app');
   if (appRoot && !appRoot.dataset.v35UiDelegation) {
