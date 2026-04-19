@@ -4,6 +4,7 @@ import {
   evaluateNightObjectives
 } from './nightCycle.js';
 import { getRoomPresentationMeta } from './presentation.js';
+import { tapeBackupEligible, buildDeskUvObjectLines } from './forensicNoir.js';
 
 let _v21SelectedRoomId = null;
 
@@ -531,6 +532,8 @@ export function renderTopbar(state) {
     appShell.dataset.motelCondition = _topbarCondition.overall;
     appShell.dataset.operatorFatigue = state?.presentationFatigue || 'steady';
     appShell.dataset.neonMode = state?.analog?.neon?.mode || 'bright';
+    appShell.dataset.uvDeskLens = state?.forensic?.uvDeskLensActive ? 'on' : 'off';
+    appShell.dataset.tapeArchive = state?.forensic?.tapeActive ? 'recording' : 'idle';
   }
 
   const radioBtn = document.getElementById('radio-intercept-btn');
@@ -1066,7 +1069,12 @@ export function renderGuests(
       : Number(guest?.urgencySignal || 0) >= 2
         ? 'guest-card-urgent'
         : '';
-    card.className = `guest-card guest-card-v20 ${emphasisClass}`.trim();
+    const uvLens = Boolean(state?.forensic?.uvDeskLensActive);
+    const latentUv =
+      uvLens && !guest.uvInspected && (guest.flagged || guest.riskLevel === 'High' || Boolean(guest.contradictoryClue));
+    card.className = `guest-card guest-card-v20 ${emphasisClass}${latentUv ? ' v33-latent-uv' : ''}${
+      uvLens ? ' v33-blacklight-context' : ''
+    }`.trim();
     card.dataset.risk = (guest.riskLevel || 'Low').toLowerCase();
     card.dataset.archetype = (guest.archetypeKey || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '-');
     const contradictionLines = Array.isArray(guest?.contradictionLines) ? guest.contradictionLines.slice(0, 3) : [];
@@ -1117,6 +1125,17 @@ export function renderGuests(
     const memoryEchoHtml = (guest?.isReturningGuest && memoryChips.length)
       ? `<div class="v26-memory-echo-strip"><span class="v26-memory-echo-label">Memory</span>${memoryChips.join('')}</div>`
       : '';
+
+    const latentPreview =
+      uvLens && !guest.uvInspected
+        ? `<div class="guest-detail-block v33-desk-objects">
+            <p class="guest-id-line"><strong>Blacklight desk (latent):</strong></p>
+            <p class="guest-id-line muted">${
+              buildDeskUvObjectLines(guest).join(' · ') ||
+              'Thin reactive field — run UV on this guest to lock a physical read.'
+            }</p>
+          </div>`
+        : '';
 
     card.innerHTML = `
       <div class="guest-card-header">
@@ -1215,6 +1234,7 @@ export function renderGuests(
             <p class="guest-id-line"><strong>UV Read:</strong> ${guest?.uvInspected ? (guest?.uvProfile?.suspicious ? 'Suspicious' : 'Clear') : 'Not used yet'}</p>
             <p class="guest-id-line muted">${guest?.uvInspected ? (guest?.uvProfile?.markers || []).join('; ') : 'Use UV only when the desk read feels off or scanner chatter lines up.'}</p>
           </div>
+          ${latentPreview}
           <div class="guest-detail-block guest-uv-block">
             <p class="guest-id-line"><strong>Pattern:</strong> ${guest?.factionProfile?.label || 'No strong local-network sign yet'}</p>
             <p class="guest-id-line muted">${guest?.factionProfile?.clue || guest?.linkedArrival?.note || 'No linked traveler or faction pattern surfaced yet.'}</p>
@@ -2041,6 +2061,101 @@ export function renderAnalogPowerExtras(state) {
   });
 }
 
+export function renderForensicShiftUi(state) {
+  const forensicMount = document.getElementById('forensic-shift-mount');
+  const lostMount = document.getElementById('lost-found-mount');
+  const f = state?.forensic;
+  const locker = state?.evidenceLockerSummary || state?.evidenceLocker || {};
+  const items = Array.isArray(locker.items) ? locker.items : [];
+
+  if (forensicMount) {
+    const lensOn = Boolean(f?.uvDeskLensActive);
+    const tapeOn = Boolean(f?.tapeActive);
+    const tapeLeft = Number(f?.tapeTurnsLeft || 0);
+    const tail = items.slice(-6).reverse();
+    const tapeRows = tail
+      .map((it) => {
+        if (!tapeBackupEligible(it) || it.tapeSecured) return '';
+        return `<div class="v33-tape-row">
+          <span class="v33-tape-label">${(it.label || 'Item').slice(0, 42)}</span>
+          <button type="button" class="button button-utility v33-tape-start" data-evidence-tape="${it.id}">Tape</button>
+        </div>`;
+      })
+      .join('');
+    forensicMount.innerHTML = `
+      <div class="v33-forensic-strip">
+        <div class="v33-uv-control">
+          <span class="v33-forensic-label">Blacklight</span>
+          <button type="button" class="button ${lensOn ? 'button-warning' : 'button-secondary'} v33-uv-toggle-btn" aria-pressed="${lensOn ? 'true' : 'false'}">
+            ${lensOn ? 'Lens ON' : 'Lens OFF'}
+          </button>
+          <span class="muted v33-forensic-hint">Desk-only. Does not blind the whole UI.</span>
+        </div>
+        <div class="v33-tape-panel">
+          <span class="v33-forensic-label">Tape backup</span>
+          ${tapeOn ? `<span class="v33-tape-active">Recording… ${tapeLeft} tick(s)</span>` : '<span class="muted">Vulnerable window while recording.</span>'}
+          ${tapeRows || '<span class="muted v33-tape-empty">No eligible strips queued.</span>'}
+        </div>
+      </div>
+    `;
+    forensicMount.querySelector('.v33-uv-toggle-btn')?.addEventListener('click', () => {
+      if (typeof state.onToggleUvDeskLens === 'function') state.onToggleUvDeskLens();
+    });
+    forensicMount.querySelectorAll('.v33-tape-start').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-evidence-tape');
+        if (id && typeof state.onTapeBackupEvidence === 'function') state.onTapeBackupEvidence(id);
+      });
+    });
+  }
+
+  if (lostMount) {
+    const lf = f?.lostFound || [];
+    if (!lf.length) {
+      lostMount.innerHTML = '';
+      lostMount.classList.remove('has-items');
+      return;
+    }
+    lostMount.classList.add('has-items');
+    lostMount.innerHTML = `
+      <div class="v33-lost-found-board">
+        <div class="v33-lost-found-header"><span>Lost &amp; Found</span><span class="muted">${lf.length} item(s)</span></div>
+        <div class="v33-lost-found-list">
+          ${lf
+            .map(
+              (it) => `<div class="v33-lost-item" data-lf-id="${it.id}">
+            <div>
+              <strong>${it.label}</strong>
+              <p class="muted microcopy-line">${it.short}</p>
+              <span class="v33-lf-risk risk-${it.risk || 'ordinary'}">${it.risk || 'ordinary'}</span>
+            </div>
+            <div class="v33-lf-actions">
+              <button type="button" class="button button-utility" data-lf-act="hold">Hold</button>
+              <button type="button" class="button button-secondary" data-lf-act="log">Log</button>
+              <button type="button" class="button button-secondary" data-lf-act="return">Return</button>
+              <button type="button" class="button button-secondary" data-lf-act="evidence">Evidence</button>
+              <button type="button" class="button button-warning" data-lf-act="sell">Sell</button>
+              <button type="button" class="button button-warning" data-lf-act="stash">Stash</button>
+            </div>
+          </div>`
+            )
+            .join('')}
+        </div>
+      </div>
+    `;
+    lostMount.querySelectorAll('[data-lf-act]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('.v33-lost-item');
+        const id = row?.getAttribute('data-lf-id');
+        const act = btn.getAttribute('data-lf-act');
+        if (id && act && typeof state.onLostFoundAction === 'function') {
+          state.onLostFoundAction(id, act);
+        }
+      });
+    });
+  }
+}
+
 export function renderCameraSceneOverlay(state) {
   const overlay = document.getElementById('camera-scene-overlay');
   if (!overlay) return;
@@ -2684,9 +2799,14 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
       const recentItems = items.slice(-5);
       const rowsHtml = recentItems.map((item) => {
         const cat = String(item.category || 'other');
+        const chips = [];
+        if (item.uvConfirmed) chips.push('<span class="v33-evidence-chip is-uv-confirmed">UV✓</span>');
+        if (item.tapeSecured) chips.push('<span class="v33-evidence-chip is-tape">Tape</span>');
+        else if (item.uvReactive) chips.push('<span class="v33-evidence-chip is-uv-reactive">UV·</span>');
+        const chipStr = chips.length ? `<span class="v33-summary-chip-wrap">${chips.join('')}</span>` : '';
         return `<div class="v27-summary-evidence-row">
           <span class="v27-summary-evidence-dot category-${cat}"></span>
-          <span>${item.label || 'Evidence'} — Night ${item.night || '?'}</span>
+          <span>${item.label || 'Evidence'} — Night ${item.night || '?'} ${chipStr}</span>
         </div>`;
       }).join('');
       const mysteryReveal = locker.mysteryFragmentsFound >= 6
@@ -2923,8 +3043,17 @@ function buildEvidenceLockerHtml(locker = {}, compact = false) {
     const displayItems = compact ? items.slice(-6) : items;
     listHtml = `<div class="v27-evidence-list">${displayItems.map((item) => {
       const cat = String(item.category || 'other');
-      return `<div class="v27-evidence-item category-${cat}">
+      const chips = [];
+      if (item.uvConfirmed) chips.push('<span class="v33-evidence-chip is-uv-confirmed" title="UV-confirmed on shift">UV✓</span>');
+      if (item.tapeSecured) chips.push('<span class="v33-evidence-chip is-tape" title="Magnetic tape duplicate">Tape</span>');
+      else if (item.uvReactive) chips.push('<span class="v33-evidence-chip is-uv-reactive" title="Reactive under blacklight">UV·</span>');
+      if (item.provenanceHint) {
+        chips.push(`<span class="v33-evidence-chip is-prov-${String(item.provenanceHint).replace(/[^a-z0-9]/g, '')}">${item.provenanceHint}</span>`);
+      }
+      const chipRow = chips.length ? `<div class="v33-evidence-chip-row">${chips.join('')}</div>` : '';
+      return `<div class="v27-evidence-item category-${cat}" data-evidence-id="${item.id || ''}">
         <span class="v27-evidence-item-label">${item.label || 'Evidence'}</span>
+        ${chipRow}
         <span class="v27-evidence-item-desc">${item.desc || ''}</span>
         <span class="v27-evidence-item-night">Night ${item.night || '?'}</span>
       </div>`;

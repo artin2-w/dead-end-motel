@@ -164,10 +164,10 @@ const EVIDENCE_CATALOG = [
   { id: 'mystery-shift-log',     type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Shift Log', desc: 'A partial shift log found inside the power board housing — not yours.' },
   { id: 'mystery-key-tag',       type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Key Tag',   desc: 'A key tag printed with room "0". There is no Room 0 in this motel.' },
   { id: 'mystery-photo',         type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Photo',     desc: 'A photo of the parking lot at night, taped under the desk. Timestamp: two months ago.' },
-  { id: 'mystery-note',          type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Note',      desc: '"Don\'t trust the scanner after midnight. It routes to a third address since April."' },
+  { id: 'mystery-note',          type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Note',      desc: '"Don\'t trust the scanner after midnight. It routes to a third address since April."', uvReactive: true, provenanceHint: 'mystery' },
   { id: 'mystery-badge',         type: 'mystery',   category: 'mystery',      label: 'Previous Manager: Badge',     desc: 'A faded employee badge. The name is scratched off. The photo shows this exact desk.' },
   // v0.28 dirty business evidence
-  { id: 'stained-cash-band',       type: 'dirty',   category: 'dirty',    label: 'Stained Cash Band',           desc: 'A rubber-banded roll of bills with a brown stain. Not from the till.' },
+  { id: 'stained-cash-band',       type: 'dirty',   category: 'dirty',    label: 'Stained Cash Band',           desc: 'A rubber-banded roll of bills with a brown stain. Not from the till.', uvReactive: true, provenanceHint: 'dirty' },
   { id: 'off-book-register-note',  type: 'dirty',   category: 'dirty',    label: 'Off-Book Register Note',      desc: 'A handwritten note with room number and initials — never entered into the system.' },
   { id: 'dead-drop-token',         type: 'dirty',   category: 'dirty',    label: 'Vending Drop Token',          desc: 'A coin-shaped token in the vending machine return slot. Not locally manufactured.' },
   { id: 'hunter-vehicle-note',     type: 'dirty',   category: 'security', label: 'Hunter Vehicle Note',         desc: 'Partial plate and description of the vehicle that stopped at the lot asking questions.' },
@@ -183,16 +183,25 @@ const EVIDENCE_CATALOG = [
   { id: 'inside-job-note',           type: 'staff', category: 'staff', label: 'Inside Job Note',           desc: 'A folded slip found behind the desk board. A handwritten list of rooms with current guest names.' },
   // v0.30 contamination / Room 9 / owner-protected space
   { id: 'owner-access-slip',        type: 'contamination', category: 'owner', label: 'Owner Access Slip',             desc: 'A keycard authorization record. One room number appears outside the standard guest rotation. The access was logged at 2:40 AM.' },
-  { id: 'sealed-housekeeping-memo', type: 'contamination', category: 'owner', label: 'Sealed Housekeeping Memo',      desc: 'An internal notice, still sealed. The room number is crossed out. "Do not service. Owner authorization only." No date.' },
+  { id: 'sealed-housekeeping-memo', type: 'contamination', category: 'owner', label: 'Sealed Housekeeping Memo',      desc: 'An internal notice, still sealed. The room number is crossed out. "Do not service. Owner authorization only." No date.', uvReactive: true, provenanceHint: 'room9' },
   { id: 'stained-maintenance-note', type: 'contamination', category: 'owner', label: 'Stained Maintenance Note',      desc: 'Work order for a plumbing issue in a rear room. The room number in the header was scratched out and replaced. The stain on the corner is not coffee.' },
   { id: 'unsigned-expense-form',    type: 'contamination', category: 'owner', label: 'Unsigned Expense Form',         desc: 'A requisition for "specialized cleaning materials." No signatory. The room number field is blank but the amount is $340.' },
   { id: 'old-room-ledger',          type: 'contamination', category: 'owner', label: 'Old Room Ledger Fragment',      desc: 'A page from a prior-season log. One room entry spans 94 consecutive nights — under the same reservation name. No checkout was ever recorded.' },
   { id: 'do-not-enter-copy',        type: 'contamination', category: 'owner', label: '"Do Not Enter" Notice Copy',    desc: 'A duplicate of an internal management notice. Handwritten at the bottom: "Previous manager was told the same thing. He looked anyway."' },
   // v0.31 town corruption / bagman cop
   { id: 'police-payoff-receipt',  type: 'corruption', category: 'town', label: 'Police Payoff Receipt',    desc: 'A carbon-copy receipt folded into a desk drawer. A dollar amount. No signature, but the badge number in the memo field is real.' },
-  { id: 'false-police-log',       type: 'corruption', category: 'town', label: 'False Police Log',         desc: 'A dispatch record that skips a 40-minute window during a night when you know something happened. The log shows a patrol car on the opposite end of town.' },
+  { id: 'false-police-log',       type: 'corruption', category: 'town', label: 'False Police Log',         desc: 'A dispatch record that skips a 40-minute window during a night when you know something happened. The log shows a patrol car on the opposite end of town.', uvReactive: true, provenanceHint: 'town' },
   { id: 'informant-record',       type: 'corruption', category: 'town', label: 'Informant Record',         desc: 'A typed list of names, amounts, and dates. The motel appears twice. Someone has been reporting activity here for longer than you\'ve been working nights.' },
-  { id: 'bagman-visit-note',      type: 'corruption', category: 'town', label: 'Bagman Visit Note',        desc: 'A single index card in the back of the desk. Two words: a name and a room number. Circled. Dated last Thursday.' }
+  { id: 'bagman-visit-note',      type: 'corruption', category: 'town', label: 'Bagman Visit Note',        desc: 'A single index card in the back of the desk. Two words: a name and a room number. Circled. Dated last Thursday.' },
+  {
+    id: 'lost-found-object',
+    type: 'object',
+    category: 'mystery',
+    label: 'Lost & Found Chain Object',
+    desc: 'An object moved from the informal bin into the evidence spine. Still smells like lobby carpet and indecision.',
+    uvReactive: true,
+    provenanceHint: 'desk'
+  }
 ];
 
 const MYSTERY_FRAGMENTS = [
@@ -784,7 +793,11 @@ export function buildEvidenceItem(triggerId, night = 1, contextLabel = '') {
     category: template.category,
     label: contextLabel ? `${template.label}: ${contextLabel}` : template.label,
     desc: template.desc,
-    night
+    night,
+    uvReactive: Boolean(template.uvReactive),
+    provenanceHint: template.provenanceHint || null,
+    uvConfirmed: false,
+    tapeSecured: false
   };
 }
 

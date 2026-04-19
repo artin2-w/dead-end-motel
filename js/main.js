@@ -100,6 +100,23 @@ import {
   cycleNeonPlayerWish
 } from './analogSurvival.js';
 import {
+  normalizeForensicNoirState,
+  toggleUvDeskLens,
+  buildDeskUvObjectLines,
+  applyUvInspectionCrossRef,
+  maybeSpawnLostFoundOnReject,
+  maybeSpawnLostFoundOnEvict,
+  resolveLostFoundAction,
+  tickForensicTape,
+  isTapeArchiveVulnerable,
+  startTapeBackupForEvidenceItem,
+  maybeRollLostFoundClaimEvent,
+  buildLostFoundClaimNightEvent,
+  resolveLostFoundClaimChoice,
+  getForensicRenderModel,
+  resetForensicForNewNight
+} from './forensicNoir.js';
+import {
   normalizeCameraSceneState,
   buildFreshCameraSceneState,
   clearCameraScene,
@@ -310,6 +327,7 @@ import {
   renderSharedSpaces,
   renderCameras,
   renderAnalogPowerExtras,
+  renderForensicShiftUi,
   renderNightEventCard,
   renderNightEventOverlay,
   renderCameraSceneOverlay,
@@ -2615,6 +2633,7 @@ function restoreNightStartSnapshot(options = {}) {
   state = normalizePowerEconomyState(state);
   normalizeAnalogSurvivalState(state);
   finalizeAnalogSurvivalState(state);
+  normalizeForensicNoirState(state);
   state = normalizeCameraSceneState(state);
   state = normalizeLocationState(state);
   state = normalizePresentationState(state);
@@ -5281,11 +5300,53 @@ function buildRenderState() {
     cameraInterferenceLevel: Math.max(
       blackoutState.cameraInterference,
       Number(state?.crisisEscalation?.cameraInterferenceLevel || 0),
-      getCameraAnalogPenalty(state)
+      getCameraAnalogPenalty(state),
+      isTapeArchiveVulnerable(state) ? 1 : 0
     ),
     analog: getBreakerBoardSummary(state),
     presentationFatigue: getFatigueTier(state),
     blurGuestNamesFromFatigue: shouldFatigueBlurNames(state),
+    forensic: getForensicRenderModel(state),
+    onToggleUvDeskLens: () => {
+      onMeaningfulAction();
+      audioController.playUiClick();
+      const on = toggleUvDeskLens(state);
+      pushLiveAlert(state, {
+        type: 'info',
+        message: on ? 'Blacklight desk lens on — reactive reads visible on open cases.' : 'Blacklight desk lens off.',
+        dedupeKey: `uv-lens-${state.night}-${on ? 'on' : 'off'}`
+      });
+      if (progressShift('uv-lens-toggle', { timeScale: 0.06, skipPassiveDrain: true })) return;
+      renderAll();
+    },
+    onLostFoundAction: (itemId, action) => {
+      onMeaningfulAction();
+      audioController.playUiClick();
+      const r = resolveLostFoundAction(state, itemId, action);
+      if (!r.ok) {
+        pushLiveAlert(state, { type: 'warning', message: r.reason, dedupeKey: 'lf-fail' });
+      } else if (Array.isArray(r.logs)) {
+        r.logs.forEach((ln) => state.logs.push(ln));
+      }
+      if (progressShift('lost-found', { timeScale: 0.12, skipPassiveDrain: true })) return;
+      renderAll();
+    },
+    onTapeBackupEvidence: (evidenceItemId) => {
+      onMeaningfulAction();
+      audioController.playUiClick();
+      const r = startTapeBackupForEvidenceItem(state, evidenceItemId);
+      if (!r.ok) {
+        pushLiveAlert(state, { type: 'warning', message: r.reason, dedupeKey: 'tape-fail' });
+      } else {
+        pushLiveAlert(state, {
+          type: 'warning',
+          message: 'Tape backup running — two thin ticks of divided attention.',
+          dedupeKey: 'tape-start'
+        });
+      }
+      if (progressShift('tape-backup', { timeScale: 0.1, skipPassiveDrain: true })) return;
+      renderAll();
+    },
     onAnalogCycleCircuit: (circuitId) => {
       onMeaningfulAction();
       audioController.playUiClick();
@@ -5906,6 +5967,7 @@ function bootstrapState() {
   }
   normalizeAnalogSurvivalState(state);
   finalizeAnalogSurvivalState(state);
+  normalizeForensicNoirState(state);
 }
 function renderAll() {
   evaluatePresentationState();
@@ -5937,6 +5999,7 @@ function renderAll() {
   renderSharedSpaces(renderState);
   renderCameras(renderState);
   renderAnalogPowerExtras(renderState);
+  renderForensicShiftUi(renderState);
   renderNightEventOverlay(renderState);
   renderCameraSceneOverlay(renderState);
   renderSpecialEncounterOverlay(renderState);
@@ -6234,6 +6297,30 @@ function startShift() {
 // ============================================================
 // v0.23 — RAID / CAMERA SABOTAGE / BURNER PHONE / ZONE BLACKOUT
 // ============================================================
+
+function triggerLostFoundClaimEvent() {
+  state.activeNightEvent = buildLostFoundClaimNightEvent('desk property');
+  state.nightEventOverlayOpen = false;
+  state.logs.push('Someone is at the glass asking about lost property that never hit the official bin.');
+  pushLiveAlert(state, {
+    type: 'warning',
+    kind: 'actionable',
+    message: 'Lost property claim: a face at the desk insists the motel has something.',
+    dedupeKey: `lost-claim-${state.night}`
+  });
+  renderAll();
+}
+
+function handleLostFoundClaimChoice(choiceId) {
+  onMeaningfulAction();
+  audioController.playUiClick();
+  state.nightEventOverlayOpen = false;
+  state.activeNightEvent = null;
+  const res = resolveLostFoundClaimChoice(state, choiceId);
+  if (Array.isArray(res.logs)) state.logs.push(...res.logs);
+  if (progressShift('lost-claim', { timeScale: 0.18, skipPassiveDrain: true })) return;
+  renderAll();
+}
 
 function triggerLotPayphoneEvent() {
   state.activeNightEvent = buildLotPayphoneNightEvent();
@@ -6784,8 +6871,13 @@ function addEvidenceItem(triggerId, night = null, contextLabel = '') {
   const item = buildEvidenceItem(triggerId, night !== null ? night : (state.night || 1), contextLabel);
   if (!item) return;
   const existing = state.evidenceLocker.items;
-  // prevent duplicate template per night
-  const alreadyThisNight = existing.some((e) => e.templateId === triggerId && e.night === item.night);
+  // prevent duplicate template per night (same label if contextual)
+  const alreadyThisNight = existing.some(
+    (e) =>
+      e.templateId === triggerId &&
+      e.night === item.night &&
+      (!contextLabel || String(e.label || '') === String(item.label || ''))
+  );
   if (alreadyThisNight) return;
   state.evidenceLocker.items = [...existing, item].slice(-32);
 }
@@ -8417,6 +8509,12 @@ function progressShift(actionKey, options = {}) {
     });
   }
 
+  normalizeForensicNoirState(state);
+  const tapeTickResult = tickForensicTape(state);
+  if (tapeTickResult?.alert) {
+    pushLiveAlert(state, tapeTickResult.alert);
+  }
+
   if (state?.activeNightEvent?.id) {
     registerContentExposure(state, { kind: 'event', id: state.activeNightEvent.id });
   }
@@ -8753,6 +8851,12 @@ function progressShift(actionKey, options = {}) {
       triggerBagmanCopEvent();
       return false;
     }
+  }
+
+  // v0.33 lost-property claim — after mishandled lost & found
+  if (!state.activeNightEvent && maybeRollLostFoundClaimEvent(state)) {
+    triggerLostFoundClaimEvent();
+    return false;
   }
 
   // v0.32 lot payphone — rare outdoor line (weather / pressure weighted)
@@ -9093,6 +9197,8 @@ function rejectGuest(guestId) {
 
   recordSpecialEncounterMiss(state, guest);
 
+  maybeSpawnLostFoundOnReject(state, guest);
+
   state.guests = state.guests.filter((entry) => entry.id !== guestId);
   state.logs = [...state.logs, ...outcome.logs];
   state.reputation = applyReputationDelta(state.reputation, outcome.reputationDelta);
@@ -9222,6 +9328,7 @@ function deepInspectGuest(guestId) {
     }
     const updatedGuest = updateQueuedGuest(guestId, (currentGuest) => {
       const suspicious = Boolean(currentGuest?.uvProfile?.suspicious);
+      const deskLines = buildDeskUvObjectLines({ ...currentGuest, uvInspected: true });
       return {
         ...currentGuest,
         uvInspected: true,
@@ -9231,11 +9338,13 @@ function deepInspectGuest(guestId) {
           currentGuest.threadMemoryLine,
           suspicious
             ? `UV read found: ${(currentGuest?.uvProfile?.markers || []).join('; ')}.`
-            : 'UV read did not reveal fresh tampering.'
+            : 'UV read did not reveal fresh tampering.',
+          deskLines.length ? `Desk UV objects: ${deskLines.join(' · ')}` : ''
         ].filter(Boolean).join(' ')
       };
     });
     if (!updatedGuest) return;
+    applyUvInspectionCrossRef(state, updatedGuest);
     state.logs.push(
       updatedGuest?.uvProfile?.suspicious
         ? `UV inspection on ${updatedGuest.name} exposed hidden marks: ${(updatedGuest.uvProfile.markers || []).join('; ')}.`
@@ -10103,6 +10212,10 @@ function handleNightEventChoice(optionId) {
   const activeEventId = state?.activeNightEvent?.id || 'none';
 
   // Dispatch v0.23 custom event handlers before the generic resolver
+  if (activeEventId === 'lost-found-claim') {
+    handleLostFoundClaimChoice(optionId);
+    return;
+  }
   if (activeEventId === 'lot-payphone') {
     handleLotPayphoneChoice(optionId);
     return;
@@ -10748,6 +10861,11 @@ function endNight(options = {}) {
     if (analogRecall.length) {
       state.summaryIdentityLines.push(`Breaker / neon / operator: ${analogRecall.join(' · ')}`);
     }
+    normalizeForensicNoirState(state);
+    const forensicRecall = (state.forensicNoir?.shiftLog || []).filter(Boolean).slice(-2);
+    if (forensicRecall.length) {
+      state.summaryIdentityLines.push(`Forensic / objects: ${forensicRecall.join(' · ')}`);
+    }
     state.summaryIdentityLines = state.summaryIdentityLines.filter(Boolean).slice(0, 5);
     if ((state.shiftStats.nightEventsMissed || 0) === 0 && (state.shiftStats.unresolvedLocationScenes || 0) === 0) {
       applyIdentityImpact({
@@ -11201,6 +11319,10 @@ function evictRoomGuest(roomId) {
   const roomIndex = state.rooms.findIndex((room) => room.id === roomId);
   if (roomIndex === -1) return;
 
+  const preRoom = state.rooms[roomIndex];
+  const preGuestName = preRoom?.occupiedBy || preRoom?.guestName || '';
+  const preLabel = preRoom?.label || '';
+
   const result = evictGuestFromRoom(state.rooms[roomIndex]);
   state.rooms[roomIndex] = {
     ...result.room,
@@ -11237,6 +11359,10 @@ function evictRoomGuest(roomId) {
   });
 
   calmRoomChain(roomId, 4);
+
+  if (preGuestName) {
+    maybeSpawnLostFoundOnEvict(state, preGuestName, preLabel, preRoom?.riskLevel);
+  }
 
   if (checkFailureState()) return;
   if (progressShift('evict')) return;
@@ -11401,6 +11527,7 @@ function nextNight() {
   state.shiftStats = createShiftStats();
   state.powerEconomy = buildFreshPowerEconomy();
   resetAnalogForNewShift(state);
+  resetForensicForNewNight(state);
   applyNightStartProgression(state);
   applyDayShiftPlanForNightStart();
   state.cameraScene = buildFreshCameraSceneState();

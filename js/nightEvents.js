@@ -823,9 +823,14 @@ export function tickNightEvents(state, branchContext = null) {
 
   if (state.activeNightEvent) {
     const event = state.activeNightEvent;
-    const skipDirectorTimeout = ['police-raid', 'lot-payphone', 'unknown-caller', 'burner-phone', 'hunters'].includes(
-      String(event?.id || '')
-    );
+    const skipDirectorTimeout = [
+      'police-raid',
+      'lot-payphone',
+      'lost-found-claim',
+      'unknown-caller',
+      'burner-phone',
+      'hunters'
+    ].includes(String(event?.id || ''));
     event.ageTicks += 1;
     const safeNight = Math.max(1, Number(state?.night || 1));
 

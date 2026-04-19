@@ -82,6 +82,14 @@ export function buildNightSummary(state) {
   if (fatigueEnd >= 55) {
     identity.push('Operator fatigue stacked high enough that the shift felt personally costly, not just strategically tense.');
   }
+  const forensicLog = Array.isArray(state?.forensicNoir?.shiftLog) ? state.forensicNoir.shiftLog.filter(Boolean) : [];
+  if (forensicLog.length) {
+    identity.push(`Forensic trace: ${forensicLog.slice(-2).join(' · ')}`);
+  }
+  const uvN = Number(state?.forensicNoir?.uvConfirmationsThisShift || 0);
+  if (uvN >= 2) {
+    identity.push('UV/blacklight work tied multiple physical threads together — the desk stopped pretending everything was routine paper.');
+  }
   if (state?.emergencyNight?.active || Number(state?.emergencyState?.commandHistory?.length || 0) > 0) {
     identity.push('The shift crossed into command-state management, where containment choices mattered as much as basic desk reads.');
   }

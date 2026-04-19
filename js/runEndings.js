@@ -333,6 +333,9 @@ function evaluateGrade(snapshot) {
   if (n(snapshot.operatorFatigueEnd, 0) >= 78) score -= 2;
   else if (n(snapshot.operatorFatigueEnd, 0) <= 35) score += 2;
   if (n(snapshot.analogStrongStimUses, 0) >= 1) score -= 1;
+  score += Math.min(3, n(snapshot.tapeSecuredCount, 0));
+  if (n(snapshot.uvConfirmedEvidenceCount, 0) >= 3) score += 2;
+  if (n(snapshot.forensicClaimDebt, 0) >= 2) score -= 2;
 
   if (score >= 86) return { grade: 'S', label: 'Definitive Campaign Close' };
   if (score >= 75) return { grade: 'A', label: 'Strong Campaign Close' };
@@ -416,7 +419,14 @@ export function buildRunEndingPackage(state) {
     huntWins: n(callerThread.huntNightWins, 0),
     huntLosses: n(callerThread.huntNightLosses, 0),
     operatorFatigueEnd: n(state?.analogSurvival?.operatorFatigue, 0),
-    analogStrongStimUses: n(state?.analogSurvival?.stimUses?.strong, 0)
+    analogStrongStimUses: n(state?.analogSurvival?.stimUses?.strong, 0),
+    tapeSecuredCount: Array.isArray(state?.evidenceLocker?.items)
+      ? state.evidenceLocker.items.filter((it) => it?.tapeSecured).length
+      : 0,
+    uvConfirmedEvidenceCount: Array.isArray(state?.evidenceLocker?.items)
+      ? state.evidenceLocker.items.filter((it) => it?.uvConfirmed).length
+      : 0,
+    forensicClaimDebt: n(state?.forensicNoir?.claimDebt, 0)
   };
 
   const ending = evaluateCategory(snapshot);
@@ -470,6 +480,7 @@ export function buildRunEndingPackage(state) {
     : '';
 
   const analogFoot = (state?.analogSurvival?.analogNightLog || []).filter(Boolean).slice(-1)[0];
+  const forensicFoot = (state?.forensicNoir?.shiftLog || []).filter(Boolean).slice(-1)[0];
   const notes = [
     snapshot.endingMood ? `Late-run identity: ${snapshot.endingMood}` : '',
     snapshot.finalePerformanceLabel ? `Finale assessment: ${snapshot.finalePerformanceLabel}` : '',
@@ -479,8 +490,9 @@ export function buildRunEndingPackage(state) {
     `Special + event containment wins: ${snapshot.cleanResolutions}`,
     rareMoments > 0 ? `Rare run moments surfaced: ${rareMoments}` : '',
     analogFoot ? `Physical desk toll: ${analogFoot}` : '',
+    forensicFoot ? `Forensic trace: ${forensicFoot}` : '',
     finaleIntegrationLine
-  ].slice(0, 5);
+  ].slice(0, 6);
 
   const tags = [
     `Difficulty: ${difficultyLabel}`,
@@ -515,7 +527,10 @@ export function buildRunEndingPackage(state) {
     snapshot.staffDismissed && !snapshot.staffCompromised ? 'Last Honest Shift' : '',
     snapshot.mutinyFired && snapshot.avgStaffMorale < 0.30 ? 'Fear Management' : '',
     snapshot.operatorFatigueEnd >= 75 ? 'Operator Exhausted' : '',
-    snapshot.analogStrongStimUses >= 1 ? 'Chemically Stabilized' : ''
+    snapshot.analogStrongStimUses >= 1 ? 'Chemically Stabilized' : '',
+    snapshot.tapeSecuredCount >= 2 ? 'Tape Discipline' : '',
+    snapshot.uvConfirmedEvidenceCount >= 2 ? 'UV-Confirmed Chain' : '',
+    snapshot.forensicClaimDebt >= 1 ? 'Trace Debt' : ''
   ].filter(Boolean).slice(0, 6);
 
   return {
