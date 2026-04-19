@@ -630,6 +630,53 @@ export function renderTopbar(state) {
     activeUpgradesInline.textContent = `Active Upgrades: ${summary}`;
   }
 
+  const v35Ext = document.getElementById('v35-shift-extensions');
+  if (v35Ext) {
+    const eu = state?.endlessUi;
+    const da = state?.dawnAuditorUi;
+    const parts = [];
+    if (eu?.isEndless) {
+      parts.push(
+        `<div class="v35-endless-strip" role="status">
+          <span class="v35-mode-kicker">Endless shift</span>
+          <span class="v35-endurance">Endurance <strong>${eu.survivalScore}</strong></span>
+          <span class="v35-contract-pill">${eu.contract ? eu.contract.codename : 'Broker pending'}</span>
+        </div>`
+      );
+    } else if (eu?.darkContractsOn && eu.contract) {
+      parts.push(
+        `<div class="v35-endless-strip v35-endless-strip--compact" role="status">
+          <span class="v35-mode-kicker">Broker contract</span>
+          <span class="v35-contract-pill">${eu.contract.codename}</span>
+        </div>`
+      );
+    }
+    if (da?.active) {
+      const cleanupReady = da.cleanupWindow && da.cleanupUsed < 1;
+      const exp =
+        da.exposurePreview != null
+          ? `<span class="v35-exposure">Exposure index ~<strong>${da.exposurePreview}</strong> (lower is safer)</span>`
+          : '';
+      parts.push(`<div class="v35-dawn-auditor-card" role="region" aria-label="Dawn inspection pressure">
+        <div class="v35-dawn-auditor-header">
+          <span class="v35-dawn-auditor-title">Dawn auditor window</span>
+          ${da.warned ? '<span class="v35-dawn-badge">6:00 inspection rumored</span>' : '<span class="v35-dawn-badge v35-dawn-badge--quiet">Watch the lobby optics</span>'}
+        </div>
+        <p class="muted v35-dawn-auditor-copy">Outside eyes may walk the desk story. Reduce visible mess, stabilize logs, and secure evidence before dawn closes the ledger.</p>
+        ${exp}
+        ${
+          cleanupReady
+            ? `<div class="v35-cleanup-row"><button type="button" class="button button-secondary v35-cleanup-btn" data-dawn-auditor-cleanup>Concealment pass (−$14, −2 rep)</button><span class="muted v35-cleanup-hint">One quick pass this window — buys exposure room.</span></div>`
+            : da.cleanupUsed >= 1
+              ? '<p class="muted v35-cleanup-used">Concealment pass already spent tonight.</p>'
+              : '<p class="muted v35-cleanup-wait">Cleanup window opens in the final stretch before 6:00.</p>'
+        }
+      </div>`);
+    }
+    v35Ext.innerHTML = parts.join('');
+    v35Ext.hidden = parts.length === 0;
+  }
+
   const contextStrip = document.getElementById('topbar-context-strip');
   if (contextStrip) {
     const pressure = state?.uiPressureLevel || 'calm';
@@ -2390,6 +2437,16 @@ function buildReportPriorityStrip(state) {
   }
 
   strip.appendChild(chips);
+  const eu = state?.endlessUi;
+  if (eu && (eu.isEndless || eu.darkContractsOn)) {
+    const mode = document.createElement('div');
+    mode.className = 'report-v35-mode-line';
+    const cn = eu.contract?.codename ? `${eu.contract.codename}` : 'No broker contract';
+    mode.textContent = eu.isEndless
+      ? `Endless shift — endurance ${eu.survivalScore} • tonight: ${cn}`
+      : `Broker pressure — tonight: ${cn}`;
+    strip.appendChild(mode);
+  }
   return strip;
 }
 
@@ -2551,6 +2608,7 @@ function getSummaryBreakdownLineClass(line = '') {
   if (/^What hurt/i.test(s)) return 'aar-line aar-line-bad';
   if (/^Dominant pressure/i.test(s)) return 'aar-line aar-line-pressure';
   if (/^Dawn read/i.test(s)) return 'aar-line aar-line-dawn';
+  if (/^Dawn inspection/i.test(s)) return 'aar-line aar-line-dawn';
   return 'aar-line';
 }
 
@@ -2584,6 +2642,32 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
     runBonusLabel.textContent = bonus > 0
       ? `Archive bonus active: +${bonus}%`
       : 'Archive bonus active: None';
+  }
+
+  const v35Strip = document.getElementById('summary-v35-strip');
+  if (v35Strip) {
+    const eu = state?.endlessUi;
+    const band = String(state?.dawnAuditor?.outcomeBand || '');
+    if (eu?.isEndless || eu?.darkContractsOn || (band && band !== 'none')) {
+      const contract = eu?.contract;
+      const aud =
+        band === 'clean'
+          ? 'Dawn auditor: clean pass'
+          : band === 'partial'
+            ? 'Dawn auditor: partial hit'
+            : band === 'severe'
+              ? 'Dawn auditor: severe discovery'
+              : '';
+      v35Strip.innerHTML = `<div class="v35-summary-strip">
+        ${eu?.isEndless ? `<p><span class="v35-tag">Endless</span> Endurance <strong>${eu.survivalScore}</strong> • waves logged <strong>${eu.wave || state.night}</strong></p>` : ''}
+        ${contract?.codename ? `<p class="muted">Contract <strong>${contract.codename}</strong> — ${contract.headline}</p>` : ''}
+        ${aud ? `<p class="muted">${aud}</p>` : ''}
+      </div>`;
+      v35Strip.hidden = false;
+    } else {
+      v35Strip.innerHTML = '';
+      v35Strip.hidden = true;
+    }
   }
 
   const outcomeTitle = document.getElementById('summary-outcome-title');
@@ -3199,6 +3283,37 @@ export function renderNightPrep(state, upgrades = [], onPurchaseUpgrade = null) 
         ? `${collapseLine}${listHtml}`
         : '<p class="muted">No special campaign warnings.</p>'
     );
+  }
+
+  const darkContractsRoot = document.getElementById('night-prep-dark-contracts');
+  if (darkContractsRoot) {
+    const dw = state?.darkWebPrep;
+    if (dw?.enabled && Array.isArray(dw.offers) && dw.offers.length) {
+      const sel = String(dw.selectedNextId || '');
+      darkContractsRoot.innerHTML = prepSurface(
+        'dark-web-contracts',
+        'Dark-web broker — next shift contract',
+        `<div class="v35-contract-terminal">
+          <p class="v35-contract-terminal-lede muted">Pick one anonymous offer. It changes the rules, not just the flavor text.</p>
+          <div class="v35-contract-offers">
+            ${dw.offers
+              .map((c) => {
+                const active = sel === c.id ? ' is-selected' : '';
+                return `<button type="button" class="v35-contract-card${active}" data-dark-contract-id="${c.id}">
+                  <span class="v35-contract-code">${c.codename}</span>
+                  <span class="v35-contract-headline">${c.headline}</span>
+                  <span class="v35-contract-upside muted">${c.upside}</span>
+                  <span class="v35-contract-downside">Downside: ${c.downside}</span>
+                </button>`;
+              })
+              .join('')}
+          </div>
+          <p class="v35-contract-foot muted">${sel ? `Queued: ${(dw.offers.find((o) => o.id === sel) || {}).codename || sel}` : 'If you do not choose, tonight’s contract carries forward or the broker auto-assigns at shift start.'}</p>
+        </div>`
+      );
+    } else {
+      darkContractsRoot.innerHTML = '';
+    }
   }
 
   const forecastStrip = document.getElementById('night-prep-forecast');

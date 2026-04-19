@@ -1,3 +1,5 @@
+import { getDarkContractById } from './endlessShift.js';
+
 function n(value, fallback = 0) {
   const next = Number(value);
   return Number.isFinite(next) ? next : fallback;
@@ -463,7 +465,12 @@ export function buildRunEndingPackage(state) {
     forensicClaimDebt: n(state?.forensicNoir?.claimDebt, 0),
     convergencePeakTier: n(state?.campaignCollapseStats?.peakConvergenceTier, 0),
     trueCrisisNightsSurvived: n(state?.campaignCollapseStats?.trueCrisisNights, 0),
-    totalVectorHits: n(state?.campaignCollapseStats?.totalVectorHits, 0)
+    totalVectorHits: n(state?.campaignCollapseStats?.totalVectorHits, 0),
+    endlessSurvivalScore: n(state?.endlessRun?.survivalScore, 0),
+    endlessAuditorPasses: n(state?.endlessRun?.auditorPasses, 0),
+    endlessAuditorFails: n(state?.endlessRun?.auditorFails, 0),
+    endlessCleanupPasses: n(state?.endlessRun?.cleanupPasses, 0),
+    darkWebContractCodename: String(getDarkContractById(state?.endlessRun?.selectedDarkContractId)?.codename || '')
   };
 
   const ending = evaluateCategory(snapshot);
@@ -531,8 +538,11 @@ export function buildRunEndingPackage(state) {
     n(snapshot.convergencePeakTier, 0) >= 2
       ? `Convergence arc: peak tier ${snapshot.convergencePeakTier}, ${n(snapshot.trueCrisisNightsSurvived, 0)} collapse-class night(s).`
       : '',
+    String(state?.runSetup?.campaignMode || '') === 'endless' && n(snapshot.endlessSurvivalScore, 0) > 0
+      ? `Endless ledger: endurance ${Math.round(snapshot.endlessSurvivalScore)}, dawn passes ${snapshot.endlessAuditorPasses}, severe hits ${snapshot.endlessAuditorFails}, concealment passes ${snapshot.endlessCleanupPasses}.`
+      : '',
     finaleIntegrationLine
-  ].slice(0, 7);
+  ].slice(0, 8);
 
   const tags = [
     `Difficulty: ${difficultyLabel}`,
@@ -572,8 +582,13 @@ export function buildRunEndingPackage(state) {
     snapshot.uvConfirmedEvidenceCount >= 2 ? 'UV-Confirmed Chain' : '',
     snapshot.forensicClaimDebt >= 1 ? 'Trace Debt' : '',
     n(snapshot.trueCrisisNightsSurvived, 0) >= 2 ? 'Collapse Veteran' : '',
-    n(snapshot.convergencePeakTier, 0) >= 4 ? 'Peak Convergence' : ''
-  ].filter(Boolean).slice(0, 6);
+    n(snapshot.convergencePeakTier, 0) >= 4 ? 'Peak Convergence' : '',
+    snapshot.darkWebContractCodename ? `Contract ${snapshot.darkWebContractCodename}` : '',
+    String(state?.runSetup?.campaignMode || '') === 'endless' ? 'Endless Shift' : '',
+    n(snapshot.endlessSurvivalScore, 0) >= 120 ? 'Endurance Class' : '',
+    n(snapshot.endlessAuditorFails, 0) >= 2 ? 'Dawn Liability' : '',
+    n(snapshot.endlessAuditorPasses, 0) >= 3 ? 'Clean Dawns' : ''
+  ].filter(Boolean).slice(0, 8);
 
   return {
     key: ending.key,

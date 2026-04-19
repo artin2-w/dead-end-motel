@@ -1,4 +1,5 @@
 import { buildShiftOutcome } from './scoring.js';
+import { getDarkContractById, isEndlessMode, darkWebContractsEnabled } from './endlessShift.js';
 
 export function buildNightSummary(state) {
   const base = buildShiftOutcome({
@@ -109,6 +110,24 @@ export function buildNightSummary(state) {
   }
   if (state?.emergencyNight?.active || Number(state?.emergencyState?.commandHistory?.length || 0) > 0) {
     identity.push('The shift crossed into command-state management, where containment choices mattered as much as basic desk reads.');
+  }
+
+  const darkC = darkWebContractsEnabled(state) ? getDarkContractById(state?.endlessRun?.selectedDarkContractId) : null;
+  if (darkC?.codename) {
+    identity.push(`Anonymous contract ${darkC.codename} framed the economy: ${darkC.headline}.`);
+  }
+  if (isEndlessMode(state)) {
+    identity.push(
+      `Endless shift ledger: endurance ${Math.round(Number(state?.endlessRun?.survivalScore || 0))} • auditor passes ${Number(state?.endlessRun?.auditorPasses || 0)} / partials ${Number(state?.endlessRun?.auditorPartials || 0)} / severe ${Number(state?.endlessRun?.auditorFails || 0)}.`
+    );
+  }
+  const audBand = String(state?.dawnAuditor?.outcomeBand || '');
+  if (audBand === 'clean') {
+    identity.push('Dawn inspection: outside clipboard walk closed clean — visible exposure stayed under their threshold.');
+  } else if (audBand === 'partial') {
+    identity.push('Dawn inspection: partial outside hit — fines and town memory, but not a full breach narrative.');
+  } else if (audBand === 'severe') {
+    identity.push('Dawn inspection: severe read — traces, optics, or paperwork looked too compromised to hand-wave.');
   }
 
   let branchOutcome = 'Contained, but ordinary.';

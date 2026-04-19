@@ -123,6 +123,27 @@ import {
   buildCollapsePrepBrief
 } from './campaignCollapse.js';
 import {
+  isEndlessMode,
+  darkWebContractsEnabled,
+  pickDarkContractOffers,
+  getDarkContractById,
+  mergeDarkContractIntoRunModifiers,
+  normalizeEndlessRunState,
+  normalizeContractRuntime,
+  normalizeDawnAuditorState,
+  clearContractRuntime,
+  applyDarkContractRuntime,
+  applyContractAnalogHooks,
+  applyContractStaffHook,
+  applyContractWeatherHook,
+  rollDawnAuditor,
+  tickDawnAuditor,
+  computeDawnExposure,
+  applyDawnAuditorCleanupPass,
+  resolveDawnAuditorAtDawn,
+  recordEndlessWaveStats
+} from './endlessShift.js';
+import {
   normalizeCameraSceneState,
   buildFreshCameraSceneState,
   clearCameraScene,
@@ -674,20 +695,28 @@ function applyRunSetupStartModifiers() {
     state.powerEconomy.restoreCharges = Math.max(0, nextCharges);
   }
   state.runSetup = markRunSetupModifiersApplied(setup);
-  state.runModifiers = getRunSetupModifierProfile(state.runSetup);
+  const baseMods = getRunSetupModifierProfile(state.runSetup);
+  const darkPick = darkWebContractsEnabled(state) ? String(state?.endlessRun?.selectedDarkContractId || '') : '';
+  state.runModifiers = darkPick ? mergeDarkContractIntoRunModifiers(baseMods, darkPick) : baseMods;
   state.runSetupSummary = buildRunSetupSummary(state.runSetup);
 }
 
 function setRunDifficultyFromMenu(difficultyId) {
   state.runSetup = withRunDifficulty(state?.runSetup || createDefaultRunSetup(), difficultyId);
-  state.runModifiers = getRunSetupModifierProfile(state.runSetup);
+  normalizeEndlessRunState(state);
+  const base = getRunSetupModifierProfile(state.runSetup);
+  const cid = darkWebContractsEnabled(state) ? String(state?.endlessRun?.selectedDarkContractId || '') : '';
+  state.runModifiers = cid ? mergeDarkContractIntoRunModifiers(base, cid) : base;
   state.runSetupSummary = buildRunSetupSummary(state.runSetup);
   renderAll();
 }
 
 function setRunCampaignModeFromMenu(modeId) {
   state.runSetup = withRunCampaignMode(state?.runSetup || createDefaultRunSetup(), modeId);
-  state.runModifiers = getRunSetupModifierProfile(state.runSetup);
+  normalizeEndlessRunState(state);
+  const base = getRunSetupModifierProfile(state.runSetup);
+  const cid = darkWebContractsEnabled(state) ? String(state?.endlessRun?.selectedDarkContractId || '') : '';
+  state.runModifiers = cid ? mergeDarkContractIntoRunModifiers(base, cid) : base;
   state.runSetupSummary = buildRunSetupSummary(state.runSetup);
   state.campaign = state.campaign && typeof state.campaign === 'object' ? state.campaign : {};
   state.campaign.length = getCampaignLengthFromRunSetup(state.runSetup);
@@ -697,7 +726,10 @@ function setRunCampaignModeFromMenu(modeId) {
 
 function toggleRunContractFromMenu(contractId) {
   state.runSetup = toggleRunContract(state?.runSetup || createDefaultRunSetup(), contractId);
-  state.runModifiers = getRunSetupModifierProfile(state.runSetup);
+  normalizeEndlessRunState(state);
+  const base = getRunSetupModifierProfile(state.runSetup);
+  const cid = darkWebContractsEnabled(state) ? String(state?.endlessRun?.selectedDarkContractId || '') : '';
+  state.runModifiers = cid ? mergeDarkContractIntoRunModifiers(base, cid) : base;
   state.runSetupSummary = buildRunSetupSummary(state.runSetup);
   renderAll();
 }
@@ -759,7 +791,13 @@ function normalizeCampaignSystems() {
   state.metaRunState.rerollUsed = Boolean(state.metaRunState.rerollUsed);
   state.metaRunState.clueBoost = Boolean(state.metaRunState.clueBoost);
   state.runSetup = normalizeRunSetup(state?.runSetup || createDefaultRunSetup());
+  normalizeEndlessRunState(state);
+  normalizeContractRuntime(state);
+  const darkId = String(state?.endlessRun?.selectedDarkContractId || '');
   state.runModifiers = getRunSetupModifierProfile(state.runSetup);
+  if (darkWebContractsEnabled(state) && darkId) {
+    state.runModifiers = mergeDarkContractIntoRunModifiers(state.runModifiers, darkId);
+  }
   state.runSetupSummary = buildRunSetupSummary(state.runSetup);
   state.finaleObjectives = Array.isArray(state?.finaleObjectives) ? state.finaleObjectives : [];
   state.finaleUi = state?.finaleUi && typeof state.finaleUi === 'object' ? state.finaleUi : null;
@@ -5250,6 +5288,39 @@ function calmRoomChain(roomId, amount = 2) {
   calmChainForRoom(state, roomId, amount);
 }
 
+function handleSelectDarkContract(contractId) {
+  const id = String(contractId || '').trim();
+  if (!id || !getDarkContractById(id)) return;
+  if (!darkWebContractsEnabled(state)) return;
+  if (activeScreenId !== 'night-prep-screen') return;
+  onMeaningfulAction();
+  audioController.playUiClick();
+  normalizeEndlessRunState(state);
+  state.endlessRun.nextDarkContractId = id;
+  state.logs.push(`Dark-web broker locked next shift contract: ${getDarkContractById(id).codename}.`);
+  pushLiveAlert(state, {
+    type: 'warning',
+    message: `Contract queued: ${getDarkContractById(id).codename} — ${getDarkContractById(id).downside}`,
+    dedupeKey: `dw-contract-${id}-${state.night}`
+  });
+  normalizeCampaignSystems();
+  renderNightPrepScreen();
+  renderAll();
+}
+
+function handleDawnAuditorCleanup() {
+  const res = applyDawnAuditorCleanupPass(state);
+  if (!res.ok) {
+    pushLiveAlert(state, { type: 'warning', message: res.reason || 'No concealment pass available.', dedupeKey: 'dawn-cleanup-fail' });
+    renderAll();
+    return;
+  }
+  onMeaningfulAction();
+  audioController.playUiClick();
+  if (progressShift('dawn-auditor-cleanup', { timeScale: 0.1, skipPassiveDrain: true })) return;
+  renderAll();
+}
+
 function buildRenderState() {
   normalizeDeskInspectionState(state);
   normalizeStaffManagementState();
@@ -5383,8 +5454,50 @@ function buildRenderState() {
       blackoutState.cameraInterference,
       Number(state?.crisisEscalation?.cameraInterferenceLevel || 0),
       getCameraAnalogPenalty(state),
-      isTapeArchiveVulnerable(state) ? 1 : 0
+      isTapeArchiveVulnerable(state) ? 1 : 0,
+      Number(state?.contractRuntime?.cameraInterferenceBonus || 0)
     ),
+    endlessUi: (() => {
+      normalizeEndlessRunState(state);
+      const c = getDarkContractById(state.endlessRun.selectedDarkContractId);
+      return {
+        isEndless: isEndlessMode(state),
+        darkContractsOn: darkWebContractsEnabled(state),
+        survivalScore: Number(state.endlessRun.survivalScore || 0),
+        wave: Number(state.endlessRun.wave || 0),
+        auditorPasses: Number(state.endlessRun.auditorPasses || 0),
+        auditorPartials: Number(state.endlessRun.auditorPartials || 0),
+        auditorFails: Number(state.endlessRun.auditorFails || 0),
+        cleanupPasses: Number(state.endlessRun.cleanupPasses || 0),
+        contract: c
+          ? { id: c.id, codename: c.codename, headline: c.headline, downside: c.downside }
+          : null
+      };
+    })(),
+    darkWebPrep: (() => {
+      if (!darkWebContractsEnabled(state)) {
+        return { enabled: false, offers: [], selectedNextId: '', onSelectDarkContract: null };
+      }
+      normalizeEndlessRunState(state);
+      return {
+        enabled: true,
+        offers: pickDarkContractOffers(state, 3),
+        selectedNextId: String(state.endlessRun.nextDarkContractId || ''),
+        onSelectDarkContract: handleSelectDarkContract
+      };
+    })(),
+    dawnAuditorUi: (() => {
+      normalizeDawnAuditorState(state);
+      const da = state.dawnAuditor || {};
+      return {
+        active: Boolean(da.active),
+        warned: Boolean(da.warned),
+        cleanupWindow: Boolean(da.cleanupWindow),
+        cleanupUsed: Number(da.cleanupUsed || 0),
+        exposurePreview: da.active ? computeDawnExposure(state) : null,
+        onCleanup: handleDawnAuditorCleanup
+      };
+    })(),
     analog: getBreakerBoardSummary(state),
     presentationFatigue: getFatigueTier(state),
     blurGuestNamesFromFatigue: shouldFatigueBlurNames(state),
@@ -6052,6 +6165,9 @@ function bootstrapState() {
   }
   normalizeAnalogSurvivalState(state);
   finalizeAnalogSurvivalState(state);
+  normalizeEndlessRunState(state);
+  normalizeContractRuntime(state);
+  normalizeDawnAuditorState(state);
   normalizeForensicNoirState(state);
 }
 function renderAll() {
@@ -6347,7 +6463,28 @@ function startShift() {
     window.DeadEndPhase2.applyNightModifier(state);
   }
   state.runSetup = lockRunSetup(state?.runSetup || createDefaultRunSetup());
-  state.runModifiers = getRunSetupModifierProfile(state.runSetup);
+  normalizeEndlessRunState(state);
+  if (darkWebContractsEnabled(state)) {
+    if (!String(state.endlessRun.selectedDarkContractId || '')) {
+      const pick = pickDarkContractOffers(state, 1)[0];
+      if (pick) {
+        state.endlessRun.selectedDarkContractId = pick.id;
+        state.endlessRun.lastContractId = pick.id;
+      }
+    }
+    applyDarkContractRuntime(state, state.endlessRun.selectedDarkContractId);
+    applyContractAnalogHooks(state);
+    applyContractStaffHook(state);
+    applyContractWeatherHook(state);
+    rollDawnAuditor(state);
+  } else {
+    clearContractRuntime(state);
+    normalizeDawnAuditorState(state);
+  }
+  state.runModifiers = mergeDarkContractIntoRunModifiers(
+    getRunSetupModifierProfile(state.runSetup),
+    state.endlessRun.selectedDarkContractId
+  );
   state.runSetupSummary = buildRunSetupSummary(state.runSetup);
   applyRunSetupStartModifiers();
   state.doctrine = beginDoctrineNight(state.doctrine || {});
@@ -6372,6 +6509,12 @@ function startShift() {
   });
   pushOpeningTensionBeat('shift-start');
   resetAnalogForNewShift(state);
+  if (darkWebContractsEnabled(state)) {
+    applyDarkContractRuntime(state, state.endlessRun.selectedDarkContractId);
+    applyContractAnalogHooks(state);
+    applyContractStaffHook(state);
+    applyContractWeatherHook(state);
+  }
   captureNightStartSnapshot('shift-start', { force: true });
   setActiveScreen('game-screen');
   setActivePanel('frontdesk-panel');
@@ -8618,6 +8761,7 @@ function progressShift(actionKey, options = {}) {
   }
 
   normalizeForensicNoirState(state);
+  tickDawnAuditor(state, (a) => pushLiveAlert(state, a));
   const tapeTickResult = tickForensicTape(state);
   if (tapeTickResult?.alert) {
     pushLiveAlert(state, tapeTickResult.alert);
@@ -10909,6 +11053,11 @@ function endNight(options = {}) {
   const nextNightIndex = Number(state.night || 1) + 1;
   state.carryoverBriefing = buildIncomingNightNotes(state, nextNightIndex);
 
+  const dawnAuditorResult = resolveDawnAuditorAtDawn(state);
+  if (Array.isArray(dawnAuditorResult.lines) && dawnAuditorResult.lines.length) {
+    dawnAuditorResult.lines.forEach((ln) => state.logs.push(ln));
+  }
+
   try {
     renderTopbar(buildRenderState());
   } catch (topbarErr) {
@@ -10920,6 +11069,9 @@ function endNight(options = {}) {
   try {
     recordCampaignConvergenceNight(state);
     _endNightSummary = buildNightSummary(state);
+    if (isEndlessMode(state)) {
+      recordEndlessWaveStats(state, _endNightSummary);
+    }
     state.lastSummary = _endNightSummary;
     state.finalePerformance = buildFinalePerformanceContext(state);
     registerCampaignNightSuccess(state, { summary: _endNightSummary });
@@ -11610,6 +11762,21 @@ function nextNight() {
   state.night += 1;
   state.failedState = null;
   state.pendingRunCompletion = false;
+  normalizeEndlessRunState(state);
+  if (darkWebContractsEnabled(state)) {
+    const nx = String(state.endlessRun.nextDarkContractId || '');
+    if (nx && getDarkContractById(nx)) {
+      state.endlessRun.selectedDarkContractId = nx;
+      state.endlessRun.lastContractId = nx;
+      state.endlessRun.nextDarkContractId = '';
+    } else if (!String(state.endlessRun.selectedDarkContractId || '')) {
+      const pick = pickDarkContractOffers(state, 1)[0];
+      if (pick) {
+        state.endlessRun.selectedDarkContractId = pick.id;
+        state.endlessRun.lastContractId = pick.id;
+      }
+    }
+  }
   state.power = 100;
   if (window.DeadEndPhase2?.applyNightModifier) {
     window.DeadEndPhase2.applyNightModifier(state);
@@ -11648,6 +11815,16 @@ function nextNight() {
   state.powerEconomy = buildFreshPowerEconomy();
   resetAnalogForNewShift(state);
   resetForensicForNewNight(state);
+  if (darkWebContractsEnabled(state)) {
+    applyDarkContractRuntime(state, state.endlessRun.selectedDarkContractId);
+    applyContractAnalogHooks(state);
+    applyContractStaffHook(state);
+    applyContractWeatherHook(state);
+    rollDawnAuditor(state);
+  } else {
+    clearContractRuntime(state);
+    normalizeDawnAuditorState(state);
+  }
   applyNightStartProgression(state);
   applyDayShiftPlanForNightStart();
   state.cameraScene = buildFreshCameraSceneState();
@@ -11775,6 +11952,23 @@ function bindEvents() {
   document.getElementById('audio-toggle-btn').addEventListener('click', toggleAudio);
   document.getElementById('open-help-btn').addEventListener('click', () => toggleHelpOverlay(true));
   document.getElementById('main-menu-reroll-btn').addEventListener('click', rerollFirstNightScenario);
+
+  const appRoot = document.getElementById('app');
+  if (appRoot && !appRoot.dataset.v35UiDelegation) {
+    appRoot.dataset.v35UiDelegation = '1';
+    appRoot.addEventListener('click', (e) => {
+      const pickBtn = e.target.closest('[data-dark-contract-id]');
+      if (pickBtn && activeScreenId === 'night-prep-screen') {
+        handleSelectDarkContract(pickBtn.getAttribute('data-dark-contract-id'));
+        e.preventDefault();
+        return;
+      }
+      if (e.target.closest('[data-dawn-auditor-cleanup]')) {
+        handleDawnAuditorCleanup();
+        e.preventDefault();
+      }
+    });
+  }
 
   document.querySelectorAll('.tab-button').forEach((button) => {
     button.addEventListener('click', () => setActivePanel(button.dataset.panel));

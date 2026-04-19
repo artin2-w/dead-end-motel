@@ -79,7 +79,8 @@ export function normalizeCampaignState(state) {
     ? next.campaign
     : buildDefaultCampaignState();
 
-  const length = clamp(toNumber(current.length, DEFAULT_CAMPAIGN_LENGTH), 3, 12);
+  const endless = String(next?.runSetup?.campaignMode || '') === 'endless';
+  const length = clamp(toNumber(current.length, DEFAULT_CAMPAIGN_LENGTH), 3, endless ? 999 : 12);
   const nights = Array.isArray(current.nights) ? current.nights.slice(0, length) : [];
   const completed = clamp(toNumber(current.campaignNightsCompleted, nights.length), 0, length);
 
@@ -111,7 +112,21 @@ export function getMilestoneNightSet(campaign = {}) {
 }
 
 export function getMilestoneMeta(night = 1, campaign = {}) {
-  const length = clamp(toNumber(campaign?.length, DEFAULT_CAMPAIGN_LENGTH), 3, 12);
+  const rawLen = clamp(toNumber(campaign?.length, DEFAULT_CAMPAIGN_LENGTH), 3, 999);
+  if (rawLen > 12) {
+    const safeNight = clamp(toNumber(night, 1), 1, rawLen);
+    return {
+      key: 'endless-wave',
+      label: `Endless wave ${safeNight}`,
+      tier: 'standard',
+      atmosphere: 'No scripted finale cadence — broker contracts, convergence, and dawn scrutiny carry the arc.',
+      night: safeNight,
+      isMilestone: false,
+      isFinale: false,
+      isPreFinale: false
+    };
+  }
+  const length = clamp(rawLen, 3, 12);
   const safeNight = clamp(toNumber(night, 1), 1, length);
   const seeded = NIGHT_MILESTONES[safeNight] || {
     key: safeNight >= length ? 'finale-night' : safeNight >= length - 1 ? 'pre-finale' : 'standard-shift',
@@ -131,9 +146,20 @@ export function getMilestoneMeta(night = 1, campaign = {}) {
 
 export function getCampaignProgress(state) {
   const campaign = state?.campaign || {};
-  const length = clamp(toNumber(campaign.length, DEFAULT_CAMPAIGN_LENGTH), 3, 12);
+  const endless = String(state?.runSetup?.campaignMode || '') === 'endless';
+  const length = clamp(toNumber(campaign.length, DEFAULT_CAMPAIGN_LENGTH), 3, endless ? 999 : 12);
   const currentNight = clamp(toNumber(state?.night, 1), 1, length);
   const completed = clamp(toNumber(campaign.campaignNightsCompleted, 0), 0, length);
+  if (endless) {
+    return {
+      currentNight,
+      completed,
+      totalNights: length,
+      remaining: null,
+      label: `Endless shift • Night ${currentNight}`,
+      completedLabel: `Endurance: ${completed} wave(s) survived • score ${n(state?.endlessRun?.survivalScore, 0)}`
+    };
+  }
   return {
     currentNight,
     completed,
@@ -144,11 +170,23 @@ export function getCampaignProgress(state) {
   };
 }
 
+function n(value, fallback = 0) {
+  const x = Number(value);
+  return Number.isFinite(x) ? x : fallback;
+}
+
 export function getPrepForecastNotes(state) {
   const progress = getCampaignProgress(state);
+  const endless = String(state?.runSetup?.campaignMode || '') === 'endless';
   const upcomingNight = clamp(progress.currentNight + 1, 1, progress.totalNights);
   const meta = getMilestoneMeta(upcomingNight, state?.campaign || {});
   const notes = [progress.completedLabel];
+
+  if (endless) {
+    notes.push('Endless shift: no scripted finale — pressure keeps compounding until you break or walk away.');
+    notes.push('Dark contracts rewrite the rules each wave; dawn auditors appear when heat is visible.');
+    return notes.slice(0, 5);
+  }
 
   if (meta.isFinale) {
     notes.push('Final night approaching: unresolved pressure may carry into the finale.');
@@ -296,6 +334,7 @@ export function getMilestoneSupportNotes(state, night = null) {
 }
 
 export function shouldEndRunAfterSuccessfulNight(state, night = null) {
+  if (String(state?.runSetup?.campaignMode || '') === 'endless') return false;
   const campaign = state?.campaign || {};
   const length = clamp(toNumber(campaign.length, DEFAULT_CAMPAIGN_LENGTH), 3, 12);
   const safeNight = clamp(toNumber(night, toNumber(state?.night, 1)), 1, length);

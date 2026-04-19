@@ -98,6 +98,7 @@ export function getBreakerBudget(state) {
   b -= blackoutStrainLevel(state);
   const pressure = state?.uiPressureLevel || 'calm';
   if (pressure === 'emergency' || pressure === 'dire') b -= 1;
+  b -= Math.max(0, Number(state?.contractRuntime?.breakerBudgetPenalty || 0));
   return Math.max(5, b);
 }
 

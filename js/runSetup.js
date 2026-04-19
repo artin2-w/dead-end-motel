@@ -37,6 +37,18 @@ const CAMPAIGN_MODE_PRESETS = Object.freeze([
       guestRiskBonus: 1,
       finalePressureScale: 1.1
     }
+  },
+  {
+    id: 'endless',
+    label: 'Endless Shift (Survival)',
+    campaignLength: 999,
+    description: 'Official survival mode: no campaign finale cadence. Waves, contracts, and scoring stack forever.',
+    modifiers: {
+      pressureScale: 1.05,
+      passiveDrainMult: 1.04,
+      eventTriggerBonus: 0.02,
+      guestRiskBonus: 1
+    }
   }
 ]);
 
@@ -197,7 +209,9 @@ export function getCampaignLengthFromRunSetup(runSetup = {}) {
   const normalized = normalizeRunSetup(runSetup);
   const campaignMode =
     CAMPAIGN_MODE_PRESETS.find((entry) => entry.id === normalized.campaignMode) || CAMPAIGN_MODE_PRESETS[0];
-  return clamp(Number(campaignMode.campaignLength || 5), 3, 12);
+  const raw = Number(campaignMode.campaignLength || 5);
+  if (normalized.campaignMode === 'endless') return clamp(raw, 12, 999);
+  return clamp(raw, 3, 12);
 }
 
 export function getContractCatalog() {

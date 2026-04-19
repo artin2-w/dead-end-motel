@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dead End Motel v0.34</title>
+  <title>Dead End Motel v0.35</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -21,12 +21,13 @@
   <link rel="stylesheet" href="styles/v32-analog.css" />
   <link rel="stylesheet" href="styles/v33-blacklight.css" />
   <link rel="stylesheet" href="styles/v34-collapse.css" />
+  <link rel="stylesheet" href="styles/v35-endless.css" />
 </head>
 <body>
   <div id="app" class="app-shell screen-main-menu">
     <header class="topbar topbar-v20" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.34</p>
+        <p class="eyebrow">Dead End Motel v0.35</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -155,6 +156,7 @@
               <div id="shift-progress-fill" class="shift-progress-fill"></div>
             </div>
             <div id="live-alert-strip" class="live-alert-strip"></div>
+            <div id="v35-shift-extensions" class="v35-shift-extensions" hidden aria-live="polite"></div>
             <div id="active-night-event-card" class="active-night-event-card">
               <p class="muted">No active shift events.</p>
             </div>
@@ -336,6 +338,7 @@
                 <p id="summary-campaign-progress" class="summary-campaign-progress muted"></p>
                 <p id="summary-run-setup" class="summary-campaign-progress muted"></p>
                 <p id="summary-run-reward-bonus" class="summary-campaign-progress muted"></p>
+                <div id="summary-v35-strip" class="summary-v35-strip" hidden></div>
                 <h3 id="summary-outcome-title" class="summary-outcome-title"></h3>
                 <p id="summary-outcome-note" class="summary-outcome-note"></p>
               </div>
@@ -412,6 +415,7 @@
             </div>
             <div class="prep-context-grid">
               <div id="night-prep-campaign-forecast" class="night-prep-campaign-forecast"></div>
+              <div id="night-prep-dark-contracts" class="night-prep-dark-contracts"></div>
               <div id="night-prep-doctrine" class="night-prep-doctrine"></div>
               <div id="night-prep-staff" class="night-prep-staff"></div>
               <div id="night-prep-budget" class="night-prep-budget"></div>
