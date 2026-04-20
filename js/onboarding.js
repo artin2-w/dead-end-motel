@@ -1,3 +1,5 @@
+import { getNightGuidanceBand } from './night.js';
+
 const ONBOARDING_STORAGE_KEY = 'dead-end-motel-onboarding-v1';
 
 const PANEL_INTRO_COPY = {
@@ -218,8 +220,11 @@ function getGuidedHintModel(renderState) {
     unresolvedCameraCount,
     activePanelId,
     sharedPressureCount,
-    emergencyActive
+    emergencyActive,
+    night: hintNight
   } = renderState;
+  const night = Math.max(1, Number(hintNight || 1));
+  const band = getNightGuidanceBand(night);
   const progress = onboarding.progress || createDefaultProgress();
 
   if (!progress.welcome) {
@@ -233,64 +238,93 @@ function getGuidedHintModel(renderState) {
   if (!progress.spawnGuest) {
     return {
       key: 'tutorial-spawn',
-      title: 'Step 1: Bring in your first guest',
-      body: 'Use Call Next Arrival at Front Desk (intake slots are limited). Then assess Risk + Policy before deciding.',
+      title: 'Step 1: Call the first arrival',
+      body:
+        band === 'intro'
+          ? 'On Night 1, start by tapping “Call next arrival” at Front Desk. You are learning the loop, not reading every system at once.'
+          : 'Use Call Next Arrival at Front Desk (intake slots are limited). Then assess Risk + Policy before deciding.',
       panelId: 'frontdesk-panel'
     };
   }
   if (!progress.deskDecision) {
     return {
       key: 'tutorial-desk-decision',
-      title: 'Step 2: Make a desk call',
-      body: 'Use Check In, Flag, or Reject. Any real desk action advances tutorial flow.',
+      title: 'Step 2: Read once, then decide',
+      body:
+        band === 'intro'
+          ? 'Tap Inspect ID, then choose Check In, Flag, or Reject. One honest desk call is enough to advance — perfection is not required.'
+          : 'Use Check In, Flag, or Reject. Any real desk action advances tutorial flow.',
       panelId: 'frontdesk-panel'
     };
   }
   if (!progress.roomStatus) {
     return {
       key: 'tutorial-room-status',
-      title: 'Step 3: Check room status',
-      body: occupiedRooms > 0
-        ? 'Watch Room Condition and Chain Pressure so small risks do not snowball.'
-        : 'No occupied rooms yet. Front Desk room status updates once guests are checked in.',
+      title: 'Step 3: Glance room status',
+      body:
+        band === 'intro'
+          ? 'After a check-in, scroll the Room strip under Front Desk. If something looks tense, respond once — otherwise keep moving toward dawn.'
+          : occupiedRooms > 0
+            ? 'Watch Room Condition and Chain Pressure so small risks do not snowball.'
+            : 'No occupied rooms yet. Front Desk room status updates once guests are checked in.',
       panelId: 'frontdesk-panel'
     };
   }
   if (!progress.cameraVisit) {
     return {
       key: 'tutorial-cameras',
-      title: 'Step 4: Use Cameras',
-      body: unresolvedCameraCount > 0
-        ? 'An anomaly is active. Investigate from Cameras to contain pressure.'
-        : 'Run a camera scan to look for anomalies before they escalate.',
+      title: band === 'intro' ? 'Step 4 (optional tonight): Cameras' : 'Step 4: Use Cameras',
+      body:
+        band === 'intro'
+          ? unresolvedCameraCount > 0
+            ? 'Anomaly live — open Cameras and tap Investigate once. You do not need the full wall on Night 1.'
+            : 'Cameras can wait until something blinks. If you are curious, open Cameras and run Scan once — then return to the desk.'
+          : band === 'expand'
+            ? unresolvedCameraCount > 0
+              ? 'Night 2: when a feed is hot, investigate it early — one contained anomaly teaches the rhythm.'
+              : 'Run a camera scan; even a clean read teaches timing costs.'
+            : unresolvedCameraCount > 0
+              ? 'An anomaly is active. Investigate from Cameras to contain pressure.'
+              : 'Run a camera scan to look for anomalies before they escalate.',
       panelId: 'cameras-panel'
     };
   }
   if (!progress.powerVisit) {
     return {
       key: 'tutorial-power',
-      title: 'Step 5: Learn power tools',
-      body: 'Emergency Restore is safer; Emergency Reroute is faster but more destabilizing.',
+      title: band === 'expand' ? 'Step 5: Respect the reserve' : 'Step 5: Learn power tools',
+      body:
+        band === 'intro'
+          ? 'Glance Power once: see reserve and the two emergency buttons. On Night 1 you rarely need breaker detail — just know where relief lives.'
+          : band === 'expand'
+            ? 'Night 2: low reserve makes scans expensive. Open Power, read the digest, then open breaker controls only if you are tuning the grid.'
+            : 'Emergency Restore is safer; Emergency Reroute is faster but more destabilizing.',
       panelId: 'power-panel'
     };
   }
   if (!progress.reportVisit) {
     return {
       key: 'tutorial-report',
-      title: 'Step 6: Use Report actions',
-      body: guests > 0
-        ? 'Dispatch Staff and Review Incidents help prevent chain spikes before dawn.'
-        : 'Report is where you review incidents and dispatch support when pressure rises.',
+      title: 'Step 6: Close the paperwork loop',
+      body:
+        band === 'intro'
+          ? 'Open Report to see the digest: shift health, recent moves, top incidents. End Night stays the star — full ledger lives inside the drawer.'
+          : guests > 0
+            ? 'Dispatch Staff and Review Incidents help prevent chain spikes before dawn.'
+            : 'Report is where you review incidents and dispatch support when pressure rises.',
       panelId: 'report-panel'
     };
   }
   if (!progress.spacesVisit && (sharedPressureCount > 0 || occupiedRooms > 0)) {
     return {
       key: 'tutorial-spaces',
-      title: 'Step 7: Check Shared Spaces',
-      body: sharedPressureCount > 0
-        ? 'Shared-space pressure is already active. Parking, hallway, and lobby trouble can reach rooms if ignored.'
-        : 'The motel is wider than the desk. Shared Spaces tracks where danger is moving before it becomes a room crisis.',
+      title: band === 'intro' ? 'Shared spaces (when pressure appears)' : 'Step 7: Check Shared Spaces',
+      body:
+        band === 'intro' && sharedPressureCount === 0
+          ? 'Zones are quiet tonight — skip this tab unless the situation board starts flashing heat.'
+          : sharedPressureCount > 0
+            ? 'Shared-space pressure is already active. Parking, hallway, and lobby trouble can reach rooms if ignored.'
+            : 'The motel is wider than the desk. Shared Spaces tracks where danger is moving before it becomes a room crisis.',
       panelId: 'spaces-panel'
     };
   }
@@ -333,8 +367,11 @@ function getLightContextHint(renderState) {
   if (unresolvedCameraCount > 0 && activePanelId !== 'cameras-panel') {
     return {
       key: 'light-camera-context',
-      title: 'Camera priority',
-      body: 'An unresolved anomaly can cascade into room pressure. Check Cameras soon.',
+      title: night <= 1 ? 'Camera: one decisive look' : 'Camera priority',
+      body:
+        night <= 1
+          ? 'A feed is asking for attention — open Cameras, investigate once, then return to the desk loop.'
+          : 'An unresolved anomaly can cascade into room pressure. Check Cameras soon.',
       panelId: 'cameras-panel'
     };
   }
@@ -342,7 +379,10 @@ function getLightContextHint(renderState) {
     return {
       key: 'light-power-context',
       title: 'Power caution',
-      body: 'Low reserve reduces room for mistakes. Consider Power actions before another heavy scan.',
+      body:
+        night <= 2
+          ? 'Reserve is thinning — open Power for the digest before you chain expensive actions.'
+          : 'Low reserve reduces room for mistakes. Consider Power actions before another heavy scan.',
       panelId: 'power-panel'
     };
   }
@@ -388,7 +428,16 @@ export function buildOnboardingUiModel(gameState, onboardingState, context = {})
   const heavyGuidance = firstRunActive && onboarding.runModePreference !== 'standard';
 
   const guidedHint = heavyGuidance
-    ? getGuidedHintModel({ onboarding, guests, occupiedRooms, unresolvedCameraCount, activePanelId, sharedPressureCount, emergencyActive })
+    ? getGuidedHintModel({
+        onboarding,
+        guests,
+        occupiedRooms,
+        unresolvedCameraCount,
+        activePanelId,
+        sharedPressureCount,
+        emergencyActive,
+        night: Number(gameState?.night || 1)
+      })
     : null;
   const contextualHint = onboarding.tutorialEnabled ? getLightContextHint({
     guests,

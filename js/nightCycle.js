@@ -112,6 +112,11 @@ export function getShiftProgressPercent(state) {
   );
 }
 
+/** Nights 1–2: digest-first surfaces, softer default camera wall exposure. */
+export function isClaritySoftLaunchNight(night) {
+  return Math.max(1, Number(night || 1)) <= 2;
+}
+
 export function evaluateNightObjectives(state) {
   const criticalRooms = (state?.rooms || []).filter(
     (room) => room?.occupiedBy && room?.condition === 'Critical'

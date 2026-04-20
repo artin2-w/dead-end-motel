@@ -245,3 +245,11 @@ export function buildNightSummary(state) {
     branchOutcome
   };
 }
+
+/** Used by onboarding / clarity to pace early-run teaching without new mechanics. */
+export function getNightGuidanceBand(night) {
+  const n = Math.max(1, Number(night || 1));
+  if (n <= 1) return 'intro';
+  if (n === 2) return 'expand';
+  return 'full';
+}

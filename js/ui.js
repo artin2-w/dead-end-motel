@@ -3,6 +3,11 @@ import {
   getShiftProgressPercent,
   evaluateNightObjectives
 } from './nightCycle.js';
+import {
+  normalizeDeskFocusGuestIds,
+  setDeskFocusGuestId,
+  isRoomClarityImportant
+} from './clarityDirector.js';
 import { getRoomPresentationMeta } from './presentation.js';
 import { tapeBackupEligible, buildDeskUvObjectLines } from './forensicNoir.js';
 import { roomEligibleForShaftRouting } from './borderTransfer.js';
@@ -1226,7 +1231,11 @@ function bindAtomicActionButton(button, handler, { groupRoot = null } = {}) {
     event.stopPropagation();
     if (fired || button.disabled) return;
     fired = true;
-    const root = groupRoot || button.closest('.camera-scene-actions, .guest-action-row, .room-tactical-row, .button-row, .report-panel-actions');
+    const root =
+      groupRoot ||
+      button.closest(
+        '.camera-scene-actions, .guest-action-row, .guest-action-row-secondary, .v50-inv-primary-row, .room-tactical-row, .button-row, .report-panel-actions'
+      );
     if (root) {
       root.querySelectorAll('button').forEach((entry) => {
         entry.disabled = true;
@@ -1264,14 +1273,14 @@ export function syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGue
     return;
   }
 
-  const first = guests[0];
-  const guestId = first?.id;
+  const guestId = state?.clarity?.stickyGuestId;
   if (guestId == null) {
     hide();
     return;
   }
 
-  const name = String(first?.name || 'Guest').slice(0, 26);
+  const focusGuest = guests.find((g) => g.id === guestId);
+  const name = String(focusGuest?.name || 'Guest').slice(0, 26);
   rail.hidden = false;
   app.setAttribute('data-v43-sticky-guest', '1');
   rail.innerHTML = `
@@ -1288,7 +1297,7 @@ export function syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGue
   if (!row) return;
 
   const roomValue = () => {
-    const sel = document.querySelector('#guest-queue .guest-card .guest-room-select');
+    const sel = document.querySelector(`#guest-queue .guest-card[data-guest-id="${guestId}"] .guest-room-select`);
     return sel?.value || null;
   };
 
@@ -1318,6 +1327,112 @@ export function syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGue
   row.appendChild(rejectBtn);
 }
 
+export function renderCurrentPriorityCard(state) {
+  const el = document.getElementById('v50-priority-card');
+  const app = document.getElementById('app');
+  if (!el || !app) return;
+  if (!app.classList.contains('screen-game-screen')) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  const cp = state?.clarity?.currentPriority;
+  if (!cp) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  el.hidden = false;
+  const typeLabel =
+    cp.type === 'desk'
+      ? 'Front desk'
+      : cp.type === 'room'
+        ? 'Rooms'
+        : cp.type === 'camera'
+          ? 'Cameras'
+          : cp.type === 'zone'
+            ? 'Shared zones'
+            : 'Systems';
+  const urgLabel = cp.urgency === 'high' ? 'Urgent' : cp.urgency === 'normal' ? 'Watch' : 'Calm';
+
+  el.innerHTML = '';
+  const inner = document.createElement('div');
+  inner.className = 'v50-priority-inner';
+  inner.innerHTML = `
+    <div class="v50-priority-meta">
+      <span class="v50-priority-type">${typeLabel}</span>
+      <span class="v50-priority-urg v50-urg-${cp.urgency}">${urgLabel}</span>
+    </div>
+    <h3 class="v50-priority-headline"></h3>
+    <p class="v50-priority-explain muted"></p>
+    <p class="v50-priority-action"><strong>Recommended:</strong> <span class="v50-priority-action-text"></span></p>
+    <p class="v50-priority-cost muted"></p>
+    <div class="v50-priority-actions"></div>
+  `;
+  inner.querySelector('.v50-priority-headline').textContent = cp.headline || '';
+  inner.querySelector('.v50-priority-explain').textContent = cp.explain || '';
+  inner.querySelector('.v50-priority-action-text').textContent = cp.recommendedAction || '';
+  inner.querySelector('.v50-priority-cost').textContent = cp.consequenceHint || '';
+
+  const actions = inner.querySelector('.v50-priority-actions');
+  const primary = document.createElement('button');
+  primary.type = 'button';
+  primary.className = 'button button-primary v50-priority-primary';
+  primary.textContent = cp.primaryCta?.label || 'Continue';
+  primary.addEventListener('click', () => {
+    if (typeof state.onClarityNavigatePanel === 'function' && cp.primaryCta?.panelId) {
+      state.onClarityNavigatePanel(cp.primaryCta.panelId);
+    }
+  });
+  actions.appendChild(primary);
+  if (cp.secondaryCta?.label && cp.secondaryCta?.panelId) {
+    const sec = document.createElement('button');
+    sec.type = 'button';
+    sec.className = 'button button-secondary v50-priority-secondary';
+    sec.textContent = cp.secondaryCta.label;
+    sec.addEventListener('click', () => {
+      if (typeof state.onClarityNavigatePanel === 'function') {
+        state.onClarityNavigatePanel(cp.secondaryCta.panelId);
+      }
+    });
+    actions.appendChild(sec);
+  }
+  el.appendChild(inner);
+}
+
+export function renderPowerDigest(state) {
+  const strip = document.getElementById('v50-power-digest');
+  const drawer = document.getElementById('v50-breaker-drawer');
+  if (!strip) return;
+
+  const p = Number(state?.power ?? 100);
+  const analog = state?.analog;
+  const neon = String(analog?.neon?.mode || '—');
+  const fatigue = String(analog?.fatigueTier || 'steady');
+  const load = analog ? `${analog.load || 0}/${analog.budget || 0}` : '—';
+  const hint =
+    p <= 32
+      ? 'Reserve is thin — avoid stacking scans and heavy room actions until you stabilize.'
+      : Number(analog?.load || 0) > Number(analog?.budget || 99)
+        ? 'Breaker load is over budget; trim circuits or neon before the grid fights back.'
+        : 'Grid is within tolerance — open breaker detail only when you need fine control.';
+
+  strip.innerHTML = `
+    <div class="v50-power-digest-grid">
+      <div><span class="v50-pd-label">Reserve</span><strong>${Math.round(p)}%</strong></div>
+      <div><span class="v50-pd-label">Neon</span><strong>${neon}</strong></div>
+      <div><span class="v50-pd-label">Operator</span><strong>${fatigue}</strong></div>
+      <div><span class="v50-pd-label">Breaker load</span><strong>${load}</strong></div>
+    </div>
+    <p class="v50-power-digest-hint muted">${hint}</p>
+  `;
+
+  if (drawer) {
+    const open = Boolean(state?.clarity?.compactSurfaceState?.breakerDefaultOpen);
+    drawer.open = open;
+  }
+}
+
 export function renderGuests(
   state,
   onCheckIn,
@@ -1333,6 +1448,7 @@ export function renderGuests(
 ) {
   const queue = document.getElementById('guest-queue');
   queue.innerHTML = '';
+  normalizeDeskFocusGuestIds(state.guests);
 
   if (!state.guests.length) {
     queue.innerHTML =
@@ -1351,9 +1467,10 @@ export function renderGuests(
     const uvLens = Boolean(state?.forensic?.uvDeskLensActive);
     const latentUv =
       uvLens && !guest.uvInspected && (guest.flagged || guest.riskLevel === 'High' || Boolean(guest.contradictoryClue));
-    card.className = `guest-card guest-card-v20 v41-guest-tile v43-guest-card ${emphasisClass}${latentUv ? ' v33-latent-uv' : ''}${
+    card.className = `guest-card guest-card-v20 v41-guest-tile v43-guest-card v50-guest-card ${emphasisClass}${latentUv ? ' v33-latent-uv' : ''}${
       uvLens ? ' v33-blacklight-context' : ''
     }`.trim();
+    card.dataset.guestId = String(guest.id);
     card.dataset.risk = (guest.riskLevel || 'Low').toLowerCase();
     card.dataset.archetype = (guest.archetypeKey || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '-');
     const contradictionLines = Array.isArray(guest?.contradictionLines) ? guest.contradictionLines.slice(0, 3) : [];
@@ -1429,8 +1546,22 @@ export function renderGuests(
         ${guest?.uvInspected ? '<span class="guest-meta-chip guest-meta-chip-uv">UV Used</span>' : ''}
       `;
 
+    const polLow = String(guest.policyRecommendation || 'Approve').toLowerCase();
+    let recBand = 'caution';
+    let recLabel = 'Caution';
+    if (/reject|deny/.test(polLow)) {
+      recBand = 'reject';
+      recLabel = 'Reject lean';
+    } else if (/approve/.test(polLow) && riskLower === 'low' && contCount === 0 && decSig < 2) {
+      recBand = 'approve';
+      recLabel = 'Approve lean';
+    }
+    const reasonA = contradictionLines[0] || '';
+    const reasonB = contradictionLines[1] || '';
+    const reasonsHtml = [reasonA, reasonB].filter(Boolean).map((r) => `<span class="v50-guest-reason">${r}</span>`).join('');
+
     card.innerHTML = `
-      <div class="guest-card-header">
+      <div class="guest-card-header v50-guest-focus-hit" role="button" tabindex="0" aria-label="Focus guest ${guest.name}">
         <div class="guest-arch-avatar guest-arch-risk-${riskLower}" title="${guest.archetypeLabel || 'Unknown Pattern'}">${archetypeInitial}</div>
         <h4 class="${state.blurGuestNamesFromFatigue ? 'v32-fatigue-name' : ''}">${guest.name}</h4>
         <div class="guest-critical-badges">
@@ -1443,25 +1574,39 @@ export function renderGuests(
       </div>
       ${namedPresenceHtml}
       ${memoryEchoHtml}
-      <div class="v24-verdict-strip v43-verdict-strip">
-        <span class="v24-verdict-chip v24-verdict-chip-risk-${riskLower}" title="Risk level">Risk ${guest.riskLevel || 'Low'}</span>
-        <span class="v24-verdict-chip v24-verdict-chip-policy-${policyLower}" title="Policy recommendation">${(guest.policyRecommendation || 'APPROVE').toUpperCase()}</span>
-        <span class="v43-guest-mood-chip" title="Mood">Mood: ${guest.mood}</span>
-        <span class="v43-guest-arch-chip" title="Pattern">${guest.archetypeLabel || 'Unknown'}</span>
-        ${decSig > 0 ? `<span class="v24-verdict-chip v24-verdict-chip-${decChipClass}" title="Deception signal">Deception ×${decSig}</span>` : ''}
-        ${contCount > 0 ? `<span class="v24-verdict-chip v24-verdict-chip-${contChipClass}" title="Contradictions found">${contCount} Contradiction${contCount > 1 ? 's' : ''}</span>` : ''}
-        ${guest?.forgeryProfile?.isForged ? '<span class="v24-verdict-chip v24-verdict-chip-dec-high" title="Forgery risk detected">Forgery Risk</span>' : ''}
+      <div class="v50-desk-read">
+        <span class="v50-risk-band v50-risk-${riskLower}">Risk ${guest.riskLevel || 'Low'}</span>
+        <span class="v50-desk-rec v50-rec-${recBand}">${recLabel}</span>
       </div>
-      <p class="guest-case-strapline v43-guest-strapline">${strapline}</p>
-      <div class="guest-action-stack v42-guest-action-stack v43-guest-action-stack">
+      ${reasonsHtml ? `<div class="v50-guest-reasons">${reasonsHtml}</div>` : ''}
+      <p class="v50-guest-threadline">${reasonA ? reasonA : strapline}</p>
+      <details class="v50-guest-more-signals">
+        <summary>Cross-check more</summary>
+        <div class="v24-verdict-strip v43-verdict-strip v50-verdict-nested">
+          <span class="v24-verdict-chip v24-verdict-chip-policy-${policyLower}" title="Policy recommendation">${(guest.policyRecommendation || 'APPROVE').toUpperCase()}</span>
+          <span class="v43-guest-mood-chip" title="Mood">Mood: ${guest.mood}</span>
+          <span class="v43-guest-arch-chip" title="Pattern">${guest.archetypeLabel || 'Unknown'}</span>
+          ${decSig > 0 ? `<span class="v24-verdict-chip v24-verdict-chip-${decChipClass}" title="Deception signal">Deception ×${decSig}</span>` : ''}
+          ${contCount > 0 ? `<span class="v24-verdict-chip v24-verdict-chip-${contChipClass}" title="Contradictions found">${contCount} Contradiction${contCount > 1 ? 's' : ''}</span>` : ''}
+          ${guest?.forgeryProfile?.isForged ? '<span class="v24-verdict-chip v24-verdict-chip-dec-high" title="Forgery risk detected">Forgery Risk</span>' : ''}
+        </div>
+        <p class="guest-case-strapline v43-guest-strapline muted">${strapline}</p>
+      </details>
+      <div class="guest-action-stack v42-guest-action-stack v43-guest-action-stack v50-guest-actions">
         <div class="action-group action-group-decide">
           <p class="action-group-label">Desk decision</p>
           <div class="action-group-body guest-action-row"></div>
         </div>
-        <div class="action-group action-group-investigate">
+        <div class="action-group v50-inv-primary-block">
           <p class="action-group-label">Investigation</p>
-          <div class="action-group-body guest-action-row-secondary"></div>
+          <div class="action-group-body v50-inv-primary-row"></div>
         </div>
+        <details class="v50-inv-more-drawer">
+          <summary>More checks</summary>
+          <div class="action-group action-group-investigate">
+            <div class="action-group-body guest-action-row-secondary"></div>
+          </div>
+        </details>
       </div>
       <div class="guest-detail-block guest-room-choice-block v43-guest-room-block">
         <p class="guest-room-choice-label">Room release matters tonight.</p>
@@ -1477,18 +1622,21 @@ export function renderGuests(
         </div>
       </div>
       ${(guest?.inspectionHeadline || contradictionLines.length || recommendedQuestions.length)
-        ? `<div class="guest-case-read ${[contradictionLines.length >= 3 ? 'is-hot' : '', scannerFriction ? 'has-scanner-friction' : ''].filter(Boolean).join(' ')}">
-            <div class="guest-case-read-header">
-              <p class="section-tag">Case Read</p>
-              ${linkedCaseLabel ? `<span class="guest-case-pill">${linkedCaseLabel}</span>` : ''}
+        ? `<details class="guest-case-read-drawer v50-case-read-drawer">
+            <summary>Full case read</summary>
+            <div class="guest-case-read ${[contradictionLines.length >= 3 ? 'is-hot' : '', scannerFriction ? 'has-scanner-friction' : ''].filter(Boolean).join(' ')}">
+              <div class="guest-case-read-header">
+                <p class="section-tag">Case Read</p>
+                ${linkedCaseLabel ? `<span class="guest-case-pill">${linkedCaseLabel}</span>` : ''}
+              </div>
+              ${guest?.inspectionHeadline ? `<p class="guest-case-headline">${guest.inspectionHeadline}</p>` : ''}
+              ${contradictionLines.length
+                ? `<ul class="guest-contradiction-list">${contradictionLines.map((line) => `<li class="guest-contradiction-item">${line}</li>`).join('')}</ul>`
+                : ''}
+              ${recommendedQuestions.length ? `<p class="guest-followup-line">Ask Follow-Up: <strong>${recommendedQuestions.join(' • ')}</strong></p>` : ''}
+              ${supportLines.length ? `<p class="guest-support-line muted">Desk support: ${supportLines.join(' • ')}.</p>` : ''}
             </div>
-            ${guest?.inspectionHeadline ? `<p class="guest-case-headline">${guest.inspectionHeadline}</p>` : ''}
-            ${contradictionLines.length
-              ? `<ul class="guest-contradiction-list">${contradictionLines.map((line) => `<li class="guest-contradiction-item">${line}</li>`).join('')}</ul>`
-              : ''}
-            ${recommendedQuestions.length ? `<p class="guest-followup-line">Ask Follow-Up: <strong>${recommendedQuestions.join(' • ')}</strong></p>` : ''}
-            ${supportLines.length ? `<p class="guest-support-line muted">Desk support: ${supportLines.join(' • ')}.</p>` : ''}
-          </div>`
+          </details>`
         : ''}
       ${guest?.specialEncounter && !guest.specialEncounter.resolved
         ? `
@@ -1559,6 +1707,7 @@ export function renderGuests(
     `;
 
     const actions = card.querySelector('.guest-action-row');
+    const primaryRow = card.querySelector('.v50-inv-primary-row');
     const secondaryActions = card.querySelector('.guest-action-row-secondary');
     const roomSelect = card.querySelector('.guest-room-select');
     const checkInButton = document.createElement('button');
@@ -1588,14 +1737,15 @@ export function renderGuests(
     inspectIdButton.textContent = guest?.idInspected ? 'ID Checked' : 'Inspect ID';
     inspectIdButton.title = 'Read the guest ID for expiry, validity, and mismatch clues.';
     inspectIdButton.disabled = Boolean(guest?.idInspected);
-    bindAtomicActionButton(inspectIdButton, () => onInspectId(guest.id), { groupRoot: secondaryActions });
+    const invPrimary = primaryRow || secondaryActions;
+    bindAtomicActionButton(inspectIdButton, () => onInspectId(guest.id), { groupRoot: invPrimary });
 
     const uvButton = document.createElement('button');
     uvButton.className = 'button button-utility';
     uvButton.textContent = guest?.uvInspected ? 'UV Done' : 'Use UV';
     uvButton.title = 'Optional deep inspection for hidden marks and forged details.';
     uvButton.disabled = Boolean(guest?.uvInspected);
-    bindAtomicActionButton(uvButton, () => onDeepInspect(guest.id), { groupRoot: secondaryActions });
+    bindAtomicActionButton(uvButton, () => onDeepInspect(guest.id), { groupRoot: invPrimary });
 
     const depositButton = document.createElement('button');
     depositButton.className = 'button button-utility';
@@ -1616,13 +1766,7 @@ export function renderGuests(
     holdButton.textContent = guest?.heldForScreening ? 'Held' : 'Hold Screening';
     holdButton.title = 'Hold the guest aside. Safer, slower, and reputation-sensitive.';
     holdButton.disabled = Boolean(guest?.heldForScreening);
-    bindAtomicActionButton(holdButton, () => onHoldScreening(guest.id), { groupRoot: secondaryActions });
-
-    secondaryActions.appendChild(inspectIdButton);
-    secondaryActions.appendChild(uvButton);
-    secondaryActions.appendChild(depositButton);
-    secondaryActions.appendChild(verifyButton);
-    secondaryActions.appendChild(holdButton);
+    bindAtomicActionButton(holdButton, () => onHoldScreening(guest.id), { groupRoot: invPrimary });
 
     const questionButton = document.createElement('button');
     questionButton.className = 'button button-utility';
@@ -1635,8 +1779,15 @@ export function renderGuests(
           guest?.vehicleProfile ? 'vehicle' : guest?.linkedArrival ? 'relationship' : guest?.forgeryProfile?.isForged ? 'inconsistency' : 'late-timing'
         );
       }
-    }, { groupRoot: secondaryActions });
-    secondaryActions.appendChild(questionButton);
+    }, { groupRoot: invPrimary });
+
+    invPrimary.appendChild(inspectIdButton);
+    invPrimary.appendChild(uvButton);
+    invPrimary.appendChild(questionButton);
+    invPrimary.appendChild(holdButton);
+
+    secondaryActions.appendChild(depositButton);
+    secondaryActions.appendChild(verifyButton);
 
     if (guest?.specialEncounter && !guest.specialEncounter.resolved) {
       const specialButton = document.createElement('button');
@@ -1649,6 +1800,21 @@ export function renderGuests(
         }
       }, { groupRoot: actions });
       actions.appendChild(specialButton);
+    }
+
+    const focusHit = card.querySelector('.v50-guest-focus-hit');
+    if (focusHit && typeof state.onDeskGuestFocus === 'function') {
+      focusHit.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        state.onDeskGuestFocus(guest.id);
+      });
+      focusHit.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          state.onDeskGuestFocus(guest.id);
+        }
+      });
     }
 
     queue.appendChild(card);
@@ -1764,6 +1930,11 @@ export function renderRooms(
 ) {
   const roomList = document.getElementById('room-list');
   roomList.innerHTML = '';
+  const primaryHost = document.createElement('div');
+  primaryHost.className = 'v50-rooms-primary-host';
+  const overflowHost = document.createElement('div');
+  overflowHost.className = 'v50-rooms-overflow-host';
+  const hotIds = new Set((state.clarity?.compactSurfaceState?.roomImportantIds || []).map(Number));
 
   state.rooms.forEach((room) => {
     const presentation = getRoomPresentationMeta(room);
@@ -1773,7 +1944,9 @@ export function renderRooms(
     const roomHasPendingRequest = Boolean(room?.serviceState?.pendingRequest);
     const roomChainHigh = Number(room?.chainPressure || 0) >= 4;
     const isSelectedRoom = _v21SelectedRoomId === room.id;
-    card.className = `room-card v43-room-surface ${getRoomConditionClass(room.condition || 'Stable')} room-tone-${presentation.tone} ${presentation.shouldPulse ? 'is-critical-pulse' : ''} ${room.occupied ? 'room-card-occupied' : 'room-card-vacant'} ${lockedOut ? 'room-card-locked' : ''} ${systemNoise ? 'room-card-system-noise' : ''} ${isSelectedRoom ? 'room-card-focused' : ''}`.trim();
+    card.className = `room-card v43-room-surface v50-room-card ${getRoomConditionClass(room.condition || 'Stable')} room-tone-${presentation.tone} ${presentation.shouldPulse ? 'is-critical-pulse' : ''} ${room.occupied ? 'room-card-occupied' : 'room-card-vacant'} ${lockedOut ? 'room-card-locked' : ''} ${systemNoise ? 'room-card-system-noise' : ''} ${isSelectedRoom ? 'room-card-focused' : ''}`.trim();
+    const primaryVisible = lockedOut || hotIds.has(room.id) || isRoomClarityImportant(room);
+    const attachHost = primaryVisible ? primaryHost : overflowHost;
     if (lockedOut) {
       card.innerHTML = `
         <div class="room-card-header">
@@ -1782,7 +1955,7 @@ export function renderRooms(
         </div>
         <p class="room-meta muted">Not licensed for occupancy yet — unlocks as the campaign expands.</p>
       `;
-      roomList.appendChild(card);
+      attachHost.appendChild(card);
       return;
     }
     card.innerHTML = room.occupied
@@ -2007,8 +2180,19 @@ export function renderRooms(
       actions.appendChild(evictButton);
     }
 
-    roomList.appendChild(card);
+    attachHost.appendChild(card);
   });
+
+  roomList.appendChild(primaryHost);
+  if (overflowHost.childElementCount > 0) {
+    const det = document.createElement('details');
+    det.className = 'v50-rooms-all-drawer';
+    const sm = document.createElement('summary');
+    sm.textContent = `Show all rooms (${overflowHost.childElementCount} quieter / vacant)`;
+    det.appendChild(sm);
+    det.appendChild(overflowHost);
+    roomList.appendChild(det);
+  }
 }
 
 export function renderSharedSpaces(state) {
@@ -2027,6 +2211,11 @@ export function renderSharedSpaces(state) {
   };
 
   const spaces = Array.isArray(state?.sharedSpaces) ? state.sharedSpaces : [];
+  const hotZoneIdSet = new Set((state.clarity?.compactSurfaceState?.zoneHotIds || []).map(Number));
+  const boardOuter = document.getElementById('shared-space-board');
+  if (boardOuter) {
+    boardOuter.classList.toggle('v50-all-quiet', Boolean(state?.clarity?.compactSurfaceState?.zonesAllQuiet));
+  }
   spaces.forEach((space) => {
     const card = document.createElement('article');
     const emergencyPriority = Boolean(state?.emergencyNight?.active) && Number(space?.pressureScore || 0) >= 4;
@@ -2046,8 +2235,9 @@ export function renderSharedSpaces(state) {
     const weatherHintText = isOutdoor && _ssWeather.primary !== 'clear'
       ? (WEATHER_HINT_TEXT[_ssWeather.primary]?.[zoneNumeric] || null)
       : null;
-    card.className = `room-card shared-space-card v41-zone-card v43-zone-module ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'} ${emergencyPriority ? 'is-emergency-priority' : ''} ${systemNoise ? 'shared-space-system-noise' : ''} ${linkedScanner ? 'has-linked-scanner' : ''}`.trim();
+    card.className = `room-card shared-space-card v41-zone-card v43-zone-module v50-zone-module ${space?.severity === 'high' ? 'room-tone-hostile' : space?.severity === 'medium' ? 'room-tone-strained' : 'room-tone-steady'} ${emergencyPriority ? 'is-emergency-priority' : ''} ${systemNoise ? 'shared-space-system-noise' : ''} ${linkedScanner ? 'has-linked-scanner' : ''}`.trim();
     card.dataset.zoneId = String(space.zoneId || 0);
+    if (hotZoneIdSet.has(zoneNumeric)) card.classList.add('is-hot');
     card.innerHTML = `
       <div class="shared-space-zones">
         <div class="room-card-header shared-space-head">
@@ -2141,6 +2331,8 @@ function getCameraStatusClass(status) {
 
 export function renderCameras(state) {
   const grid = document.getElementById('camera-grid');
+  const digest = document.getElementById('v50-camera-digest');
+  const drawer = document.getElementById('v50-camera-wall-drawer');
   if (!grid) return;
   grid.innerHTML = '';
   grid.classList.add('v42-camera-grid');
@@ -2271,6 +2463,46 @@ export function renderCameras(state) {
 
     grid.appendChild(card);
   });
+
+  if (digest) {
+    digest.hidden = false;
+    const ids = new Set((state.clarity?.compactSurfaceState?.cameraDigestIds || []).map(Number));
+    const digestCams = (state.cameras || []).filter((c) => ids.has(c.id));
+    digest.innerHTML = '';
+    if (!digestCams.length) {
+      const calm = document.createElement('div');
+      calm.className = 'v50-camera-digest-calm';
+      calm.innerHTML =
+        '<p class="section-tag v50-digest-kicker">Surveillance</p><p class="v50-digest-title">Feeds are calm</p><p class="muted">No anomalies flagged. Open the full wall when you want every angle.</p>';
+      digest.appendChild(calm);
+    } else {
+      const ul = document.createElement('ul');
+      ul.className = 'v50-camera-digest-list';
+      digestCams.forEach((cam) => {
+        const li = document.createElement('li');
+        li.className = 'v50-camera-digest-item';
+        const label = document.createElement('span');
+        label.textContent = cam.name || 'Camera';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'button button-warning v50-cam-digest-btn';
+        btn.textContent = 'Investigate';
+        btn.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          if (typeof state.onInvestigateCamera === 'function') state.onInvestigateCamera(cam.id);
+        });
+        li.appendChild(label);
+        li.appendChild(btn);
+        ul.appendChild(li);
+      });
+      digest.appendChild(ul);
+    }
+  }
+  if (drawer) {
+    const sm = drawer.querySelector('summary');
+    if (sm) sm.textContent = `Open full camera wall (${(state.cameras || []).length} feeds)`;
+    drawer.open = Boolean(state?.clarity?.compactSurfaceState?.cameraWallDefaultOpen);
+  }
 }
 
 const V32_CIRCUIT_LABELS = {
@@ -2897,12 +3129,62 @@ function buildLogItem(entry) {
 
 export function renderLogs(state) {
   const list = document.getElementById('incident-log');
+  const digestMount = document.getElementById('v50-report-digest');
   list.innerHTML = '';
-  list.className = 'log-list log-list-v20 log-list-v24 v43-incident-log';
+  list.className = 'log-list log-list-v20 log-list-v24 v43-incident-log v50-incident-log';
 
   list.appendChild(buildReportPriorityStrip(state));
 
+  const fillReportDigest = (groupedPreview = []) => {
+    if (!digestMount) return;
+    digestMount.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'v50-report-digest-inner';
+    const health = document.createElement('div');
+    health.className = 'v50-report-health';
+    const p = Number(state?.power ?? 100);
+    const r = Number(state?.reputation ?? 0);
+    const m = Number(state?.money ?? 0);
+    const up = String(state?.uiPressureLevel || 'calm');
+    health.innerHTML = `<h3 class="v50-rd-title">Shift health</h3><p class="v50-rd-metrics muted">Power <strong>${Math.round(p)}%</strong> · Rep <strong>${r}</strong> · Cash <strong>${formatMoney(m)}</strong> · Pressure <strong>${up}</strong></p>`;
+    wrap.appendChild(health);
+
+    const recent = (Array.isArray(state?.logs) ? state.logs : []).slice(-3).reverse();
+    if (recent.length) {
+      const rh = document.createElement('h4');
+      rh.className = 'v50-rd-sub';
+      rh.textContent = 'Recent actions';
+      wrap.appendChild(rh);
+      const ul = document.createElement('ul');
+      ul.className = 'v50-rd-recent';
+      recent.forEach((line) => {
+        const li = document.createElement('li');
+        li.textContent = String(line || '').slice(0, 160);
+        ul.appendChild(li);
+      });
+      wrap.appendChild(ul);
+    }
+
+    const hot = groupedPreview.filter((e) => ['key', 'room', 'camera', 'suspicious', 'zone', 'power'].includes(e.category)).slice(0, 3);
+    if (hot.length) {
+      const ih = document.createElement('h4');
+      ih.className = 'v50-rd-sub';
+      ih.textContent = 'Top incidents';
+      wrap.appendChild(ih);
+      const ol = document.createElement('ol');
+      ol.className = 'v50-rd-hot';
+      hot.forEach((e) => {
+        const li = document.createElement('li');
+        li.textContent = `${e.text}${e.count > 1 ? ` ×${e.count}` : ''}`;
+        ol.appendChild(li);
+      });
+      wrap.appendChild(ol);
+    }
+    digestMount.appendChild(wrap);
+  };
+
   if (!state.logs.length) {
+    fillReportDigest([]);
     const empty = document.createElement('div');
     empty.className = 'log-item';
     empty.textContent = 'No incidents yet.';
@@ -2948,6 +3230,8 @@ export function renderLogs(state) {
     }
   });
 
+  fillReportDigest(grouped);
+
   const SECTIONS = [
     { key: 'key',        title: 'Key Events Tonight',         limit: 6,        collapsed: false },
     { key: 'success',    title: 'Resolved & Secured',         limit: 4,        collapsed: false },
@@ -2964,6 +3248,15 @@ export function renderLogs(state) {
     { key: 'town',       title: 'Town & Local Pressure',      limit: 5,        collapsed: false },
     { key: 'archive',    title: 'Full Night Log',             limit: Infinity, collapsed: true  }
   ];
+
+  const ledger = document.createElement('details');
+  ledger.className = 'v50-report-ledger-drawer';
+  const ledgerSummary = document.createElement('summary');
+  ledgerSummary.textContent = 'Full categorized ledger';
+  ledger.appendChild(ledgerSummary);
+  const ledgerBody = document.createElement('div');
+  ledgerBody.className = 'v50-report-ledger-body';
+  ledger.appendChild(ledgerBody);
 
   SECTIONS.forEach(({ key, title, limit, collapsed }) => {
     const items = grouped.filter((e) => e.category === key);
@@ -2995,8 +3288,9 @@ export function renderLogs(state) {
       section.appendChild(drawer);
     }
 
-    list.appendChild(section);
+    ledgerBody.appendChild(section);
   });
+  list.appendChild(ledger);
 }
 
 export function renderFailure(failure, extra = null) {

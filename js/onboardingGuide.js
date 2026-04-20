@@ -3,26 +3,26 @@ const PHASE3_ONBOARDING_KEY = 'dead-end-motel-phase3-onboarding-v1';
 const GUIDE_STEPS = [
   {
     key: 'guest-queue',
-    title: 'Guest Queue',
-    body: 'This is your live desk line. New arrivals stack here and demand quick judgment.',
+    title: 'Guest queue',
+    body: 'Call arrivals here. Night 1 is about one clean read — not every chip on the card.',
     selectors: ['#guest-queue', '#frontdesk-panel .card-list']
   },
   {
-    key: 'risk-badges',
-    title: 'Risk & Trait Signals',
-    body: 'Risk, policy recommendation, mood, and trait chips are your first read before committing.',
-    selectors: ['#guest-queue .guest-chip-row', '#guest-queue .risk-badge', '#guest-queue .guest-card']
+    key: 'priority-surface',
+    title: 'Current priority',
+    body: 'The strip above the tabs tells you what matters now, what to do next, and what it might cost.',
+    selectors: ['#v50-priority-card', '#motel-command-board']
   },
   {
     key: 'desk-actions',
-    title: 'Desk Decisions',
-    body: 'Check In, Flag, or Reject set the tone of your shift. Every click has a cost.',
+    title: 'Desk decisions',
+    body: 'Inspect ID when it is still dark, then Check In, Flag, or Reject. That is the spine of the night.',
     selectors: ['#guest-queue .guest-action-row', '#guest-queue .button']
   },
   {
     key: 'objectives-alerts',
-    title: 'Objectives & Alerts',
-    body: 'Track active objectives and warning alerts to avoid silent collapses.',
+    title: 'Objectives & alerts',
+    body: 'Keep the objective line in view; expand situation detail only when you want deep context.',
     selectors: ['#night-objective-list', '#live-alert-strip', '.shift-status-card']
   }
 ];

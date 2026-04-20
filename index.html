@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Dead End Motel v0.43</title>
+  <title>Dead End Motel v0.50</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -30,12 +30,13 @@
   <link rel="stylesheet" href="styles/v41-polish.css" />
   <link rel="stylesheet" href="styles/v42-mobile-command.css" />
   <link rel="stylesheet" href="styles/v43-control-surface.css" />
+  <link rel="stylesheet" href="styles/v50-clarity.css" />
 </head>
 <body>
-  <div id="app" class="app-shell screen-main-menu v42-root v43-root">
+  <div id="app" class="app-shell screen-main-menu v42-root v43-root v50-root">
     <header class="topbar topbar-v20 v42-topbar v43-topbar" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.43</p>
+        <p class="eyebrow">Dead End Motel v0.50</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -73,7 +74,7 @@
     </header>
 
     <main class="v42-main">
-      <section id="main-menu" class="screen active v41-main-menu v43-main-menu">
+      <section id="main-menu" class="screen active v41-main-menu v43-main-menu v50-main-menu">
         <div class="v41-menu-atmosphere" aria-hidden="true"></div>
         <div class="hero-card v41-menu-shell v43-menu-shell">
           <div class="v41-menu-layout">
@@ -208,7 +209,7 @@
             </div>
           </div>
 
-          <details class="shift-situation-drawer" open>
+          <details class="shift-situation-drawer">
             <summary class="shift-situation-summary">
               <span>Situation, doctrine &amp; outlook</span>
               <span class="shift-situation-hint muted">Show / hide</span>
@@ -250,6 +251,8 @@
             </div>
           </div>
         </section>
+
+        <div id="v50-priority-card" class="v50-priority-card" hidden></div>
 
         <div id="motel-command-board" class="motel-command-board v43-command-strip-wrap" aria-label="Motel command overview"></div>
 
@@ -318,7 +321,11 @@
               <button id="scan-cameras-btn" class="button button-secondary">Scan Cameras</button>
             </div>
             <p class="muted microcopy-line">Scan to detect anomalies, then Investigate to contain spillover pressure.</p>
-            <div id="camera-grid" class="camera-grid"></div>
+            <div id="v50-camera-digest" class="v50-camera-digest" hidden></div>
+            <details id="v50-camera-wall-drawer" class="v50-camera-wall-drawer">
+              <summary class="v50-camera-wall-summary">Open full camera wall</summary>
+              <div id="camera-grid" class="camera-grid"></div>
+            </details>
           </section>
 
           <section id="spaces-panel" class="panel panel-v41 panel-v41--spaces">
@@ -363,7 +370,12 @@
               </div>
             </div>
 
-            <div id="analog-breaker-mount" class="analog-breaker-mount" aria-label="Breaker board and operator strain"></div>
+            <div id="v50-power-digest" class="v50-power-digest" aria-live="polite"></div>
+
+            <details id="v50-breaker-drawer" class="v50-breaker-drawer">
+              <summary class="v50-breaker-summary">Open breaker controls</summary>
+              <div id="analog-breaker-mount" class="analog-breaker-mount" aria-label="Breaker board and operator strain"></div>
+            </details>
 
             <div class="button-row">
               <button id="restore-power-btn" class="button button-primary">Emergency Restore</button>
@@ -386,7 +398,8 @@
               <button id="end-night-btn" class="button button-primary">End Night</button>
             </div>
             <p class="muted microcopy-line v43-report-hint">Review and dispatch advance time when pressure exists; empty paperwork barely moves the clock.</p>
-            <div id="incident-log" class="log-list v43-incident-log"></div>
+            <div id="v50-report-digest" class="v50-report-digest"></div>
+            <div id="incident-log" class="log-list v43-incident-log v50-incident-log"></div>
           </section>
         </div>
       </section>

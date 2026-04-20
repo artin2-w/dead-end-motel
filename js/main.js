@@ -1,3 +1,4 @@
+import { deriveClarityModel, setDeskFocusGuestId } from './clarityDirector.js';
 import { createInitialState } from './state.js';
 import { createGuest } from './guests.js';
 import {
@@ -414,6 +415,8 @@ import {
 } from './onboarding.js';
 import {
   renderTopbar,
+  renderCurrentPriorityCard,
+  renderPowerDigest,
   renderGuests,
   renderRooms,
   renderSharedSpaces,
@@ -5710,6 +5713,24 @@ function buildRenderState() {
     roomAssignmentOptions: getRoomAssignmentOptionsForGuest(guest, roomsWithChainPressure)
   }));
 
+  const clarity = deriveClarityModel(
+    {
+      ...state,
+      guests: guestsWithDeskOptions,
+      rooms: roomsWithChainPressure,
+      sharedSpaces,
+      cameras: state.cameras || [],
+      activeEvents: state.activeEvents || [],
+      analog: getBreakerBoardSummary(state),
+      blackoutState,
+      emergencyNight,
+      night: state.night,
+      power: state.power,
+      crisisNight: state?.crisisNight || null
+    },
+    { activePanelId, activeScreenId }
+  );
+
   return {
     ...state,
     onInvestigateCamera: investigateCameraZone,
@@ -5976,7 +5997,17 @@ function buildRenderState() {
     localScannerFeed: Array.isArray(state?.localScannerFeed) ? state.localScannerFeed : [],
     runEnding: state?.runEnding || null,
     onboardingUi,
-    ...metaSurface
+    ...metaSurface,
+    clarity,
+    onClarityNavigatePanel: (panelId) => {
+      if (activeScreenId !== 'game-screen') return;
+      setActivePanel(panelId);
+      renderAll();
+    },
+    onDeskGuestFocus: (guestId) => {
+      setDeskFocusGuestId(guestId);
+      renderAll();
+    }
   };
 }
 
@@ -6575,6 +6606,7 @@ function renderAll() {
   evaluatePresentationState();
   const renderState = buildRenderState();
   renderTopbar(renderState);
+  renderCurrentPriorityCard(renderState);
   renderNightEventCard(renderState);
   renderGuests(
     renderState,
@@ -6601,6 +6633,7 @@ function renderAll() {
   renderSharedSpaces(renderState);
   renderCameras(renderState);
   renderAnalogPowerExtras(renderState);
+  renderPowerDigest(renderState);
   renderForensicShiftUi(renderState);
   renderOperatorNoirMount(renderState);
   renderBorderTransferMount(renderState);
@@ -6632,7 +6665,7 @@ function renderAll() {
   });
   renderHelpOverlay(renderState);
   renderSettingsOverlay(renderState);
-  renderLogs(state);
+  renderLogs(renderState);
   if (activeScreenId === 'failure-screen' && state?.failedState) {
     renderFailure(state.failedState, { deadDropOffer: buildDeadDropFailureOffer(metaState, state) });
   }

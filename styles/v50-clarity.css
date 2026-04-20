@@ -1,0 +1,384 @@
+/**
+ * Dead End Motel v0.50 — Premium clarity layer (task-first, digest surfaces)
+ */
+
+/* -------------------------------------------------------------------------- */
+/* Priority card                                                             */
+/* -------------------------------------------------------------------------- */
+
+.v50-priority-card {
+  margin: 0.35rem 0 0.65rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(110, 231, 255, 0.18);
+  background: linear-gradient(160deg, rgba(17, 24, 39, 0.96), rgba(9, 11, 18, 0.9));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.v50-priority-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.v50-priority-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.v50-priority-type {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent, #6ee7ff);
+}
+
+.v50-priority-urg {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.v50-urg-high { color: #f87171; }
+.v50-urg-normal { color: #fbbf24; }
+.v50-urg-low { color: #94a3b8; }
+
+.v50-priority-headline {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.25;
+  font-weight: 650;
+}
+
+.v50-priority-explain {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.v50-priority-action {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.v50-priority-cost {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.v50-priority-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.v50-priority-primary {
+  min-height: 2.55rem;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Guest card v50                                                            */
+/* -------------------------------------------------------------------------- */
+
+.v50-guest-focus-hit {
+  cursor: pointer;
+  border-radius: 10px;
+  outline: none;
+}
+
+.v50-guest-focus-hit:focus-visible {
+  box-shadow: 0 0 0 2px rgba(110, 231, 255, 0.45);
+}
+
+.v50-desk-read {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.35rem 0 0.25rem;
+}
+
+.v50-risk-band {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.v50-risk-low { color: #6ee7ff; }
+.v50-risk-medium { color: #fbbf24; }
+.v50-risk-high { color: #f87171; }
+
+.v50-desk-rec {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.12rem 0.5rem;
+  border-radius: 6px;
+}
+
+.v50-rec-approve { background: rgba(52, 211, 153, 0.12); color: #6ee7b6; }
+.v50-rec-caution { background: rgba(251, 191, 36, 0.12); color: #fcd34d; }
+.v50-rec-reject { background: rgba(248, 113, 113, 0.12); color: #fca5a5; }
+
+.v50-guest-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0 0 0.25rem;
+}
+
+.v50-guest-reason {
+  font-size: 0.82rem;
+  color: var(--text-soft, #94a3b8);
+  line-height: 1.35;
+}
+
+.v50-guest-threadline {
+  margin: 0 0 0.45rem;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.v50-guest-more-signals,
+.v50-inv-more-drawer {
+  font-size: 0.86rem;
+  margin: 0.25rem 0;
+}
+
+.v50-verdict-nested {
+  margin-top: 0.35rem;
+}
+
+.v50-inv-primary-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+@media (min-width: 720px) {
+  .v50-inv-primary-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Rooms digest                                                              */
+/* -------------------------------------------------------------------------- */
+
+.v50-rooms-all-drawer {
+  margin-top: 0.5rem;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  padding: 0.35rem 0.45rem;
+}
+
+.v50-rooms-all-drawer summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text-soft, #94a3b8);
+}
+
+.v50-rooms-primary-host,
+.v50-rooms-overflow-host {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Cameras digest + wall drawer                                              */
+/* -------------------------------------------------------------------------- */
+
+.v50-camera-digest {
+  margin: 0.35rem 0 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.v50-camera-digest-calm .v50-digest-title {
+  margin: 0.15rem 0;
+  font-size: 0.95rem;
+}
+
+.v50-camera-digest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.v50-camera-digest-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+}
+
+.v50-cam-digest-btn {
+  flex-shrink: 0;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+.v50-camera-wall-drawer {
+  margin-top: 0.25rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.25rem 0.45rem;
+}
+
+.v50-camera-wall-drawer summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Shared spaces — quiet collapse                                            */
+/* -------------------------------------------------------------------------- */
+
+.v43-spaces-board-outer.v50-all-quiet .v50-zone-module:not(.is-hot) {
+  display: none;
+}
+
+.v43-spaces-board-outer.v50-all-quiet::after {
+  content: 'Zones read quiet — expand any card from the tab if you need full detail.';
+  display: block;
+  font-size: 0.82rem;
+  color: var(--text-soft, #94a3b8);
+  padding: 0.35rem 0.25rem 0.15rem;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Power digest + breaker drawer                                             */
+/* -------------------------------------------------------------------------- */
+
+.v50-power-digest {
+  margin: 0.45rem 0;
+  padding: 0.5rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 10, 16, 0.55);
+}
+
+.v50-power-digest-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.v50-pd-label {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-soft, #94a3b8);
+}
+
+.v50-power-digest-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.82rem;
+}
+
+.v50-breaker-drawer {
+  margin-top: 0.45rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.25rem 0.45rem;
+}
+
+.v50-breaker-summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Report digest + ledger                                                     */
+/* -------------------------------------------------------------------------- */
+
+.v50-report-digest {
+  margin: 0.35rem 0 0.55rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 10, 16, 0.55);
+}
+
+.v50-rd-title {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.v50-rd-sub {
+  margin: 0.65rem 0 0.25rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent, #6ee7ff);
+}
+
+.v50-rd-recent,
+.v50-rd-hot {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--text-main, #f1f5f9);
+}
+
+.v50-report-ledger-drawer {
+  margin-top: 0.45rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.35rem 0.45rem;
+}
+
+.v50-report-ledger-drawer summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.v50-report-ledger-body .report-section:first-child {
+  margin-top: 0.25rem;
+}
+
+/* End Night stays dominant */
+#report-panel .report-panel-actions .button.button-primary {
+  font-size: 1.02rem;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Main menu — advanced setup demoted                                        */
+/* -------------------------------------------------------------------------- */
+
+.v50-main-menu .v41-menu-cluster-tools {
+  opacity: 0.92;
+}
+
+.v50-main-menu .v41-menu-cluster-tools .v41-cluster-label {
+  font-size: 0.72rem;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Global polish                                                             */
+/* -------------------------------------------------------------------------- */
+
+.v50-root .section-tag {
+  letter-spacing: 0.08em;
+}
+
+.v50-root.screen-game-screen .panel-header h3 {
+  font-size: 1.05rem;
+}

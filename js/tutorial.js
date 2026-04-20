@@ -11,7 +11,7 @@ function createOverlay() {
   overlay.className = 'phase2-tutorial-overlay';
   overlay.innerHTML = `
     <div class="phase2-tutorial-panel" role="dialog" aria-modal="true" aria-label="First shift tutorial">
-      <p class="section-tag">Dead End Motel v0.2</p>
+      <p class="section-tag">Dead End Motel v0.50</p>
       <h3 id="phase2-tutorial-title">Welcome to your shift</h3>
       <p id="phase2-tutorial-body" class="muted"></p>
       <div class="phase2-tutorial-progress" id="phase2-tutorial-progress"></div>
@@ -26,9 +26,18 @@ function createOverlay() {
 }
 
 const STEPS = [
-  { title: 'Review guest info', body: 'Check risk, traits, and policy clues before committing to a guest decision.' },
-  { title: 'Make a decision', body: 'Use Approve, Flag, or Deny based on pressure, policy, and available room safety.' },
-  { title: 'Survive the night', body: 'Rotate desk, cameras, and power actions to prevent chain pressure until dawn.' }
+  {
+    title: 'Read the priority strip',
+    body: 'Each shift opens with one clear question: what matters right now. Let that steer you before you open every tab.'
+  },
+  {
+    title: 'Run the desk like a thriller, not a spreadsheet',
+    body: 'Call an arrival, inspect ID once, then choose Check In, Flag, or Reject. Depth lives in drawers — default is decisive.'
+  },
+  {
+    title: 'Survive to dawn',
+    body: 'Rooms, cameras, and power still exist — but you earn the night by sequencing actions, not by seeing every widget at once.'
+  }
 ];
 
 const tutorialState = {
@@ -123,7 +132,7 @@ function applyTooltips() {
   });
   document.querySelectorAll('.guest-action-row .button').forEach((button) => {
     const text = String(button.textContent || '').toLowerCase();
-    if (text.includes('check in')) button.title = button.title || 'Approve this guest and assign a room.';
+    if (text.includes('check in')) button.title = button.title || 'Check in this guest and assign a room.';
     if (text.includes('flag')) button.title = button.title || 'Flag for monitoring if uncertain.';
     if (text.includes('reject')) button.title = button.title || 'Deny entry; safer short-term, reputation risk long-term.';
   });
@@ -160,7 +169,7 @@ export function runTutorialTick(context = {}) {
   const now = Date.now();
   if (now - tutorialState.lastInputAt > 5000 && now - tutorialState.hintShownAt > 5000) {
     tutorialState.hintShownAt = now;
-    showContextHint('Hint: Review risk + traits, then decide quickly to control pressure.');
+    showContextHint('Hint: follow the Current Priority card — one action at a time beats tab-hopping.');
   }
 }
 
