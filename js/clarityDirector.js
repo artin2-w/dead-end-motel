@@ -1,8 +1,16 @@
 /**
- * v0.50 — Clarity director: task-first priority from existing simulation state only.
+ * v0.51 — Clarity director: premium control-surface signals from existing simulation state only.
+ * Presentation flags (drawer/tool toggles) are module-local — not persisted to save.
  */
 
 let deskFocusGuestId = null;
+
+/** Session UI toggles — safe defaults, no save keys */
+let deskToolsOpen = false;
+let sharedBoardUserOpen = false;
+let quietRoomsCollapsed = true;
+let menuRunSetupCollapsed = false;
+let menuDestructiveCollapsed = true;
 
 export function setDeskFocusGuestId(id) {
   if (id == null || id === '') {
@@ -15,6 +23,30 @@ export function setDeskFocusGuestId(id) {
 
 export function getDeskFocusGuestId() {
   return deskFocusGuestId;
+}
+
+export function setDeskToolsOpen(open) {
+  deskToolsOpen = Boolean(open);
+}
+
+export function setSharedBoardUserOpen(open) {
+  sharedBoardUserOpen = Boolean(open);
+}
+
+export function setQuietRoomsCollapsed(collapsed) {
+  quietRoomsCollapsed = Boolean(collapsed);
+}
+
+export function setMenuRunSetupCollapsed(collapsed) {
+  menuRunSetupCollapsed = Boolean(collapsed);
+}
+
+export function setMenuDestructiveCollapsed(collapsed) {
+  menuDestructiveCollapsed = Boolean(collapsed);
+}
+
+export function getQuietRoomsCollapsed() {
+  return quietRoomsCollapsed;
 }
 
 /** Returns resolved focus id for queue (null if 2+ guests and none focused). */
@@ -56,6 +88,15 @@ export function isRoomClarityImportant(room) {
   return pending || chain || watched || cond === 'Critical' || cond === 'Hostile' || cond === 'Tense';
 }
 
+/** Hot strip: tense / watch / unstable / chain / important / watched power */
+export function isRoomPresentationHot(room) {
+  if (!room || room.unlocked === false) return false;
+  if (!room.occupied) return false;
+  if (isRoomClarityImportant(room)) return true;
+  const c = String(room.condition || '').toLowerCase();
+  return c === 'watch' || c === 'unstable' || c === 'tense';
+}
+
 function zoneIsHot(space) {
   const score = Number(space?.pressureScore || 0);
   const sev = String(space?.severity || '').toLowerCase();
@@ -71,6 +112,17 @@ function simpleRecFromGuest(guest) {
   return { band: 'approve', label: 'Approve lean' };
 }
 
+function modeLabel(mode) {
+  const m = {
+    intake: 'Intake mode',
+    monitor: 'Monitor mode',
+    crisis: 'Crisis mode',
+    cleanup: 'Cleanup mode',
+    dawn: 'Dawn mode'
+  };
+  return m[mode] || 'Monitor mode';
+}
+
 export function deriveClarityModel(state, context = {}) {
   const activePanelId = String(context.activePanelId || 'frontdesk-panel');
   const night = Math.max(1, Number(state?.night || 1));
@@ -82,6 +134,15 @@ export function deriveClarityModel(state, context = {}) {
   const analog = state?.analog || null;
   const blackout = state?.blackoutState?.level || 'none';
   const emergency = Boolean(state?.emergencyNight?.active);
+  const shiftElapsed = Number(state?.shiftElapsedMinutes || 0);
+  const crisisNight = state?.crisisNight || {};
+  const convergenceHot = Boolean(crisisNight.trueCrisisNight) || Number(crisisNight.convergenceTier || 0) >= 3;
+  const da = state?.dawnAuditor || {};
+  const dawnAuditorActive = Boolean(da.active);
+  const dawnCleanupWindow = Boolean(da.cleanupWindow);
+  const finaleTrue = Boolean(state?.finaleDirector?.trueFinalNight);
+  const onboardingUi = context.onboardingUi || null;
+  const hintPanelId = onboardingUi?.hintCard?.panelId || onboardingUi?.highlightPanelId || null;
 
   const resolvedFocus = normalizeDeskFocusGuestIds(guests);
   const stickyGuestId = guests.length >= 2 && resolvedFocus == null ? null : resolvedFocus;
@@ -96,6 +157,31 @@ export function deriveClarityModel(state, context = {}) {
 
   const urgentPower = power <= 32 || (blackout && blackout !== 'none') || emergency;
   const analogLoad = analog ? Number(analog.load || 0) > Number(analog.budget || 1) : false;
+  const powerCritical = power <= 25;
+  const hostileRoom = importantRooms.some(
+    (r) => String(r.condition || '') === 'Critical' || String(r.condition || '') === 'Hostile'
+  );
+  const crisisElevated =
+    emergency ||
+    powerCritical ||
+    hostileRoom ||
+    hotZones.length >= 3 ||
+    notableCameras.length >= 4 ||
+    convergenceHot;
+
+  const roomHotIds = rooms.filter((r) => isRoomPresentationHot(r)).map((r) => r.id);
+  const roomCalmIds = rooms
+    .filter((r) => {
+      if (!r) return false;
+      if (r.unlocked === false) return true;
+      if (!r.occupied) return true;
+      return false;
+    })
+    .map((r) => r.id);
+
+  const lateNightSurveillance = shiftElapsed >= 180;
+  const blackoutCameraRelevant = blackout && blackout !== 'none';
+  const onboardingNeedsCameraWall = Boolean(onboardingUi?.hintCard) && hintPanelId === 'cameras-panel';
 
   let type = 'systems';
   let urgency = 'low';
@@ -106,8 +192,9 @@ export function deriveClarityModel(state, context = {}) {
   let consequenceHint = 'Low immediate penalty for waiting, but time still advances.';
   let primaryCta = { label: 'Open Front Desk', panelId: 'frontdesk-panel' };
   let secondaryCta = null;
+  let navigationCta = null;
 
-  if (guests.length) {
+  if (guests.length && !crisisElevated) {
     type = 'desk';
     const hotGuest = guests.find((g) => String(g?.riskLevel || '').toLowerCase() === 'high') || guests[0];
     const rec = simpleRecFromGuest(hotGuest);
@@ -124,6 +211,7 @@ export function deriveClarityModel(state, context = {}) {
       secondaryCta = { label: `Rooms need care (${importantRooms.length})`, panelId: 'frontdesk-panel' };
     }
     recommendedPanel = 'frontdesk-panel';
+    navigationCta = notableCameras.length ? { label: 'Skim cameras', panelId: 'cameras-panel' } : null;
   } else if (urgentPower || analogLoad) {
     type = 'systems';
     urgency = urgentPower ? 'high' : 'normal';
@@ -131,7 +219,9 @@ export function deriveClarityModel(state, context = {}) {
     explain = urgentPower
       ? 'Low reserve makes scans and interventions expensive — stabilize before stacking actions.'
       : 'Breaker load is brushing the safe budget; trim optional draws.';
-    recommendedAction = urgentPower ? 'Open Power — consider Emergency Restore before another heavy spend.' : 'Open Power and ease breaker load or neon draw.';
+    recommendedAction = urgentPower
+      ? 'Open Power — consider Emergency Restore before another heavy spend.'
+      : 'Open Power and ease breaker load or neon draw.';
     consequenceHint = 'Blackouts and blind cameras spike chain pressure when power collapses.';
     primaryCta = { label: 'Open Power', panelId: 'power-panel' };
     recommendedPanel = 'power-panel';
@@ -179,37 +269,102 @@ export function deriveClarityModel(state, context = {}) {
     secondaryCta = secondaryCta || { label: 'Emergency board', panelId: 'spaces-panel' };
   }
 
+  if (guests.length && crisisElevated) {
+    type = 'desk';
+    urgency = 'high';
+    headline = `${guests.length} guest${guests.length > 1 ? 's' : ''} at glass — crisis pressure is co‑firing`;
+    explain = 'Desk still needs a clean decision while wider systems are unstable.';
+    recommendedAction = 'Stabilize the loudest crisis vector, then return to ID + policy before room release.';
+    consequenceHint = 'Split attention raises miss-risk on both desk and floor.';
+    if (urgentPower) {
+      primaryCta = { label: 'Open Power', panelId: 'power-panel' };
+      recommendedPanel = 'power-panel';
+    } else {
+      primaryCta = { label: 'Handle desk', panelId: 'frontdesk-panel' };
+      recommendedPanel = 'frontdesk-panel';
+    }
+  }
+
+  /* Modes: Dawn > Cleanup > Crisis > Intake > Monitor */
+  let mode = 'monitor';
+  if (finaleTrue || dawnAuditorActive || shiftElapsed >= 420) {
+    mode = 'dawn';
+  } else if (dawnCleanupWindow) {
+    mode = 'cleanup';
+  } else if (crisisElevated) {
+    mode = 'crisis';
+  } else if (guests.length) {
+    mode = 'intake';
+  }
+
+  const cameraPrimary = type === 'camera' || recommendedPanel === 'cameras-panel';
+  const cameraWallDefaultOpen =
+    notableCameras.length > 0 ||
+    blackoutCameraRelevant ||
+    cameraPrimary ||
+    Boolean(onboardingNeedsCameraWall) ||
+    lateNightSurveillance;
+
+  const zonesAllQuiet = hotZones.length === 0;
+  const sharedBoardForceOpen = hotZones.length >= 3;
+  const sharedBoardOpen = sharedBoardForceOpen || sharedBoardUserOpen;
+
+  const breakerDefaultOpen = urgentPower || analogLoad || power <= 40;
+
   const compactSurfaceState = {
     cameraDigestIds: notableCameraIds,
     camerasCalm: notableCameras.length === 0,
-    cameraWallDefaultOpen: night >= 3 || notableCameras.length > 0,
+    cameraWallDefaultOpen,
     roomImportantIds: importantRoomIds,
+    roomHotIds,
+    roomCalmIds,
     roomsShowQuietDefault: night >= 3,
     zoneHotIds: hotZoneIds,
     zoneQuietCount: quietZones.length,
-    /* Reserved: true would hide non-hot cards; only enable when a summary row exists. */
-    zonesAllQuiet: false,
+    zonesAllQuiet,
+    sharedBoardForceOpen,
+    zoneHotCount: hotZones.length,
     softNight: night <= 2,
-    breakerDefaultOpen: night >= 3 || urgentPower || analogLoad,
+    breakerDefaultOpen,
     activePanelId
   };
 
+  const whyItMatters = explain;
+
   return {
+    mode,
+    modeLabel: modeLabel(mode),
     currentPriority: {
       type,
       urgency,
+      mode,
+      modeLabel: modeLabel(mode),
       headline,
       explain,
+      whyItMatters,
       recommendedAction,
       consequenceHint,
       primaryCta,
       secondaryCta,
+      navigationCta,
+      recommendedPanel,
       activePanelId
     },
     recommendedAction,
     recommendedPanel,
     deskFocusGuestId: resolvedFocus,
     stickyGuestId,
+    deskToolsOpen,
+    cameraWallOpen: cameraWallDefaultOpen,
+    breakerDetailOpen: breakerDefaultOpen,
+    sharedBoardOpen,
+    sharedBoardUserOpen,
+    sharedBoardForceOpen,
+    roomHotIds,
+    roomCalmIds,
+    quietRoomsCollapsed,
+    menuRunSetupCollapsed,
+    menuDestructiveCollapsed,
     compactSurfaceState
   };
 }

@@ -43,7 +43,7 @@ function applyMobileUsabilityPass() {
         const target = event.target;
         if (!(target instanceof Element)) return;
         const actionable = target.closest(
-          '.button, .tab-button, .camera-scene-action-btn, .guest-action-row button, .guest-action-row-secondary button, .v50-inv-primary-row button, .v43-sticky-rail-actions button, .v50-cam-digest-btn, .report-panel-actions button, .room-service-row button, .room-tactical-row button'
+          '.button, .tab-button, .camera-scene-action-btn, .guest-action-row button, .guest-action-row-secondary button, .v50-inv-primary-row button, #v51-desk-tools-body .button, .v43-sticky-rail-actions button, .v50-cam-digest-btn, .v51-camera-open-wall-btn, .report-panel-actions button, .room-service-row button, .room-tactical-row button'
         );
         if (!actionable) return;
         const now = Date.now();

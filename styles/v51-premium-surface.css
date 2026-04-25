@@ -1,0 +1,443 @@
+/**
+ * Dead End Motel v0.51 — Premium surface: one focal gradient per view, calmer chrome, stronger hero.
+ */
+
+#app.v51-root.screen-game-screen {
+  --v51-surface-ink: rgba(8, 10, 16, 0.92);
+  --v51-surface-mid: rgba(15, 18, 28, 0.88);
+  --v51-hero-edge: rgba(56, 189, 248, 0.14);
+  --v51-calm-border: rgba(148, 163, 184, 0.12);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Front desk shell — desktop 68 / 32                                        */
+/* -------------------------------------------------------------------------- */
+
+.v51-desk-shell-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 0.35rem;
+}
+
+@media (min-width: 960px) {
+  .v51-desk-shell-grid {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 1rem 1.1rem;
+  }
+
+  #v51-frontdesk-main {
+    flex: 0 0 68%;
+    max-width: 68%;
+    min-width: 0;
+  }
+
+  #v51-frontdesk-tools {
+    flex: 0 0 32%;
+    max-width: 32%;
+    min-width: 0;
+    position: sticky;
+    top: calc(env(safe-area-inset-top, 0px) + 4.75rem);
+  }
+}
+
+#v51-frontdesk-main.v51-hero-surface {
+  border-radius: 16px;
+  padding: 0.35rem 0.5rem 0.65rem;
+  border: 1px solid var(--v51-hero-edge);
+  background: linear-gradient(165deg, rgba(17, 24, 39, 0.95), rgba(7, 9, 14, 0.92));
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.38);
+}
+
+#v51-frontdesk-tools.v51-utility-panel {
+  border-radius: 14px;
+  padding: 0.5rem 0.55rem;
+  border: 1px solid var(--v51-calm-border);
+  background: var(--v51-surface-ink);
+}
+
+#v51-room-hot-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-bottom: 0.35rem;
+}
+
+.v51-room-compact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+#v51-room-calm-drawer.v51-room-calm-drawer {
+  margin-top: 0.35rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: rgba(10, 12, 18, 0.65);
+}
+
+#v51-room-calm-drawer summary {
+  cursor: pointer;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+}
+
+/* Desk tools drawer */
+#v51-desk-tools-drawer {
+  margin-bottom: 0.65rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(12, 14, 22, 0.75);
+}
+
+#v51-desk-tools-drawer > summary {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  padding: 0.45rem 0.55rem;
+  list-style: none;
+}
+
+#v51-desk-tools-drawer > summary::-webkit-details-marker {
+  display: none;
+}
+
+#v51-desk-tools-body {
+  padding: 0.35rem 0.5rem 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+#v51-desk-tools-body .button {
+  font-size: 0.78rem;
+}
+
+@media (min-width: 901px) {
+  #v51-desk-tools-drawer {
+    border: none;
+    background: transparent;
+    margin-bottom: 0.5rem;
+  }
+
+  /* Drawer stays open on wide viewports via js/ui.js renderDeskToolsPanel */
+  #v51-desk-tools-drawer > summary {
+    pointer-events: none;
+    padding-left: 0;
+    color: #cbd5e1;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Priority + mode badge                                                      */
+/* -------------------------------------------------------------------------- */
+
+#v50-priority-card.v51-priority-card .v50-priority-inner {
+  gap: 0.45rem;
+}
+
+#v51-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #a5b4fc;
+  margin-bottom: 0.15rem;
+}
+
+.v51-priority-why {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #cbd5e1;
+}
+
+.v51-priority-nav-cta {
+  margin-top: 0.15rem;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Guest card — mobile sticky de-emphasis                                     */
+/* -------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  #app.screen-game-screen[data-v51-sticky-guest] .guest-card[data-guest-id] .action-group-decide .guest-action-row {
+    opacity: 0.28;
+    pointer-events: none;
+    filter: saturate(0.65);
+  }
+
+  #app.screen-game-screen[data-v51-sticky-guest] .guest-card[data-guest-id] .action-group-decide .action-group-label {
+    opacity: 0.35;
+  }
+
+  #app.screen-game-screen[data-v51-sticky-guest]
+    .guest-card[data-guest-id][data-v51-sticky-active='1']
+    .action-group-decide
+    .guest-action-row,
+  #app.screen-game-screen[data-v51-sticky-guest]
+    .guest-card[data-guest-id][data-v51-sticky-active='1']
+    .action-group-decide
+    .action-group-label {
+    opacity: 1;
+    pointer-events: auto;
+    filter: none;
+  }
+}
+
+.v51-guest-desk-line {
+  margin: 0.25rem 0 0.15rem;
+  font-size: 0.88rem;
+  color: #e2e8f0;
+  line-height: 1.35;
+}
+
+.v51-guest-threadline {
+  margin: 0.2rem 0;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Camera / power / report digests                                            */
+/* -------------------------------------------------------------------------- */
+
+#v51-camera-digest.v51-camera-digest,
+#v51-power-digest.v51-power-digest,
+#v51-report-digest.v51-report-digest {
+  border-radius: 12px;
+  border: 1px solid var(--v51-calm-border);
+  background: rgba(10, 12, 18, 0.72);
+  padding: 0.55rem 0.65rem;
+}
+
+#v51-camera-digest .v51-digest-kicker {
+  margin: 0 0 0.15rem;
+}
+
+#v51-camera-digest .v51-digest-title {
+  margin: 0.1rem 0 0.25rem;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.v51-camera-digest-calm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.v51-camera-open-wall-btn {
+  margin-top: 0.35rem;
+  align-self: flex-start;
+}
+
+@media (max-width: 900px) {
+  #cameras-panel .camera-grid {
+    gap: 0.35rem;
+  }
+
+  #cameras-panel .camera-preview {
+    min-height: 72px;
+  }
+}
+
+@media (min-width: 901px) {
+  #cameras-panel .camera-preview {
+    min-height: 108px;
+  }
+}
+
+#power-panel .button-row.v51-power-emergency-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+@media (max-width: 900px) {
+  #power-panel .button-row.v51-power-emergency-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  #v51-power-digest + #v50-breaker-drawer {
+    margin-top: 0.45rem;
+  }
+}
+
+.v51-report-end-row {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Shared spaces summary                                                      */
+/* -------------------------------------------------------------------------- */
+
+#v51-shared-summary {
+  margin-bottom: 0.55rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(10, 12, 18, 0.65);
+}
+
+.v51-zone-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  font-size: 0.82rem;
+  color: #94a3b8;
+}
+
+.v51-zone-summary-row span {
+  white-space: nowrap;
+}
+
+.v51-shared-board-actions {
+  margin-top: 0.45rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+#shared-space-board.v51-shared-compress:not(.v51-shared-expanded) .v50-zone-module:not(.is-hot) {
+  display: none;
+}
+
+#shared-space-board.v51-shared-compress:not(.v51-shared-expanded) .v50-zone-module.is-hot {
+  margin-bottom: 0.45rem;
+}
+
+#shared-space-board.v51-shared-all-quiet:not(.v51-shared-expanded) #shared-space-grid {
+  display: none;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Room manage grids                                                          */
+/* -------------------------------------------------------------------------- */
+
+.v51-action-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.v51-action-grid--mobile {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+@media (max-width: 900px) {
+  .room-action-stack .v51-action-grid--mobile {
+    display: grid;
+  }
+
+  .room-action-stack .room-service-row.v51-action-grid--mobile,
+  .room-action-stack .room-tactical-row.v51-action-grid--mobile {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 901px) {
+  .room-action-stack .room-service-row,
+  .room-action-stack .room-tactical-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sticky rail safe area                                                      */
+/* -------------------------------------------------------------------------- */
+
+#v43-guest-sticky-rail:not([hidden]) {
+  padding-bottom: calc(0.55rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Main menu premium                                                          */
+/* -------------------------------------------------------------------------- */
+
+#app.v51-root.screen-main-menu .v41-menu-layout {
+  gap: 1.25rem;
+}
+
+@media (min-width: 901px) {
+  #app.v51-root.screen-main-menu .v41-menu-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+    align-items: start;
+  }
+
+  #app.v51-root.screen-main-menu .v41-menu-hero {
+    padding-right: 0.5rem;
+  }
+
+  #app.v51-root.screen-main-menu .v41-menu-rail {
+    border-left: 1px solid rgba(148, 163, 184, 0.12);
+    padding-left: 1rem;
+  }
+}
+
+#app.v51-root.screen-main-menu .v41-btn-shift-primary {
+  min-height: 3rem;
+  font-size: 1.05rem;
+  box-shadow: 0 10px 28px rgba(56, 189, 248, 0.12);
+}
+
+#app.v51-root.screen-main-menu .v51-menu-destructive-drawer {
+  margin-top: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.15);
+  background: rgba(30, 10, 12, 0.35);
+}
+
+#app.v51-root.screen-main-menu .v51-menu-destructive-drawer > summary {
+  color: #fca5a5;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.45rem 0.5rem;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Desktop status footer (subtle)                                             */
+/* -------------------------------------------------------------------------- */
+
+#v51-desktop-status-footer {
+  display: none;
+}
+
+@media (min-width: 901px) {
+  #app.screen-game-screen #v51-desktop-status-footer {
+    display: block;
+    margin: 0.35rem 0 0;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+    border-top: 1px solid rgba(148, 163, 184, 0.08);
+  }
+}
+
+.v51-calm-strip {
+  opacity: 0.92;
+}
+
+.v51-hot-panel {
+  border-color: rgba(251, 191, 36, 0.22) !important;
+}

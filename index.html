@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Dead End Motel v0.50</title>
+  <title>Dead End Motel v0.51</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -31,12 +31,13 @@
   <link rel="stylesheet" href="styles/v42-mobile-command.css" />
   <link rel="stylesheet" href="styles/v43-control-surface.css" />
   <link rel="stylesheet" href="styles/v50-clarity.css" />
+  <link rel="stylesheet" href="styles/v51-premium-surface.css" />
 </head>
 <body>
-  <div id="app" class="app-shell screen-main-menu v42-root v43-root v50-root">
+  <div id="app" class="app-shell screen-main-menu v42-root v43-root v50-root v51-root">
     <header class="topbar topbar-v20 v42-topbar v43-topbar" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.50</p>
+        <p class="eyebrow">Dead End Motel v0.51</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -112,11 +113,14 @@
                 </div>
               </div>
 
-              <div class="v41-menu-cluster v41-menu-cluster-danger">
-                <p class="v41-cluster-label v41-cluster-label-danger">Destructive</p>
-                <button id="main-menu-reset-campaign-btn" type="button" class="button button-destructive">Reset entire campaign</button>
-                <p class="v41-reset-hint muted">Wipes this save slot to Night 1. Archive perks, points, and endings stay.</p>
-              </div>
+              <details class="v51-menu-destructive-drawer" id="main-menu-destructive-section">
+                <summary>Destructive options</summary>
+                <div class="v41-menu-cluster v41-menu-cluster-danger">
+                  <p class="v41-cluster-label v41-cluster-label-danger">Destructive</p>
+                  <button id="main-menu-reset-campaign-btn" type="button" class="button button-destructive">Reset entire campaign</button>
+                  <p class="v41-reset-hint muted">Wipes this save slot to Night 1. Archive perks, points, and endings stay.</p>
+                </div>
+              </details>
 
               <details class="mobile-menu-section v41-menu-briefing" id="main-menu-briefing-section" data-mobile-default="closed">
                 <summary>First shift briefing</summary>
@@ -127,7 +131,7 @@
             <aside class="v41-menu-rail" aria-label="Situation and archive">
               <div id="main-menu-situation-cards" class="v41-situation-cards" aria-live="polite"></div>
               <div id="main-menu-meta-surface" class="main-menu-meta-surface v41-meta-surface">
-              <details class="mobile-menu-section main-menu-run-setup" id="main-menu-run-setup-section" data-mobile-default="open" open>
+              <details class="mobile-menu-section main-menu-run-setup" id="main-menu-run-setup-section" data-mobile-default="closed">
                 <summary>Run Setup</summary>
                 <div class="mobile-menu-section-body">
                   <label class="main-menu-setup-label" for="main-menu-difficulty-select">Difficulty</label>
@@ -252,7 +256,7 @@
           </div>
         </section>
 
-        <div id="v50-priority-card" class="v50-priority-card" hidden></div>
+        <div id="v50-priority-card" class="v50-priority-card v51-priority-card" hidden></div>
 
         <div id="motel-command-board" class="motel-command-board v43-command-strip-wrap" aria-label="Motel command overview"></div>
 
@@ -267,8 +271,8 @@
             </div>
             <p id="frontdesk-intake-line" class="muted microcopy-line v43-desk-intake"></p>
             <p class="muted microcopy-line v43-desk-flow-hint">Desk flow: read → verify → decide.</p>
-            <div class="v43-desk-grid">
-              <div class="v43-desk-primary">
+            <div id="v51-frontdesk-shell" class="v51-frontdesk-shell v51-desk-shell-grid">
+              <div id="v51-frontdesk-main" class="v51-frontdesk-main v51-hero-surface v43-desk-primary">
                 <div id="guest-queue" class="card-list v43-guest-queue"></div>
                 <div class="v43-desk-rooms-wrap">
                   <div class="panel-header split-space v43-rooms-header">
@@ -280,19 +284,23 @@
                   <div id="room-list" class="room-grid"></div>
                 </div>
               </div>
-              <aside class="v43-desk-support" aria-label="Desk intelligence and feeds">
+              <aside id="v51-frontdesk-tools" class="v51-frontdesk-tools v51-utility-panel v43-desk-support" aria-label="Desk tools and intelligence">
+                <details id="v51-desk-tools-drawer" class="v51-desk-tools-drawer">
+                  <summary>Desk tools</summary>
+                  <div id="v51-desk-tools-body" class="v51-desk-tools-body" aria-label="Desk utilities"></div>
+                </details>
                 <div id="forensic-shift-mount" class="v33-forensic-mount" aria-live="polite"></div>
                 <div id="operator-noir-mount" class="v37-operator-mount" aria-live="polite"></div>
                 <div id="border-transfer-mount" class="v38-border-mount" aria-live="polite"></div>
                 <div id="lost-found-mount" class="v33-lost-found-mount"></div>
-                <div class="desk-scanner-card intelligence-feed-card v43-scanner-surface">
+                <div class="desk-scanner-card intelligence-feed-card v43-scanner-surface" id="v51-desk-scanner-card">
                   <div class="panel-header split-space">
                     <div>
                       <p class="section-tag">Local Scanner</p>
                       <h4>Police / Incident Feed</h4>
                     </div>
                   </div>
-                  <div id="desk-scanner-feed" class="scanner-feed-list"></div>
+                  <div id="desk-scanner-feed" class="scanner-feed-list" tabindex="-1"></div>
                   <div class="scanner-intercept-strip">
                     <button id="radio-intercept-btn" class="radio-intercept-btn" hidden>Intercept Scanner</button>
                     <span id="radio-intercept-hint" class="radio-intercept-hint"></span>
@@ -321,7 +329,7 @@
               <button id="scan-cameras-btn" class="button button-secondary">Scan Cameras</button>
             </div>
             <p class="muted microcopy-line">Scan to detect anomalies, then Investigate to contain spillover pressure.</p>
-            <div id="v50-camera-digest" class="v50-camera-digest" hidden></div>
+            <div id="v51-camera-digest" class="v50-camera-digest v51-camera-digest" hidden></div>
             <details id="v50-camera-wall-drawer" class="v50-camera-wall-drawer">
               <summary class="v50-camera-wall-summary">Open full camera wall</summary>
               <div id="camera-grid" class="camera-grid"></div>
@@ -336,6 +344,7 @@
               </div>
             </div>
             <p class="muted microcopy-line v43-spaces-lede">Live situation board: pressure routes, spillover, and what to do next.</p>
+            <div id="v51-shared-summary" class="v51-shared-summary v51-calm-strip" aria-live="polite"></div>
             <div id="shared-space-board" class="v43-spaces-board-outer">
               <div id="shared-space-grid" class="shared-space-grid shared-space-board"></div>
             </div>
@@ -370,14 +379,14 @@
               </div>
             </div>
 
-            <div id="v50-power-digest" class="v50-power-digest" aria-live="polite"></div>
+            <div id="v51-power-digest" class="v50-power-digest v51-power-digest" aria-live="polite"></div>
 
             <details id="v50-breaker-drawer" class="v50-breaker-drawer">
               <summary class="v50-breaker-summary">Open breaker controls</summary>
               <div id="analog-breaker-mount" class="analog-breaker-mount" aria-label="Breaker board and operator strain"></div>
             </details>
 
-            <div class="button-row">
+            <div class="button-row v51-power-emergency-row">
               <button id="restore-power-btn" class="button button-primary">Emergency Restore</button>
               <button id="drain-power-btn" class="button button-danger">Emergency Reroute</button>
             </div>
@@ -392,13 +401,13 @@
                 <h3>Night Report</h3>
               </div>
             </div>
+            <p class="muted microcopy-line v43-report-hint">Review and dispatch advance time when pressure exists; empty paperwork barely moves the clock.</p>
+            <div id="v51-report-digest" class="v50-report-digest v51-report-digest"></div>
             <div class="report-panel-actions report-actions v42-report-actions">
               <button id="review-incidents-btn" class="button button-secondary">Review Incidents</button>
               <button id="dispatch-staff-btn" class="button button-utility">Dispatch Staff</button>
               <button id="end-night-btn" class="button button-primary">End Night</button>
             </div>
-            <p class="muted microcopy-line v43-report-hint">Review and dispatch advance time when pressure exists; empty paperwork barely moves the clock.</p>
-            <div id="v50-report-digest" class="v50-report-digest"></div>
             <div id="incident-log" class="log-list v43-incident-log v50-incident-log"></div>
           </section>
         </div>
@@ -596,6 +605,9 @@
           </div>
         </div>
       </section>
+      <footer id="v51-desktop-status-footer" class="v51-desktop-status-footer" aria-hidden="true">
+        Control surface v0.51 — read risk first, then spend attention.
+      </footer>
     </main>
     <div id="v43-guest-sticky-rail" class="v43-guest-sticky-rail" hidden aria-live="polite"></div>
   </div>

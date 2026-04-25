@@ -1,4 +1,8 @@
-import { deriveClarityModel, setDeskFocusGuestId } from './clarityDirector.js';
+import {
+  deriveClarityModel,
+  setDeskFocusGuestId,
+  setSharedBoardUserOpen
+} from './clarityDirector.js';
 import { createInitialState } from './state.js';
 import { createGuest } from './guests.js';
 import {
@@ -5726,9 +5730,12 @@ function buildRenderState() {
       emergencyNight,
       night: state.night,
       power: state.power,
-      crisisNight: state?.crisisNight || null
+      crisisNight: state?.crisisNight || null,
+      finaleDirector: state?.finaleDirector || null,
+      dawnAuditor: state?.dawnAuditor || null,
+      shiftElapsedMinutes: state.shiftElapsedMinutes
     },
-    { activePanelId, activeScreenId }
+    { activePanelId, activeScreenId, onboardingUi }
   );
 
   return {
@@ -6006,6 +6013,14 @@ function buildRenderState() {
     },
     onDeskGuestFocus: (guestId) => {
       setDeskFocusGuestId(guestId);
+      renderAll();
+    },
+    onSharedSpacesBoardOpen: () => {
+      setSharedBoardUserOpen(true);
+      renderAll();
+    },
+    onSharedSpacesBoardCollapse: () => {
+      setSharedBoardUserOpen(false);
       renderAll();
     }
   };

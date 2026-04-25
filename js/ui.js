@@ -6,7 +6,8 @@ import {
 import {
   normalizeDeskFocusGuestIds,
   setDeskFocusGuestId,
-  isRoomClarityImportant
+  isRoomClarityImportant,
+  isRoomPresentationHot
 } from './clarityDirector.js';
 import { getRoomPresentationMeta } from './presentation.js';
 import { tapeBackupEligible, buildDeskUvObjectLines } from './forensicNoir.js';
@@ -1223,6 +1224,100 @@ function buildResponseOptionMarkup({ title, effectLine, description, note, noteP
   `;
 }
 
+function renderDeskToolsPanel(state, deskHandlers) {
+  const mount = document.getElementById('v51-desk-tools-body');
+  const drawer = document.getElementById('v51-desk-tools-drawer');
+  if (!mount) return;
+  if (drawer && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 901px)').matches) {
+    drawer.open = true;
+  }
+  mount.innerHTML = '';
+  const gid = state?.clarity?.deskFocusGuestId ?? state?.guests?.[0]?.id ?? null;
+  const guest = gid != null ? (state.guests || []).find((g) => g.id === gid) : null;
+  const {
+    onInspectId,
+    onDeepInspect,
+    onQuestionGuest,
+    onTapeBackupEvidence
+  } = deskHandlers;
+
+  const mk = (label, cls, disabled, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `button ${cls}`;
+    b.textContent = label;
+    b.disabled = Boolean(disabled);
+    bindAtomicActionButton(b, fn, { groupRoot: mount });
+    mount.appendChild(b);
+  };
+
+  if (guest) {
+    mk(guest?.idInspected ? 'ID checked' : 'Inspect ID', 'button-secondary', guest?.idInspected, () => onInspectId(guest.id));
+    mk(guest?.uvInspected ? 'UV done' : 'Use UV', 'button-utility', guest?.uvInspected, () => onDeepInspect(guest.id));
+    mk('Ask follow-up', 'button-utility', false, () => {
+      if (typeof onQuestionGuest === 'function') {
+        onQuestionGuest(
+          guest.id,
+          guest?.vehicleProfile ? 'vehicle' : guest?.linkedArrival ? 'relationship' : guest?.forgeryProfile?.isForged ? 'inconsistency' : 'late-timing'
+        );
+      }
+    });
+  } else {
+    const d = document.createElement('p');
+    d.className = 'muted microcopy-line';
+    d.style.flex = '1 1 100%';
+    d.textContent = 'Desk tools activate when a guest is at the window.';
+    mount.appendChild(d);
+  }
+
+  const scanBtn = document.createElement('button');
+  scanBtn.type = 'button';
+  scanBtn.className = 'button button-secondary';
+  scanBtn.textContent = 'Open scanner feed';
+  scanBtn.title = 'Scroll to the police / incident scanner card.';
+  scanBtn.addEventListener('click', () => {
+    document.getElementById('desk-scanner-feed')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    document.getElementById('v51-desk-scanner-card')?.classList.add('v51-hot-panel');
+    window.setTimeout(() => document.getElementById('v51-desk-scanner-card')?.classList.remove('v51-hot-panel'), 2400);
+  });
+  mount.appendChild(scanBtn);
+
+  const swBtn = document.createElement('button');
+  swBtn.type = 'button';
+  swBtn.className = 'button button-utility';
+  swBtn.textContent = 'Switchboard';
+  swBtn.title = 'Jump to the operator / switchboard surface.';
+  swBtn.addEventListener('click', () => {
+    document.getElementById('operator-noir-mount')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  mount.appendChild(swBtn);
+
+  const tapeBtn = document.createElement('button');
+  tapeBtn.type = 'button';
+  tapeBtn.className = 'button button-utility';
+  tapeBtn.textContent = 'Tape backup';
+  const evidence = Array.isArray(state?.forensic?.evidenceItems) ? state.forensic.evidenceItems : [];
+  const tapeTarget = evidence.find((it) => tapeBackupEligible(it) && !it.tapeSecured);
+  tapeBtn.disabled = !tapeTarget || typeof onTapeBackupEvidence !== 'function';
+  tapeBtn.title = tapeBtn.disabled ? 'No eligible evidence for tape backup right now.' : 'Start tape backup on the next eligible item.';
+  tapeBtn.addEventListener('click', () => {
+    const ev = (Array.isArray(state?.forensic?.evidenceItems) ? state.forensic.evidenceItems : []).find(
+      (it) => tapeBackupEligible(it) && !it.tapeSecured
+    );
+    if (ev && typeof onTapeBackupEvidence === 'function') onTapeBackupEvidence(ev.id);
+  });
+  mount.appendChild(tapeBtn);
+
+  const forensic = document.getElementById('forensic-shift-mount');
+  const more = document.createElement('details');
+  more.className = 'v51-desk-more-tools';
+  more.innerHTML = '<summary>More tools</summary><p class="muted microcopy-line">Forensic desk, border transfer, and lost &amp; found stay mounted below for deep reads.</p>';
+  more.addEventListener('toggle', () => {
+    if (more.open) forensic?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  mount.appendChild(more);
+}
+
 function bindAtomicActionButton(button, handler, { groupRoot = null } = {}) {
   if (!button || typeof handler !== 'function') return;
   let fired = false;
@@ -1234,7 +1329,7 @@ function bindAtomicActionButton(button, handler, { groupRoot = null } = {}) {
     const root =
       groupRoot ||
       button.closest(
-        '.camera-scene-actions, .guest-action-row, .guest-action-row-secondary, .v50-inv-primary-row, .room-tactical-row, .button-row, .report-panel-actions'
+        '.camera-scene-actions, .guest-action-row, .guest-action-row-secondary, .v50-inv-primary-row, #v51-desk-tools-body, .room-tactical-row, .button-row, .report-panel-actions'
       );
     if (root) {
       root.querySelectorAll('button').forEach((entry) => {
@@ -1266,6 +1361,7 @@ export function syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGue
     rail.hidden = true;
     rail.innerHTML = '';
     app.removeAttribute('data-v43-sticky-guest');
+    delete app.dataset.v51StickyGuest;
   };
 
   if (!isGame || !isFrontDesk || !isMobile || !guests.length) {
@@ -1283,6 +1379,7 @@ export function syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGue
   const name = String(focusGuest?.name || 'Guest').slice(0, 26);
   rail.hidden = false;
   app.setAttribute('data-v43-sticky-guest', '1');
+  app.dataset.v51StickyGuest = String(guestId);
   rail.innerHTML = `
     <div class="v43-sticky-rail-inner" role="region">
       <p class="v43-sticky-rail-label"></p>
@@ -1358,19 +1455,25 @@ export function renderCurrentPriorityCard(state) {
   el.innerHTML = '';
   const inner = document.createElement('div');
   inner.className = 'v50-priority-inner';
+  const modeBadge = state?.clarity?.modeLabel || cp.modeLabel || 'Monitor mode';
   inner.innerHTML = `
+    <div id="v51-mode-badge" class="v51-mode-badge">${modeBadge}</div>
     <div class="v50-priority-meta">
       <span class="v50-priority-type">${typeLabel}</span>
       <span class="v50-priority-urg v50-urg-${cp.urgency}">${urgLabel}</span>
     </div>
     <h3 class="v50-priority-headline"></h3>
     <p class="v50-priority-explain muted"></p>
+    <p class="v51-priority-why muted"><strong>Why it matters:</strong> <span class="v51-priority-why-text"></span></p>
     <p class="v50-priority-action"><strong>Recommended:</strong> <span class="v50-priority-action-text"></span></p>
     <p class="v50-priority-cost muted"></p>
     <div class="v50-priority-actions"></div>
+    <div class="v51-priority-nav-cta"></div>
   `;
   inner.querySelector('.v50-priority-headline').textContent = cp.headline || '';
   inner.querySelector('.v50-priority-explain').textContent = cp.explain || '';
+  const whyText = inner.querySelector('.v51-priority-why-text');
+  if (whyText) whyText.textContent = cp.whyItMatters || cp.explain || '';
   inner.querySelector('.v50-priority-action-text').textContent = cp.recommendedAction || '';
   inner.querySelector('.v50-priority-cost').textContent = cp.consequenceHint || '';
 
@@ -1397,11 +1500,24 @@ export function renderCurrentPriorityCard(state) {
     });
     actions.appendChild(sec);
   }
+  const navHost = inner.querySelector('.v51-priority-nav-cta');
+  if (navHost && cp.navigationCta?.label && cp.navigationCta?.panelId) {
+    const nav = document.createElement('button');
+    nav.type = 'button';
+    nav.className = 'button button-utility';
+    nav.textContent = cp.navigationCta.label;
+    nav.addEventListener('click', () => {
+      if (typeof state.onClarityNavigatePanel === 'function') {
+        state.onClarityNavigatePanel(cp.navigationCta.panelId);
+      }
+    });
+    navHost.appendChild(nav);
+  }
   el.appendChild(inner);
 }
 
 export function renderPowerDigest(state) {
-  const strip = document.getElementById('v50-power-digest');
+  const strip = document.getElementById('v51-power-digest') || document.getElementById('v50-power-digest');
   const drawer = document.getElementById('v50-breaker-drawer');
   if (!strip) return;
 
@@ -1453,6 +1569,12 @@ export function renderGuests(
   if (!state.guests.length) {
     queue.innerHTML =
       '<div class="v41-empty-queue" role="status"><p class="v41-empty-queue-title">Queue clear</p><p class="v41-empty-queue-copy muted">No bodies at the glass. Call the next arrival when intake has breath — empty is relief, not safety.</p></div>';
+    renderDeskToolsPanel(state, {
+      onInspectId,
+      onDeepInspect,
+      onQuestionGuest,
+      onTapeBackupEvidence: state.onTapeBackupEvidence
+    });
     syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGuest });
     return;
   }
@@ -1471,6 +1593,9 @@ export function renderGuests(
       uvLens ? ' v33-blacklight-context' : ''
     }`.trim();
     card.dataset.guestId = String(guest.id);
+    if (state?.clarity?.stickyGuestId != null && guest.id === state.clarity.stickyGuestId) {
+      card.dataset.v51StickyActive = '1';
+    }
     card.dataset.risk = (guest.riskLevel || 'Low').toLowerCase();
     card.dataset.archetype = (guest.archetypeKey || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '-');
     const contradictionLines = Array.isArray(guest?.contradictionLines) ? guest.contradictionLines.slice(0, 3) : [];
@@ -1579,7 +1704,10 @@ export function renderGuests(
         <span class="v50-desk-rec v50-rec-${recBand}">${recLabel}</span>
       </div>
       ${reasonsHtml ? `<div class="v50-guest-reasons">${reasonsHtml}</div>` : ''}
-      <p class="v50-guest-threadline">${reasonA ? reasonA : strapline}</p>
+      <p class="v51-guest-desk-line">${strapline}</p>
+      ${guest.threadMemoryLine || guest.priorHistoryLine
+        ? `<details class="v51-thread-drawer"><summary>Thread / prior context</summary><div class="guest-history-block"><p class="guest-history-line muted">${[guest.priorHistoryLine, guest.threadMemoryLine].filter(Boolean).join(' · ')}</p></div></details>`
+        : ''}
       <details class="v50-guest-more-signals">
         <summary>Cross-check more</summary>
         <div class="v24-verdict-strip v43-verdict-strip v50-verdict-nested">
@@ -1598,12 +1726,13 @@ export function renderGuests(
           <div class="action-group-body guest-action-row"></div>
         </div>
         <div class="action-group v50-inv-primary-block">
-          <p class="action-group-label">Investigation</p>
+          <p class="action-group-label">Quick checks (desk tools hold ID / UV / follow-up)</p>
           <div class="action-group-body v50-inv-primary-row"></div>
         </div>
         <details class="v50-inv-more-drawer">
           <summary>More checks</summary>
           <div class="action-group action-group-investigate">
+            <p class="muted microcopy-line">Use <strong>Desk tools</strong> in the right rail for Inspect ID, UV, and follow-up questions.</p>
             <div class="action-group-body guest-action-row-secondary"></div>
           </div>
         </details>
@@ -1698,12 +1827,6 @@ export function renderGuests(
           ${secondarySignalsInner}
         </div>
       </details>
-      ${(guest.priorHistoryLine || guest.threadMemoryLine)
-        ? `<div class="guest-history-block">
-            ${guest.priorHistoryLine ? `<p class="guest-history-line">${guest.priorHistoryLine}</p>` : ''}
-            ${guest.threadMemoryLine ? `<p class="guest-history-line">${guest.threadMemoryLine}</p>` : ''}
-          </div>`
-        : ''}
     `;
 
     const actions = card.querySelector('.guest-action-row');
@@ -1732,34 +1855,21 @@ export function renderGuests(
     actions.appendChild(flagButton);
     actions.appendChild(rejectButton);
 
-    const inspectIdButton = document.createElement('button');
-    inspectIdButton.className = 'button button-secondary';
-    inspectIdButton.textContent = guest?.idInspected ? 'ID Checked' : 'Inspect ID';
-    inspectIdButton.title = 'Read the guest ID for expiry, validity, and mismatch clues.';
-    inspectIdButton.disabled = Boolean(guest?.idInspected);
     const invPrimary = primaryRow || secondaryActions;
-    bindAtomicActionButton(inspectIdButton, () => onInspectId(guest.id), { groupRoot: invPrimary });
-
-    const uvButton = document.createElement('button');
-    uvButton.className = 'button button-utility';
-    uvButton.textContent = guest?.uvInspected ? 'UV Done' : 'Use UV';
-    uvButton.title = 'Optional deep inspection for hidden marks and forged details.';
-    uvButton.disabled = Boolean(guest?.uvInspected);
-    bindAtomicActionButton(uvButton, () => onDeepInspect(guest.id), { groupRoot: invPrimary });
 
     const depositButton = document.createElement('button');
     depositButton.className = 'button button-utility';
     depositButton.textContent = guest?.depositRequested ? 'Deposit Taken' : 'Request Deposit';
     depositButton.title = 'Safer but colder desk handling. Can calm risk or drive off good guests.';
     depositButton.disabled = Boolean(guest?.depositRequested);
-    bindAtomicActionButton(depositButton, () => onDeposit(guest.id), { groupRoot: secondaryActions });
+    bindAtomicActionButton(depositButton, () => onDeposit(guest.id), { groupRoot: invPrimary });
 
     const verifyButton = document.createElement('button');
     verifyButton.className = 'button button-warning';
     verifyButton.textContent = guest?.secondaryVerified ? 'Verified' : 'Secondary Check';
     verifyButton.title = 'Ask follow-up questions and compare details before room release.';
     verifyButton.disabled = Boolean(guest?.secondaryVerified);
-    bindAtomicActionButton(verifyButton, () => onSecondaryVerify(guest.id), { groupRoot: secondaryActions });
+    bindAtomicActionButton(verifyButton, () => onSecondaryVerify(guest.id), { groupRoot: invPrimary });
 
     const holdButton = document.createElement('button');
     holdButton.className = 'button button-warning';
@@ -1768,26 +1878,9 @@ export function renderGuests(
     holdButton.disabled = Boolean(guest?.heldForScreening);
     bindAtomicActionButton(holdButton, () => onHoldScreening(guest.id), { groupRoot: invPrimary });
 
-    const questionButton = document.createElement('button');
-    questionButton.className = 'button button-utility';
-    questionButton.textContent = 'Ask Follow-Up';
-    questionButton.title = 'Push on vehicle, timing, relationship, or identity details for a sharper read.';
-    bindAtomicActionButton(questionButton, () => {
-      if (typeof onQuestionGuest === 'function') {
-        onQuestionGuest(
-          guest.id,
-          guest?.vehicleProfile ? 'vehicle' : guest?.linkedArrival ? 'relationship' : guest?.forgeryProfile?.isForged ? 'inconsistency' : 'late-timing'
-        );
-      }
-    }, { groupRoot: invPrimary });
-
-    invPrimary.appendChild(inspectIdButton);
-    invPrimary.appendChild(uvButton);
-    invPrimary.appendChild(questionButton);
+    invPrimary.appendChild(verifyButton);
+    invPrimary.appendChild(depositButton);
     invPrimary.appendChild(holdButton);
-
-    secondaryActions.appendChild(depositButton);
-    secondaryActions.appendChild(verifyButton);
 
     if (guest?.specialEncounter && !guest.specialEncounter.resolved) {
       const specialButton = document.createElement('button');
@@ -1818,6 +1911,12 @@ export function renderGuests(
     }
 
     queue.appendChild(card);
+  });
+  renderDeskToolsPanel(state, {
+    onInspectId,
+    onDeepInspect,
+    onQuestionGuest,
+    onTapeBackupEvidence: typeof state.onTapeBackupEvidence === 'function' ? state.onTapeBackupEvidence : null
   });
   syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGuest });
 }
@@ -1930,11 +2029,16 @@ export function renderRooms(
 ) {
   const roomList = document.getElementById('room-list');
   roomList.innerHTML = '';
-  const primaryHost = document.createElement('div');
-  primaryHost.className = 'v50-rooms-primary-host';
-  const overflowHost = document.createElement('div');
-  overflowHost.className = 'v50-rooms-overflow-host';
-  const hotIds = new Set((state.clarity?.compactSurfaceState?.roomImportantIds || []).map(Number));
+  const isMobileRooms = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 900px)').matches;
+  const hotStrip = document.createElement('div');
+  hotStrip.id = 'v51-room-hot-strip';
+  const warmWrap = document.createElement('div');
+  warmWrap.className = 'v51-room-compact-list v51-room-warm-wrap';
+  const calmFrag = document.createDocumentFragment();
+  const mobileStackFrag = document.createDocumentFragment();
+  const hotIdSet = new Set(
+    (state.clarity?.roomHotIds || state.clarity?.compactSurfaceState?.roomImportantIds || []).map(Number)
+  );
 
   state.rooms.forEach((room) => {
     const presentation = getRoomPresentationMeta(room);
@@ -1945,8 +2049,16 @@ export function renderRooms(
     const roomChainHigh = Number(room?.chainPressure || 0) >= 4;
     const isSelectedRoom = _v21SelectedRoomId === room.id;
     card.className = `room-card v43-room-surface v50-room-card ${getRoomConditionClass(room.condition || 'Stable')} room-tone-${presentation.tone} ${presentation.shouldPulse ? 'is-critical-pulse' : ''} ${room.occupied ? 'room-card-occupied' : 'room-card-vacant'} ${lockedOut ? 'room-card-locked' : ''} ${systemNoise ? 'room-card-system-noise' : ''} ${isSelectedRoom ? 'room-card-focused' : ''}`.trim();
-    const primaryVisible = lockedOut || hotIds.has(room.id) || isRoomClarityImportant(room);
-    const attachHost = primaryVisible ? primaryHost : overflowHost;
+    const hotRoom = !lockedOut && (hotIdSet.has(room.id) || isRoomPresentationHot(room));
+    const calmSlot = lockedOut || !room.occupied;
+    const calmOrLockedHost = isMobileRooms ? mobileStackFrag : calmFrag;
+    const attachHost = lockedOut || calmSlot
+      ? calmOrLockedHost
+      : hotRoom
+        ? hotStrip
+        : isMobileRooms
+          ? mobileStackFrag
+          : warmWrap;
     if (lockedOut) {
       card.innerHTML = `
         <div class="room-card-header">
@@ -2011,11 +2123,11 @@ export function renderRooms(
           <div class="room-action-stack v42-room-action-stack">
             <div class="action-group">
               <p class="action-group-label">Service response</p>
-              <div class="action-group-body room-service-row"></div>
+              <div class="action-group-body room-service-row v51-action-grid v51-action-grid--mobile"></div>
             </div>
             <div class="action-group action-group-control">
               <p class="action-group-label">Room control</p>
-              <div class="action-group-body room-tactical-row"></div>
+              <div class="action-group-body room-tactical-row v51-action-grid v51-action-grid--mobile"></div>
             </div>
           </div>
         </div>
@@ -2183,21 +2295,109 @@ export function renderRooms(
     attachHost.appendChild(card);
   });
 
-  roomList.appendChild(primaryHost);
-  if (overflowHost.childElementCount > 0) {
-    const det = document.createElement('details');
-    det.className = 'v50-rooms-all-drawer';
-    const sm = document.createElement('summary');
-    sm.textContent = `Show all rooms (${overflowHost.childElementCount} quieter / vacant)`;
-    det.appendChild(sm);
-    det.appendChild(overflowHost);
-    roomList.appendChild(det);
+  roomList.appendChild(hotStrip);
+  if (isMobileRooms) {
+    const n = mobileStackFrag.childElementCount;
+    if (n > 0) {
+      const det = document.createElement('details');
+      det.id = 'v51-room-calm-drawer';
+      det.className = 'v51-room-calm-drawer v50-rooms-all-drawer';
+      const sm = document.createElement('summary');
+      sm.textContent = `Other rooms (${n} occupied / quiet / vacant)`;
+      det.appendChild(sm);
+      det.appendChild(mobileStackFrag);
+      roomList.appendChild(det);
+    }
+  } else {
+    roomList.appendChild(warmWrap);
+    const nCalm = calmFrag.childElementCount;
+    if (nCalm > 0) {
+      const det = document.createElement('details');
+      det.id = 'v51-room-calm-drawer';
+      det.className = 'v51-room-calm-drawer v50-rooms-all-drawer';
+      const sm = document.createElement('summary');
+      sm.textContent = `Show all rooms (${nCalm} quiet / vacant / locked)`;
+      det.appendChild(sm);
+      det.appendChild(calmFrag);
+      roomList.appendChild(det);
+    }
   }
 }
 
 export function renderSharedSpaces(state) {
   const grid = document.getElementById('shared-space-grid');
   if (!grid) return;
+  const summaryEl = document.getElementById('v51-shared-summary');
+  const boardOuter = document.getElementById('shared-space-board');
+  const zonesAllQuiet = Boolean(state?.clarity?.compactSurfaceState?.zonesAllQuiet);
+  const zoneHotCount = Number(state?.clarity?.compactSurfaceState?.zoneHotCount || 0);
+  const forceBoard = Boolean(state?.clarity?.compactSurfaceState?.sharedBoardForceOpen);
+  const userBoard = Boolean(state?.clarity?.sharedBoardUserOpen);
+  const expanded = forceBoard || userBoard;
+
+  if (boardOuter) {
+    boardOuter.classList.toggle('v51-shared-all-quiet', zonesAllQuiet && !forceBoard);
+    boardOuter.classList.toggle('v51-shared-compress', !zonesAllQuiet && zoneHotCount > 0 && zoneHotCount < 3 && !forceBoard);
+    boardOuter.classList.toggle('v51-shared-expanded', expanded);
+    boardOuter.classList.toggle('v50-all-quiet', Boolean(state?.clarity?.compactSurfaceState?.zonesAllQuiet));
+  }
+
+  if (summaryEl) {
+    summaryEl.innerHTML = '';
+    const spaces = Array.isArray(state?.sharedSpaces) ? state.sharedSpaces : [];
+    const zoneLabel = (z) => {
+      const id = Number(z?.zoneId || 0);
+      if (id === 1) return 'Lobby';
+      if (id === 2) return 'Parking';
+      if (id === 3) return 'Hallway';
+      if (id === 4) return 'Utility';
+      if (id === 6) return 'Rear';
+      return z?.label || 'Zone';
+    };
+    const row = document.createElement('div');
+    row.className = 'v51-zone-summary-row';
+    if (zonesAllQuiet && !forceBoard) {
+      row.innerHTML = spaces
+        .map((z) => `<span>${zoneLabel(z)} calm</span>`)
+        .join('');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'button button-secondary';
+      btn.textContent = 'Open shared spaces board';
+      btn.addEventListener('click', () => {
+        if (typeof state.onSharedSpacesBoardOpen === 'function') state.onSharedSpacesBoardOpen();
+      });
+      const wrap = document.createElement('div');
+      wrap.className = 'v51-shared-board-actions';
+      wrap.appendChild(btn);
+      summaryEl.appendChild(row);
+      summaryEl.appendChild(wrap);
+    } else if (!forceBoard && zoneHotCount > 0 && zoneHotCount < 3) {
+      row.innerHTML = spaces
+        .map((z) => {
+          const hot = Number(z?.pressureScore || 0) >= 2 || String(z?.severity || '').toLowerCase() === 'high' || String(z?.severity || '').toLowerCase() === 'medium';
+          return `<span class="${hot ? 'v51-hot-panel' : ''}">${zoneLabel(z)}${hot ? ' — hot' : ' calm'}</span>`;
+        })
+        .join('');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'button button-utility';
+      btn.textContent = expanded ? 'Collapse to summary' : 'Open full board';
+      btn.addEventListener('click', () => {
+        if (expanded && typeof state.onSharedSpacesBoardCollapse === 'function') state.onSharedSpacesBoardCollapse();
+        else if (!expanded && typeof state.onSharedSpacesBoardOpen === 'function') state.onSharedSpacesBoardOpen();
+      });
+      const wrap = document.createElement('div');
+      wrap.className = 'v51-shared-board-actions';
+      wrap.appendChild(btn);
+      summaryEl.appendChild(row);
+      summaryEl.appendChild(wrap);
+    } else {
+      row.innerHTML = '<span class="muted">Full zone board — every space surfaced below.</span>';
+      summaryEl.appendChild(row);
+    }
+  }
+
   grid.innerHTML = '';
   grid.classList.add('v42-shared-board', 'v43-tactical-board');
 
@@ -2212,10 +2412,6 @@ export function renderSharedSpaces(state) {
 
   const spaces = Array.isArray(state?.sharedSpaces) ? state.sharedSpaces : [];
   const hotZoneIdSet = new Set((state.clarity?.compactSurfaceState?.zoneHotIds || []).map(Number));
-  const boardOuter = document.getElementById('shared-space-board');
-  if (boardOuter) {
-    boardOuter.classList.toggle('v50-all-quiet', Boolean(state?.clarity?.compactSurfaceState?.zonesAllQuiet));
-  }
   spaces.forEach((space) => {
     const card = document.createElement('article');
     const emergencyPriority = Boolean(state?.emergencyNight?.active) && Number(space?.pressureScore || 0) >= 4;
@@ -2331,7 +2527,7 @@ function getCameraStatusClass(status) {
 
 export function renderCameras(state) {
   const grid = document.getElementById('camera-grid');
-  const digest = document.getElementById('v50-camera-digest');
+  const digest = document.getElementById('v51-camera-digest') || document.getElementById('v50-camera-digest');
   const drawer = document.getElementById('v50-camera-wall-drawer');
   if (!grid) return;
   grid.innerHTML = '';
@@ -2471,9 +2667,21 @@ export function renderCameras(state) {
     digest.innerHTML = '';
     if (!digestCams.length) {
       const calm = document.createElement('div');
-      calm.className = 'v50-camera-digest-calm';
-      calm.innerHTML =
-        '<p class="section-tag v50-digest-kicker">Surveillance</p><p class="v50-digest-title">Feeds are calm</p><p class="muted">No anomalies flagged. Open the full wall when you want every angle.</p>';
+      calm.className = 'v50-camera-digest-calm v51-camera-digest-calm';
+      const n = (state.cameras || []).length;
+      calm.innerHTML = `
+        <p class="section-tag v50-digest-kicker v51-digest-kicker">Camera digest</p>
+        <p class="v50-digest-title">${n} feed${n === 1 ? '' : 's'} online</p>
+        <p class="muted">No anomaly flagged.</p>
+        <button type="button" class="button button-secondary v51-camera-open-wall-btn">Open full camera wall</button>
+      `;
+      const ob = calm.querySelector('.v51-camera-open-wall-btn');
+      if (ob && drawer) {
+        ob.addEventListener('click', () => {
+          drawer.open = true;
+          drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+      }
       digest.appendChild(calm);
     } else {
       const ul = document.createElement('ul');
@@ -3129,7 +3337,7 @@ function buildLogItem(entry) {
 
 export function renderLogs(state) {
   const list = document.getElementById('incident-log');
-  const digestMount = document.getElementById('v50-report-digest');
+  const digestMount = document.getElementById('v51-report-digest') || document.getElementById('v50-report-digest');
   list.innerHTML = '';
   list.className = 'log-list log-list-v20 log-list-v24 v43-incident-log v50-incident-log';
 
@@ -3180,6 +3388,18 @@ export function renderLogs(state) {
       });
       wrap.appendChild(ol);
     }
+    const endRow = document.createElement('div');
+    endRow.className = 'v51-report-end-row';
+    const endBtn = document.createElement('button');
+    endBtn.type = 'button';
+    endBtn.className = 'button button-primary';
+    endBtn.textContent = 'End Night';
+    endBtn.title = 'Same control as the Report tab — closes the shift when safe.';
+    endBtn.addEventListener('click', () => {
+      document.getElementById('end-night-btn')?.click();
+    });
+    endRow.appendChild(endBtn);
+    wrap.appendChild(endRow);
     digestMount.appendChild(wrap);
   };
 
@@ -5118,6 +5338,15 @@ export function renderMainMenuMetaSurface(state, handlers = {}) {
     rerollButton.title = canReroll
       ? 'Consumes your First Night Reroll perk charge for this run.'
       : 'Available only on Night 1 with the First Night Reroll perk selected.';
+  }
+
+  const runSetupSection = document.getElementById('main-menu-run-setup-section');
+  if (runSetupSection && typeof window.matchMedia === 'function') {
+    runSetupSection.open = window.matchMedia('(min-width: 901px)').matches;
+  }
+  const briefingSection = document.getElementById('main-menu-briefing-section');
+  if (briefingSection && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 900px)').matches) {
+    briefingSection.open = false;
   }
 }
 
