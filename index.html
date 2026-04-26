@@ -40,6 +40,9 @@
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3815472359947626"
      crossorigin="anonymous"></script>
 
+  <!-- PayPal SDK (Sandbox) -->
+  <script src="https://www.paypal.com/sdk/js?client-id=AZqkm2Ii_sr2bWPweuzfq_D3GAmr2TFJvPuppXV5_EscSShMFdhdx9v4RA9fFXvbH3r1KQs64BhsEYgz&currency=USD"></script>
+
   <style>
     /* Lightweight compliance/footer styling (kept in index.html for beginner-friendliness). */
     .seo-content {
@@ -113,6 +116,38 @@
       line-height: 1.55;
     }
     .about-game-block li { margin: 6px 0; }
+    .support-store-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 12px;
+    }
+
+    .paypal-panel {
+      margin-top: 14px;
+      padding: 14px 14px 12px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+    }
+    .paypal-panel h3 {
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+    }
+    .paypal-product-row {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .paypal-status {
+      margin-top: 10px;
+      color: rgba(148, 163, 184, 0.95);
+      line-height: 1.45;
+      min-height: 22px;
+    }
+    #paypal-container { margin-top: 12px; }
     @media (max-width: 520px) {
       .site-footer { padding: 18px 12px; }
       .about-game-block { margin-top: 14px; }
@@ -129,6 +164,7 @@
     <div class="seo-cta-row">
       <a class="button button-primary" href="#app">Play Game</a>
       <a class="button button-secondary" href="game-guide.html">Read Game Guide</a>
+      <a class="button button-utility" href="#failure-screen">Support / Store</a>
     </div>
   </section>
   <div id="app" class="app-shell screen-main-menu v42-root v43-root v50-root v51-root">
@@ -645,6 +681,19 @@
               The motel lost all usable power and operations failed across the property.
             </p>
             <div id="failure-dead-drop-mount" class="v40-failure-dead-drop" hidden></div>
+
+            <section class="paypal-panel" aria-label="Support and purchases">
+              <h3>Support the game</h3>
+              <p class="muted" style="margin: 0; line-height: 1.45;">
+                Purchases are verified server-side. Nothing unlocks until the backend confirms payment.
+              </p>
+              <div class="paypal-product-row" role="group" aria-label="Products">
+                <button type="button" class="button button-secondary" id="buy-remove-ads-btn">Remove Ads ($1.99)</button>
+                <button type="button" class="button button-secondary" id="buy-continue-btn">Continue ($0.99)</button>
+              </div>
+              <div class="paypal-status" id="paypal-status" aria-live="polite"></div>
+              <div id="paypal-container"></div>
+            </section>
           </div>
           <div class="hero-actions">
             <button id="restart-night-btn" class="button button-primary">Retry Current Night</button>
@@ -716,15 +765,18 @@
   <div id="settings-overlay" class="help-overlay" aria-hidden="true"></div>
 
   <script type="module" src="js/main.js"></script>
-  <!-- Adsterra Social Bar: baseline monetization script. Future: connect rewarded continue flow to a real rewarded ad provider. -->
+  <!-- Adsterra disabled during AdSense review -->
+  <!--
   <script src="https://pl29260444.profitablecpmratenetwork.com/3c/b6/5d/3cb65df83fb6964b959ef5f6499c8db8.js"></script>
+  -->
+  <!-- Adsterra disabled during AdSense review -->
+  <!--
   <script>
     window.addEventListener("load", () => {
-      // Ad script is loaded via HTML tag above.
-      // Keep UI resilient even if the ad provider injects late DOM changes.
       console.log("[Ads] Window loaded; Adsterra script tag present.");
     });
   </script>
+  -->
 
   <footer class="site-footer" role="contentinfo">
     <div class="site-footer-inner">
@@ -765,5 +817,7 @@
       </div>
     </div>
   </footer>
+
+  <script type="module" src="js/paypal-checkout.js"></script>
 </body>
 </html>
