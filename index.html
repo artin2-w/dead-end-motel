@@ -41,7 +41,11 @@
      crossorigin="anonymous"></script>
 
   <!-- PayPal SDK (Sandbox) -->
-  <script src="https://www.paypal.com/sdk/js?client-id=AZqkm2Ii_sr2bWPweuzfq_D3GAmr2TFJvPuppXV5_EscSShMFdhdx9v4RA9fFXvbH3r1KQs64BhsEYgz&currency=USD"></script>
+  <!-- DEV NOTE: This project now uses the PayPal LIVE client ID.
+       Backend (Cloudflare Worker) secrets must also be switched to LIVE:
+       PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, and PAYPAL_ENV=live.
+       IMPORTANT: Never put the PayPal Secret in the frontend or commit it to GitHub. -->
+  <script src="https://www.paypal.com/sdk/js?client-id=AcGdSPcSAj8SCHkquugGxn7gtjx6vdrv1AWz7b2E4Rx66cnQ7WS1RwPujUe1oaBMd2IvZKLUEt9VUQok&currency=CAD"></script>
 
   <style>
     /* Lightweight compliance/footer styling (kept in index.html for beginner-friendliness). */
@@ -723,9 +727,16 @@
               <p class="muted" style="margin: 0; line-height: 1.45;">
                 Purchases are verified server-side. Nothing unlocks until the backend confirms payment.
               </p>
+              <p class="muted" style="margin: 8px 0 0; line-height: 1.45;">
+                Make sure you want to continue before purchasing.
+              </p>
+              <label class="muted" style="display:flex; gap:10px; align-items:flex-start; margin: 10px 0 0; line-height: 1.35;">
+                <input id="dem-terms-accept-failure" type="checkbox" />
+                <span>I understand this is a digital purchase and is non-refundable after successful delivery.</span>
+              </label>
               <div class="paypal-product-row" role="group" aria-label="Products">
-                <button type="button" class="button button-secondary" id="buy-remove-ads-btn">Remove Ads ($1.99)</button>
-                <button type="button" class="button button-secondary" id="buy-continue-btn">Continue ($0.99)</button>
+                <button type="button" class="button button-secondary" id="buy-remove-ads-btn">Remove Ads (CA$1.99)</button>
+                <button type="button" class="button button-secondary" id="buy-continue-btn">Continue (CA$0.99)</button>
               </div>
             </section>
           </div>
