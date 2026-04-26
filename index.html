@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Dead End Motel is a browser-based horror management game where you manage guests, cameras, power, and survive intense night shifts." />
   <title>Dead End Motel - Browser Horror Management Game</title>
   <link rel="stylesheet" href="styles/base.css" />
@@ -42,6 +42,28 @@
 
   <style>
     /* Lightweight compliance/footer styling (kept in index.html for beginner-friendliness). */
+    .seo-content {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 18px 16px 0;
+    }
+    .seo-content h1 {
+      font-size: 1.8rem;
+      letter-spacing: -0.02em;
+      margin: 0 0 8px;
+    }
+    .seo-content p {
+      margin: 0;
+      color: rgba(148, 163, 184, 0.95);
+      line-height: 1.55;
+    }
+    .seo-cta-row {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .seo-cta-row a { text-decoration: none; }
     .site-footer {
       padding: 20px 16px;
       border-top: 1px solid rgba(255, 255, 255, 0.10);
@@ -98,6 +120,17 @@
   </style>
 </head>
 <body>
+  <section class="seo-content">
+    <h1>Dead End Motel</h1>
+    <p>
+      A browser-based horror management game where players take control of a mysterious motel.
+      Monitor cameras, manage guests, handle incidents, and survive each night.
+    </p>
+    <div class="seo-cta-row">
+      <a class="button button-primary" href="#app">Play Game</a>
+      <a class="button button-secondary" href="game-guide.html">Read Game Guide</a>
+    </div>
+  </section>
   <div id="app" class="app-shell screen-main-menu v42-root v43-root v50-root v51-root">
     <header class="topbar topbar-v20 v42-topbar v43-topbar" role="banner">
       <div class="topbar-brand">
