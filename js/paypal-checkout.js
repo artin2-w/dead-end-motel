@@ -61,7 +61,6 @@ async function applyVerifiedPurchase(product) {
 
   if (product === 'continue_credit') {
     console.log('Applying paid continue');
-    setStatus('Payment verified. Continuing current night...');
 
     const prevCredits = readContinueCredits();
     const nextCredits = prevCredits + 1;
@@ -74,12 +73,13 @@ async function applyVerifiedPurchase(product) {
 
     if (!resume) {
       writeContinueCredits(prevCredits);
-      setStatus('Payment verified, but the night could not be resumed automatically. Your continue credit was not consumed.');
-      console.warn('Paid continue could not resume (missing handler or not on failure screen).');
+      setStatus('Payment verified, but game could not resume. Credit was not consumed.');
+      console.warn('Paid continue could not resume after verified capture.');
       return false;
     }
 
     console.log('Paid continue resumed game');
+    setStatus('Payment verified. Continuing current night...');
     return true;
   }
 

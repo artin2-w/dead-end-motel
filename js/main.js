@@ -2851,11 +2851,38 @@ function restoreNightStartSnapshot(options = {}) {
  * without requiring the in-game confirmation dialog.
  */
 window.deadEndMotelUsePaidContinue = function deadEndMotelUsePaidContinue() {
-  if (activeScreenId !== 'failure-screen') return false;
+  console.log('Paid continue hook called', { activeScreenId });
+
+  const failureScreen =
+    document.getElementById('failure-screen') ||
+    document.querySelector('.failure-screen') ||
+    document.querySelector('#failure-store')?.closest('section, .screen, .hero-card');
+
+  const failureStore = document.getElementById('failure-store');
+
+  if (!failureStore && !failureScreen) {
+    console.warn('Paid continue blocked: no failure UI detected', { activeScreenId });
+    return false;
+  }
+
+  console.log('Failure UI detected', Boolean(failureStore || failureScreen));
+  console.log('Calling restoreNightStartSnapshot');
+
   const ok = restoreNightStartSnapshot({
     message: 'Paid continue applied — night restored to its frozen opening state.'
   });
-  return Boolean(ok);
+
+  if (!ok) {
+    console.warn('Paid continue restore failed');
+    return false;
+  }
+
+  // restoreNightStartSnapshot already switches to the game screen; call again so failure
+  // shell classes / active screen cannot stick if a transition edge case occurred.
+  setActiveScreen('game-screen');
+  setActivePanel('frontdesk-panel');
+
+  return true;
 };
 
 function pushOpeningTensionBeat(context = 'opening') {
