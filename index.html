@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Dead End Motel v0.51</title>
+  <meta name="description" content="Dead End Motel is a browser-based horror management game where you manage guests, cameras, power, and survive intense night shifts." />
+  <title>Dead End Motel - Browser Horror Management Game</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -32,6 +33,69 @@
   <link rel="stylesheet" href="styles/v43-control-surface.css" />
   <link rel="stylesheet" href="styles/v50-clarity.css" />
   <link rel="stylesheet" href="styles/v51-premium-surface.css" />
+  <!-- Popunder disabled during AdSense review to protect user experience. -->
+  <!-- Adsterra Popunder: baseline monetization script. Not a rewarded-ad callback. -->
+  <!-- <script src="https://pl29260466.profitablecpmratenetwork.com/4e/87/04/4e870454396120fa5e44a4f71b15c891.js"></script> -->
+  <!-- Google AdSense verification -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3815472359947626"
+     crossorigin="anonymous"></script>
+
+  <style>
+    /* Lightweight compliance/footer styling (kept in index.html for beginner-friendliness). */
+    .site-footer {
+      padding: 20px 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.10);
+      background: rgba(9, 11, 18, 0.85);
+    }
+    .site-footer-inner {
+      max-width: 980px;
+      margin: 0 auto;
+      display: grid;
+      gap: 12px;
+    }
+    .site-footer-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      align-items: center;
+      justify-content: center;
+    }
+    .site-footer-nav a {
+      color: rgba(241, 245, 249, 0.88);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(110, 231, 255, 0.22);
+      padding-bottom: 2px;
+    }
+    .site-footer-nav a:hover { color: #6ee7ff; border-bottom-color: rgba(110, 231, 255, 0.55); }
+    .site-footer-meta {
+      text-align: center;
+      color: rgba(148, 163, 184, 0.92);
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+    .about-game-block {
+      max-width: 980px;
+      margin: 18px auto 0;
+      padding: 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+    }
+    .about-game-block h2 { font-size: 1.15rem; margin: 0 0 8px; }
+    .about-game-block p { margin: 0; color: rgba(148, 163, 184, 0.95); line-height: 1.55; }
+    .about-game-block p + p { margin-top: 10px; }
+    .about-game-block ul {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: rgba(148, 163, 184, 0.95);
+      line-height: 1.55;
+    }
+    .about-game-block li { margin: 6px 0; }
+    @media (max-width: 520px) {
+      .site-footer { padding: 18px 12px; }
+      .about-game-block { margin-top: 14px; }
+    }
+  </style>
 </head>
 <body>
   <div id="app" class="app-shell screen-main-menu v42-root v43-root v50-root v51-root">
@@ -619,5 +683,54 @@
   <div id="settings-overlay" class="help-overlay" aria-hidden="true"></div>
 
   <script type="module" src="js/main.js"></script>
+  <!-- Adsterra Social Bar: baseline monetization script. Future: connect rewarded continue flow to a real rewarded ad provider. -->
+  <script src="https://pl29260444.profitablecpmratenetwork.com/3c/b6/5d/3cb65df83fb6964b959ef5f6499c8db8.js"></script>
+  <script>
+    window.addEventListener("load", () => {
+      // Ad script is loaded via HTML tag above.
+      // Keep UI resilient even if the ad provider injects late DOM changes.
+      console.log("[Ads] Window loaded; Adsterra script tag present.");
+    });
+  </script>
+
+  <footer class="site-footer" role="contentinfo">
+    <div class="site-footer-inner">
+      <div class="about-game-block" aria-label="About the game">
+        <h2>About the Game</h2>
+        <p>Dead End Motel is a browser-based motel management and survival strategy game where players manage guests, rooms, power, and incidents during intense night shifts.</p>
+      </div>
+
+      <div class="about-game-block" aria-label="How to play">
+        <h2>How to Play</h2>
+        <p><strong>Manage guests:</strong> Each arrival is a decision. Read the desk information, verify what you can, and choose whether to check in, flag, or reject.</p>
+        <p><strong>Use cameras:</strong> Scan the feeds to spot anomalies early. Cameras help you catch pressure before it spreads into rooms and shared spaces.</p>
+        <p><strong>Handle incidents:</strong> Incidents and room calls build momentum. Respond quickly, prioritize the highest-risk problems, and avoid letting multiple zones go critical at once.</p>
+        <p><strong>Manage power and pressure:</strong> Power is your survival budget. Heavy actions can drain the grid, and rising pressure makes mistakes cost more.</p>
+        <p><strong>Survive the night:</strong> Keep the motel stable until dawn by spending attention where it matters most.</p>
+      </div>
+
+      <div class="about-game-block" aria-label="Tips">
+        <h2>Tips</h2>
+        <ul>
+          <li><strong>Stay calm under pressure:</strong> When alerts spike, slow down and make one clean decision at a time.</li>
+          <li><strong>Monitor guest behavior:</strong> Contradictions and risk signals matter more than flavor text.</li>
+          <li><strong>Balance power usage:</strong> Avoid stacking scans and heavy actions when the reserve is low.</li>
+          <li><strong>Avoid mistakes during high tension:</strong> The late night punishes rushed clicks—prioritize containment over “perfect” outcomes.</li>
+        </ul>
+      </div>
+      <nav class="site-footer-nav" aria-label="Site links">
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="about.html">About</a>
+        <a href="contact.html">Contact</a>
+        <a href="terms.html">Terms</a>
+        <a href="game-guide.html">Game Guide</a>
+        <a href="index.html">Back to Game</a>
+      </nav>
+      <div class="site-footer-meta">
+        <div>Dead End Motel • <a href="mailto:deadendmotelgame@gmail.com">deadendmotelgame@gmail.com</a></div>
+        <div class="muted">Site: <a href="https://artin2-w.github.io/dead-end-motel/">https://artin2-w.github.io/dead-end-motel/</a></div>
+      </div>
+    </div>
+  </footer>
 </body>
 </html>

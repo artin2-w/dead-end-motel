@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Dead End Motel Game Guide — controls, guest management, incidents, power, and survival tips." />
+  <title>Dead End Motel Game Guide</title>
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/theme.css" />
+  <link rel="stylesheet" href="styles/ui.css" />
+  <style>
+    .legal-shell { max-width: 960px; margin: 0 auto; padding: 22px 14px 28px; }
+    .legal-card {
+      margin-top: 16px;
+      padding: 18px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+    }
+    .legal-card h1 { font-size: 1.7rem; margin-bottom: 10px; }
+    .legal-card h2 { font-size: 1.1rem; margin: 18px 0 8px; }
+    .legal-card p, .legal-card li { color: rgba(148, 163, 184, 0.95); line-height: 1.65; }
+    .legal-card ul { margin: 10px 0 0; padding-left: 18px; }
+    .legal-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; }
+    .legal-actions a { text-decoration: none; }
+    .legal-nav { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px 14px; }
+    .legal-nav a { color: rgba(241,245,249,0.9); text-decoration: none; border-bottom: 1px solid rgba(110,231,255,0.22); padding-bottom: 2px; }
+    .legal-nav a:hover { color: #6ee7ff; border-bottom-color: rgba(110,231,255,0.55); }
+  </style>
+</head>
+<body>
+  <main class="legal-shell">
+    <div class="legal-card">
+      <p class="section-tag">Dead End Motel</p>
+      <h1>Dead End Motel Game Guide</h1>
+      <p>This guide explains the core systems and how to make good decisions during a night shift. Dead End Motel is designed to reward attention management: you can’t do everything, so you pick what matters most.</p>
+
+      <h2>Game Overview</h2>
+      <p>You run a motel desk during a tense overnight shift. Guests arrive, rooms develop pressure, shared spaces can escalate, and the power grid is always a limit. Your goal is to keep the motel stable until dawn.</p>
+
+      <h2>Controls and Interface</h2>
+      <ul>
+        <li><strong>Top bar stats</strong> show Night, Time, Money, Power, and Reputation.</li>
+        <li><strong>Panel tabs</strong> switch between Front Desk, Cameras, Shared Spaces, Power, and Report.</li>
+        <li><strong>Read before you act</strong>: the UI surfaces risk, contradictions, and hints to guide decisions.</li>
+      </ul>
+
+      <h2>Guest Management</h2>
+      <p>Every arrival is a trade-off. Approving earns money but can introduce risk; rejecting can reduce immediate danger but may cost reputation. Use “Flag” when you want to proceed cautiously.</p>
+      <ul>
+        <li><strong>Check In</strong>: commit a room assignment and accept the guest.</li>
+        <li><strong>Flag</strong>: mark for monitoring when something feels off.</li>
+        <li><strong>Reject</strong>: deny entry to reduce immediate exposure.</li>
+      </ul>
+
+      <h2>Incident Handling</h2>
+      <p>Incidents build momentum across rooms and zones. When multiple problems stack, the motel becomes unstable quickly. Respond early to prevent cascading failures.</p>
+      <ul>
+        <li>Prioritize calls marked urgent or critical.</li>
+        <li>Resolve the fastest clarity action first when you’re unsure.</li>
+        <li>If pressure is spreading, containment beats perfection.</li>
+      </ul>
+
+      <h2>Power and Pressure System</h2>
+      <p>Power is your survival budget. Scans, interventions, and heavy actions can drain the reserve. Low power increases the chance of blackout-style failure and makes response options riskier.</p>
+      <ul>
+        <li>Keep an eye on reserve percentage before chaining actions.</li>
+        <li>When power is low, reduce optional operations and stabilize first.</li>
+        <li>Pressure rising means errors are amplified—choose one strong response and follow through.</li>
+      </ul>
+
+      <h2>Survival Tips</h2>
+      <ul>
+        <li><strong>Stay calm under pressure:</strong> don’t spam buttons; make one decision, then re-check the situation.</li>
+        <li><strong>Monitor guest behavior:</strong> contradictions and risk signals matter more than narrative flavor.</li>
+        <li><strong>Balance power usage:</strong> avoid doing “everything” when the grid is strained.</li>
+        <li><strong>Keep the report readable:</strong> use the digest to see what changed, then open full logs when needed.</li>
+      </ul>
+
+      <div class="legal-actions">
+        <a class="button button-primary" href="index.html">Back to Game</a>
+      </div>
+
+      <nav class="legal-nav" aria-label="Site links">
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="about.html">About</a>
+        <a href="contact.html">Contact</a>
+        <a href="terms.html">Terms</a>
+      </nav>
+    </div>
+  </main>
+</body>
+</html>
+
