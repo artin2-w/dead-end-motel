@@ -15,10 +15,81 @@ function unlockProduct(product) {
   // IMPORTANT: Only call this after /capture-order verifies payment.
   if (product === 'remove_ads') {
     localStorage.setItem('no_ads', 'true');
+    hidePurchasedAds();
   }
+}
+
+function readContinueCredits() {
+  const raw = localStorage.getItem('credit');
+  return Math.max(0, Number.parseInt(String(raw || '0'), 10) || 0);
+}
+
+function writeContinueCredits(n) {
+  const safe = Math.max(0, Number(n || 0));
+  localStorage.setItem('credit', String(safe));
+}
+
+function hidePurchasedAds() {
+  document.documentElement.classList.add('no-ads-purchase');
+  document.body.classList.add('no-ads-purchase');
+  const selectors = [
+    '[data-ad-slot]',
+    '[data-ad]',
+    '.adsense',
+    '.adsense-slot',
+    '.ad-slot',
+    '.ad-container',
+    '.adsterra',
+    '.ad-banner',
+    '.site-ad'
+  ];
+  selectors.forEach((sel) => {
+    document.querySelectorAll(sel).forEach((el) => {
+      try {
+        el.setAttribute('hidden', '');
+        el.setAttribute('aria-hidden', 'true');
+        el.style.display = 'none';
+      } catch {
+        // ignore
+      }
+    });
+  });
+}
+
+async function applyVerifiedPurchase(product) {
+  console.log('Unlocking product', product);
+
   if (product === 'continue_credit') {
-    localStorage.setItem('credit', '1');
+    console.log('Applying paid continue');
+    setStatus('Payment verified. Continuing current night...');
+
+    const prevCredits = readContinueCredits();
+    const nextCredits = prevCredits + 1;
+    writeContinueCredits(nextCredits);
+
+    const resume =
+      typeof window.deadEndMotelUsePaidContinue === 'function'
+        ? window.deadEndMotelUsePaidContinue()
+        : false;
+
+    if (!resume) {
+      writeContinueCredits(prevCredits);
+      setStatus('Payment verified, but the night could not be resumed automatically. Your continue credit was not consumed.');
+      console.warn('Paid continue could not resume (missing handler or not on failure screen).');
+      return false;
+    }
+
+    console.log('Paid continue resumed game');
+    return true;
   }
+
+  if (product === 'remove_ads') {
+    unlockProduct(product);
+    return true;
+  }
+
+  unlockProduct(product);
+  return true;
 }
 
 async function postJson(url, body) {
@@ -142,11 +213,17 @@ async function beginCheckout(product) {
       });
 
       const result = capture.data;
-      console.log('Capture result', result);
+      console.log('Capture result full', result);
 
       if (result?.ok === true) {
-        unlockProduct(product);
-        setStatus('Payment verified. Purchase applied.');
+        const applied = await applyVerifiedPurchase(product);
+        if (!applied) return;
+
+        if (product === 'continue_credit') {
+          // Status already set in applyVerifiedPurchase
+        } else {
+          setStatus('Payment verified. Purchase applied.');
+        }
         window.setTimeout(() => closePaypalModal(), 900);
       } else {
         setStatus('Payment verification failed.');

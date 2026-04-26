@@ -2845,6 +2845,19 @@ function restoreNightStartSnapshot(options = {}) {
   return true;
 }
 
+/**
+ * Paid continue entrypoint (called only after backend payment verification).
+ * Restores the frozen opening-night snapshot (same core path as "Retry Current Night"),
+ * without requiring the in-game confirmation dialog.
+ */
+window.deadEndMotelUsePaidContinue = function deadEndMotelUsePaidContinue() {
+  if (activeScreenId !== 'failure-screen') return false;
+  const ok = restoreNightStartSnapshot({
+    message: 'Paid continue applied — night restored to its frozen opening state.'
+  });
+  return Boolean(ok);
+};
+
 function pushOpeningTensionBeat(context = 'opening') {
   const night = Math.max(1, Number(state?.night || 1));
   const occupiedCarryovers = (state?.rooms || []).filter((room) => room?.occupiedBy).length;
