@@ -3547,6 +3547,14 @@ export function renderFailure(failure, extra = null) {
   if (restartCampaignBtn) {
     restartCampaignBtn.title = 'Start a full new campaign from Night 1.';
   }
+
+  if (typeof window.refreshDemFailureMonetization === 'function') {
+    try {
+      window.refreshDemFailureMonetization();
+    } catch {
+      // ignore
+    }
+  }
 }
 
 function getSummaryGradeClass(grade = 'C') {

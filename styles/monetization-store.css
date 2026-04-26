@@ -1,0 +1,275 @@
+/* Dead End Motel — monetization store (modal in #paypal-root only) */
+
+#paypal-modal .modal-content.dem-store-shell {
+  max-width: min(920px, calc(100vw - 28px));
+  max-height: min(88vh, 900px);
+  overflow: auto;
+  text-align: left;
+  padding: 18px 18px 16px;
+}
+
+.dem-store-hero {
+  margin: 0 0 10px;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.dem-store-sub {
+  margin: 0 0 12px;
+  color: rgba(148, 163, 184, 0.95);
+  line-height: 1.45;
+  font-size: 0.95rem;
+}
+
+.dem-store-trust,
+.dem-store-delivery {
+  margin: 0 0 8px;
+  color: rgba(148, 163, 184, 0.92);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.dem-store-delivery {
+  margin-bottom: 12px;
+}
+
+.dem-featured {
+  margin: 14px 0 6px;
+}
+
+.dem-featured-intro {
+  margin: 0 0 10px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.dem-featured h3,
+.dem-store-section h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.92);
+}
+
+.dem-featured-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dem-featured-grid .dem-product-card.is-featured {
+  min-height: 188px;
+  padding: 14px 14px 12px;
+}
+
+.dem-featured-grid .dem-product-card.is-featured .dem-card-head h4 {
+  font-size: 1.08rem;
+}
+
+.dem-featured-grid .dem-product-card.is-featured .dem-card-desc {
+  font-size: 0.9rem;
+}
+
+@media (max-width: 720px) {
+  .dem-featured-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dem-product-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 980px) {
+  .dem-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .dem-product-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dem-product-card {
+  position: relative;
+  border-radius: 16px;
+  padding: 12px 12px 10px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 150px;
+}
+
+.dem-product-card.is-featured {
+  border-color: rgba(110, 231, 255, 0.35);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+}
+
+.dem-card-ribbon {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(110, 231, 255, 0.16);
+  border: 1px solid rgba(110, 231, 255, 0.35);
+  color: rgba(224, 242, 254, 0.95);
+}
+
+.dem-card-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(250, 204, 21, 0.12);
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  color: rgba(254, 243, 199, 0.95);
+}
+
+.dem-card-head h4 {
+  margin: 0 64px 0 0;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.dem-card-desc {
+  margin: 0;
+  flex: 1;
+  color: rgba(148, 163, 184, 0.95);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.dem-card-savings {
+  margin: 0;
+  font-size: 0.82rem;
+  color: rgba(167, 243, 208, 0.92);
+}
+
+.dem-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.dem-card-price {
+  font-weight: 700;
+  color: rgba(241, 245, 249, 0.95);
+  letter-spacing: 0.01em;
+}
+
+.dem-store-section {
+  margin-top: 16px;
+}
+
+.dem-section-desc {
+  margin: -4px 0 10px;
+  color: rgba(148, 163, 184, 0.92);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.dem-store-note {
+  margin: 10px 0 0;
+  color: rgba(148, 163, 184, 0.95);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.dem-terms-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 10px;
+  color: rgba(148, 163, 184, 0.95);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.dem-purchase-history {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgba(148, 163, 184, 0.88);
+}
+
+.dem-store-close {
+  margin-top: 12px;
+  width: 100%;
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: linear-gradient(to top, rgba(12, 14, 22, 0.96), rgba(12, 14, 22, 0.78), transparent);
+  padding-top: 10px;
+}
+
+#paypal-modal .modal-content.dem-store-shell button[disabled],
+#paypal-modal .modal-content.dem-store-shell .button[disabled],
+#failure-screen .button[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.15);
+}
+
+.failure-emotional {
+  margin: 10px 0 0;
+  font-size: 1.02rem;
+  color: rgba(226, 232, 240, 0.95);
+  line-height: 1.45;
+}
+
+.failure-context-subline {
+  margin: 8px 0 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.failure-credits-ready {
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+}
+
+.failure-cta-primary {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.failure-cta-main {
+  font-weight: 700;
+}
+
+.failure-cta-secondary {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.failure-bundle-hint {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.dem-trust-lead {
+  margin: 0;
+  line-height: 1.45;
+}

@@ -33,6 +33,7 @@
   <link rel="stylesheet" href="styles/v43-control-surface.css" />
   <link rel="stylesheet" href="styles/v50-clarity.css" />
   <link rel="stylesheet" href="styles/v51-premium-surface.css" />
+  <link rel="stylesheet" href="styles/monetization-store.css" />
   <!-- Popunder disabled during AdSense review to protect user experience. -->
   <!-- Adsterra Popunder: baseline monetization script. Not a rewarded-ad callback. -->
   <!-- <script src="https://pl29260466.profitablecpmratenetwork.com/4e/87/04/4e870454396120fa5e44a4f71b15c891.js"></script> -->
@@ -40,7 +41,7 @@
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3815472359947626"
      crossorigin="anonymous"></script>
 
-  <!-- PayPal SDK (Sandbox) -->
+  <!-- PayPal SDK -->
   <!-- DEV NOTE: This project now uses the PayPal LIVE client ID.
        Backend (Cloudflare Worker) secrets must also be switched to LIVE:
        PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, and PAYPAL_ENV=live.
@@ -721,11 +722,15 @@
               The motel lost all usable power and operations failed across the property.
             </p>
             <div id="failure-dead-drop-mount" class="v40-failure-dead-drop" hidden></div>
+            <p id="failure-emotional-line" class="failure-emotional muted" aria-live="polite">
+              You were so close… Continue your night
+            </p>
+            <p id="failure-context-subline" class="failure-context-subline muted" aria-live="polite" hidden></p>
 
             <section id="failure-store" class="failure-store-panel" aria-label="Support and purchases">
               <h3>Support the game</h3>
-              <p class="muted" style="margin: 0; line-height: 1.45;">
-                Purchases are verified server-side. Nothing unlocks until the backend confirms payment.
+              <p class="muted dem-trust-lead">
+                Purchases are optional — you can always retry or restart without paying. PayPal verifies each order before anything unlocks.
               </p>
               <p class="muted" style="margin: 8px 0 0; line-height: 1.45;">
                 Make sure you want to continue before purchasing.
@@ -734,9 +739,38 @@
                 <input id="dem-terms-accept-failure" type="checkbox" />
                 <span>I understand this is a digital purchase and is non-refundable after successful delivery.</span>
               </label>
-              <div class="paypal-product-row" role="group" aria-label="Products">
-                <button type="button" class="button button-secondary" id="buy-remove-ads-btn">Remove Ads (CA$1.99)</button>
-                <button type="button" class="button button-secondary" id="buy-continue-btn">Continue (CA$0.99)</button>
+
+              <div class="failure-cta-primary" role="group" aria-label="Continue options">
+                <button
+                  type="button"
+                  class="button button-primary failure-cta-saved"
+                  id="use-saved-credit-btn"
+                  data-dem-checkout-btn
+                  hidden
+                >
+                  Continue with saved credit
+                </button>
+                <button
+                  type="button"
+                  class="button button-secondary failure-cta-paid"
+                  id="buy-continue-btn"
+                  data-dem-checkout-btn
+                  hidden
+                >
+                  Continue instantly — <span id="buy-continue-price-label">CA$0.99</span>
+                </button>
+              </div>
+
+              <p id="failure-credits-ready-line" class="failure-credits-ready muted" hidden></p>
+
+              <div class="failure-cta-secondary" role="group" aria-label="Bundles and upgrades">
+                <p id="failure-bundle-hint" class="failure-bundle-hint muted">Rough nights ahead? Save with 3 Continues.</p>
+                <button type="button" class="button button-secondary" id="failure-buy-continue-3-btn" data-dem-checkout-btn>
+                  Buy 3 Continues — better value (<span id="failure-buy-3-price-label">CA$2.49</span>)
+                </button>
+                <button type="button" class="button button-secondary" id="buy-remove-ads-btn" data-dem-checkout-btn>
+                  Remove Ads (CA$1.99)
+                </button>
               </div>
             </section>
           </div>

@@ -70,7 +70,8 @@ import {
   normalizeNightCycleState,
   advanceNightCycle,
   hasReachedDawn,
-  SHIFT_DURATION_MINUTES
+  SHIFT_DURATION_MINUTES,
+  getShiftProgressPercent
 } from './nightCycle.js';
 import {
   normalizePowerEconomyState,
@@ -2884,6 +2885,145 @@ window.deadEndMotelUsePaidContinue = function deadEndMotelUsePaidContinue() {
 
   return true;
 };
+
+/**
+ * Spend one locally stored Continue credit (no PayPal) after failure UI is present.
+ * Only decrements `localStorage.credit` after a successful restore.
+ */
+window.deadEndMotelUseSavedContinue = function deadEndMotelUseSavedContinue() {
+  let credits = 0;
+  try {
+    credits = Math.max(0, Number.parseInt(String(localStorage.getItem('credit') || '0'), 10) || 0);
+  } catch {
+    credits = 0;
+  }
+  if (credits < 1) return false;
+
+  const failureScreen =
+    document.getElementById('failure-screen') ||
+    document.querySelector('.failure-screen') ||
+    document.querySelector('#failure-store')?.closest('section, .screen, .hero-card');
+  const failureStore = document.getElementById('failure-store');
+  if (!failureStore && !failureScreen) return false;
+
+  const ok = restoreNightStartSnapshot({
+    message: 'Saved Continue credit used — night restored to its frozen opening state.'
+  });
+  if (!ok) return false;
+
+  setActiveScreen('game-screen');
+  setActivePanel('frontdesk-panel');
+
+  try {
+    localStorage.setItem('credit', String(Math.max(0, credits - 1)));
+  } catch {
+    // ignore
+  }
+  return true;
+};
+
+/**
+ * Read-only “near-win” context for ethical monetization UI (failure screen / store).
+ *
+ * Guardrails:
+ * - Does NOT change RNG, pressure, or failure checks — display / suggestions only.
+ * - Never fabricates progress: uses the same shift progress helper as the HUD where possible.
+ * - Continue credits are convenience / progress protection, not a requirement to play.
+ */
+window.deadEndMotelGetFailureContext = function deadEndMotelGetFailureContext() {
+  let savedCredits = 0;
+  try {
+    savedCredits = Math.max(0, Number.parseInt(String(localStorage.getItem('credit') || '0'), 10) || 0);
+  } catch {
+    savedCredits = 0;
+  }
+
+  const night = Math.max(1, Number(state?.night || 1));
+  const money = Math.max(0, Number(state?.money ?? 0));
+  const reputation = Math.max(0, Number(state?.reputation ?? 50));
+  const reason =
+    String(state?.failedState?.reason || state?.failedState?.title || state?.failedState?.code || '') ||
+    String(document.getElementById('failure-reason')?.textContent || '').trim();
+
+  let progressPercent = 0;
+  try {
+    progressPercent = Math.max(0, Math.min(100, Math.round(Number(getShiftProgressPercent(state) || 0))));
+  } catch {
+    const elapsed = Math.max(0, Math.min(SHIFT_DURATION_MINUTES, Number(state?.shiftElapsedMinutes || 0)));
+    progressPercent = SHIFT_DURATION_MINUTES
+      ? Math.round((elapsed / SHIFT_DURATION_MINUTES) * 1000) / 10
+      : 0;
+  }
+
+  let pressure = 'unknown';
+  try {
+    pressure = String(deriveUiPressureLevel(state) || 'unknown');
+  } catch {
+    pressure = 'unknown';
+  }
+
+  const lateShift = progressPercent >= 68;
+  const survivedMost = progressPercent >= 62;
+  const milestonePressure = night >= 5 && progressPercent >= 52;
+  const nearWin = lateShift || survivedMost || milestonePressure;
+
+  let suggestedProduct = 'continue_pack_1';
+  if (savedCredits > 0) suggestedProduct = 'use_saved_credit';
+  else if (nearWin) suggestedProduct = 'continue_pack_3';
+
+  return {
+    progressPercent,
+    night,
+    money,
+    reputation,
+    reason,
+    pressure,
+    nearWin,
+    suggestedProduct,
+    savedCredits
+  };
+};
+
+function consumeMonetizationCalmBoostIfPending() {
+  if (!state || state._demCalmBoostApplied) return;
+  let pending = false;
+  try {
+    pending = localStorage.getItem('dem_boost_calm_pending') === '1';
+  } catch {
+    pending = false;
+  }
+  if (!pending) return;
+  try {
+    localStorage.removeItem('dem_boost_calm_pending');
+  } catch {
+    // ignore
+  }
+  state._demCalmBoostApplied = true;
+  state.dirtyPressure = Math.max(0, Number(state.dirtyPressure || 0) - 1);
+  state.logs.push('Calm Mode: a small early-shift pressure bleed was applied (one-time this shift).');
+}
+
+function applyMonetizationDawnBonuses() {
+  try {
+    if (localStorage.getItem('dem_boost_double_earnings_pending') === '1') {
+      localStorage.removeItem('dem_boost_double_earnings_pending');
+      const bonus = 18;
+      state.money = Math.max(0, Number(state.money || 0) + bonus);
+      state.logs.push(`Double Earnings: +$${bonus} night-close bonus (one shift).`);
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    if (localStorage.getItem('dem_upgrade_income_boost') === 'true') {
+      const bonus = 8;
+      state.money = Math.max(0, Number(state.money || 0) + bonus);
+      state.logs.push(`Income Boost: +$${bonus} night-close bonus.`);
+    }
+  } catch {
+    // ignore
+  }
+}
 
 function pushOpeningTensionBeat(context = 'opening') {
   const night = Math.max(1, Number(state?.night || 1));
@@ -9288,6 +9428,7 @@ function progressShift(actionKey, options = {}) {
       }.`
     );
   }
+  consumeMonetizationCalmBoostIfPending();
   if (!skipPassiveDrain) {
     tickOperatorFatigue(state, actionKey);
     const coldAlert = tickColdWithoutHeating(state);
@@ -11658,6 +11799,7 @@ function endNight(options = {}) {
   try {
     recordCampaignConvergenceNight(state);
     _endNightSummary = buildNightSummary(state);
+    applyMonetizationDawnBonuses();
     if (isEndlessMode(state)) {
       recordEndlessWaveStats(state, _endNightSummary);
     }
@@ -12439,6 +12581,7 @@ function nextNight() {
   state.autoIncidentCooldown = 0;
   state.escalationTick = 0;
   state.shiftElapsedMinutes = 0;
+  state._demCalmBoostApplied = false;
   state.dawnProcessed = false;
   state.lastAdvanceReason = null;
   state.summaryBranchNotes = [];
