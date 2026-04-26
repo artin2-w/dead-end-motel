@@ -165,6 +165,56 @@ function mountPaypalModal() {
   );
 }
 
+function openStoreModal() {
+  console.log('Opening global store');
+  clearPaypalRoot();
+  const root = $('paypal-root');
+  if (!root) return;
+
+  root.innerHTML = `
+    <div id="paypal-modal">
+      <div class="modal-content">
+        <h2>Support Dead End Motel</h2>
+        <div id="paypal-status" aria-live="polite"></div>
+        <div class="store-actions" style="display:grid;gap:10px;margin-top:10px;">
+          <button id="store-buy-remove-ads" type="button">Remove Ads ($1.99)</button>
+          <button id="store-buy-continue-credit" type="button">Continue Credit ($0.99)</button>
+        </div>
+        <button id="close-paypal" type="button">Close</button>
+      </div>
+    </div>
+  `;
+
+  const modal = $('paypal-modal');
+  modal?.classList.add('is-open');
+
+  $('close-paypal')?.addEventListener('click', () => {
+    closePaypalModal();
+  });
+
+  $('store-buy-remove-ads')?.addEventListener('click', () => {
+    console.log('Starting checkout from store');
+    beginCheckout('remove_ads');
+  });
+
+  $('store-buy-continue-credit')?.addEventListener('click', () => {
+    console.log('Starting checkout from store');
+    beginCheckout('continue_credit');
+  });
+
+  window.addEventListener(
+    'keydown',
+    (ev) => {
+      if (ev.key === 'Escape') closePaypalModal();
+    },
+    { once: true }
+  );
+}
+
+window.openDeadEndMotelStore = function openDeadEndMotelStore() {
+  openStoreModal();
+};
+
 function ensurePaypalLoaded() {
   return typeof window.paypal?.Buttons === 'function';
 }
@@ -246,6 +296,17 @@ async function beginCheckout(product) {
 function bindUi() {
   $('buy-remove-ads-btn')?.addEventListener('click', () => beginCheckout('remove_ads'));
   $('buy-continue-btn')?.addEventListener('click', () => beginCheckout('continue_credit'));
+
+  $('support-store-btn')?.addEventListener('click', (ev) => {
+    console.log('Support store clicked');
+    ev?.preventDefault?.();
+    try {
+      if (location.hash === '#failure-store') history.replaceState(null, '', location.pathname + location.search);
+    } catch {
+      // ignore
+    }
+    window.openDeadEndMotelStore?.();
+  });
 }
 
 if (document.readyState === 'loading') {
