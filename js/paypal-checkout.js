@@ -262,49 +262,60 @@ function applyVerifiedPurchase(product) {
       const nowCredits = readContinueCredits();
       writeContinueCredits(Math.max(0, nowCredits - 1));
       console.log('Paid continue resumed game');
-      setStatus('Payment verified. Continuing current night...');
+      const finalCredits = readContinueCredits();
+      setStatus(`Payment verified. Continuing current night… ${finalCredits} credit${finalCredits !== 1 ? 's' : ''} remaining.`);
+      refreshDemActiveEffects();
       return true;
     }
 
     if (isFailureUiPresent()) {
+      const totalNow = readContinueCredits();
       setStatus(
-        'Payment verified, but the game could not resume automatically. Your Continue credits were saved for your next failure.'
+        `Payment verified. ${grant} Continue Credit${grant > 1 ? 's' : ''} delivered — you now have ${totalNow}. Use them from the Continue overlay after your next failure.`
       );
       console.warn('Paid continue could not resume after verified capture.');
+      refreshDemActiveEffects();
       return true;
     }
 
-    setStatus('Continue credits saved. They will be used automatically after your next failure (one credit per continue).');
+    const totalNow = readContinueCredits();
+    setStatus(`Payment verified. ${grant} Continue Credit${grant > 1 ? 's' : ''} delivered. You now have ${totalNow} Continue Credit${totalNow !== 1 ? 's' : ''}.`);
+    refreshDemActiveEffects();
     return true;
   }
 
   if (product === 'remove_ads') {
     unlockProduct(product);
-    setStatus('Remove Ads unlocked — thank you for supporting a cleaner layout.');
+    setStatus('Payment verified. Supporter Clean Mode active — future ad slots will stay hidden on this browser.');
+    refreshDemActiveEffects();
     return true;
   }
 
   if (product === 'income_boost') {
     unlockProduct(product);
-    setStatus('Income Boost saved — small night-close bonuses apply after completed shifts.');
+    setStatus('Payment verified. Income Boost is now active — CA$8 bonus applies after each completed shift.');
+    refreshDemActiveEffects();
     return true;
   }
 
   if (product === 'power_calm_mode') {
     unlockProduct(product);
-    setStatus('Calm Mode saved for your next shift.');
+    setStatus('Payment verified. Calm Mode saved for your next shift — pressure spikes will be reduced.');
+    refreshDemActiveEffects();
     return true;
   }
 
   if (product === 'power_double_earnings') {
     unlockProduct(product);
-    setStatus('Double Earnings saved — applies as a modest night-close bonus after your next successful shift.');
+    setStatus('Payment verified. Double Earnings saved for your next successful shift — bonus payout at dawn.');
+    refreshDemActiveEffects();
     return true;
   }
 
   if (product === 'cosmetic_desk_skin') {
     unlockProduct(product);
-    setStatus('Cosmetic unlocked — purely visual.');
+    setStatus('Payment verified. Desk Skin unlocked.');
+    refreshDemActiveEffects();
     return true;
   }
 
@@ -697,6 +708,59 @@ function refreshFailurePurchaseUi() {
 
 window.refreshDemFailureMonetization = refreshFailurePurchaseUi;
 
+function ensureDemEffectsStrip() {
+  let strip = document.getElementById('dem-active-effects-strip');
+  if (!strip) {
+    strip = document.createElement('p');
+    strip.id = 'dem-active-effects-strip';
+    strip.className = 'dem-active-effects-strip';
+    strip.setAttribute('aria-live', 'polite');
+    strip.hidden = true;
+    const anchor = document.getElementById('active-upgrades-inline');
+    if (anchor) anchor.insertAdjacentElement('afterend', strip);
+  }
+  return strip;
+}
+
+function refreshDemActiveEffects() {
+  const strip = ensureDemEffectsStrip();
+  if (!strip) return;
+
+  const parts = [];
+  try {
+    const credits = readContinueCredits();
+    if (credits > 0) parts.push(`Continue Credits: ×${credits}`);
+
+    if (localStorage.getItem('dem_boost_calm_pending') === '1') {
+      parts.push('Calm Mode: ready for next shift');
+    } else if (window.demCalmModeActive) {
+      parts.push('Calm Mode: active this shift');
+    }
+
+    if (localStorage.getItem('dem_boost_double_earnings_pending') === '1') {
+      parts.push('Double Earnings: ready for next successful shift');
+    }
+    if (localStorage.getItem('dem_upgrade_income_boost') === 'true') {
+      parts.push('Income Boost: +CA$8 per successful night');
+    }
+    if (localStorage.getItem('no_ads') === 'true') {
+      parts.push('Supporter Clean Mode: active');
+    }
+  } catch {
+    // ignore localStorage errors
+  }
+
+  if (parts.length === 0) {
+    strip.hidden = true;
+    strip.textContent = '';
+  } else {
+    strip.hidden = false;
+    strip.textContent = `Active: ${parts.join(' · ')}`;
+  }
+}
+
+window.refreshDemActiveEffects = refreshDemActiveEffects;
+
 function attemptSavedContinue() {
   if (window.__demCheckoutActive) return;
   console.log('Saved continue clicked');
@@ -760,6 +824,7 @@ function bindUi() {
     mo.observe(fs, { attributes: true, attributeFilter: ['class'] });
   }
   refreshFailurePurchaseUi();
+  refreshDemActiveEffects();
 }
 
 if (document.readyState === 'loading') {

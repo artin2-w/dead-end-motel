@@ -473,6 +473,7 @@ let activeScreenId = 'main-menu';
 let settingsState = normalizeSettings(loadSettings());
 let settingsOverlayOpen = false;
 let isScreenTransitionInProgress = false;
+let _cfoAdTick = null;
 const actionLocks = new Set();
 
 // Dev helpers are intentionally isolated from normal release flow.
@@ -2999,17 +3000,33 @@ function consumeMonetizationCalmBoostIfPending() {
     // ignore
   }
   state._demCalmBoostApplied = true;
-  state.dirtyPressure = Math.max(0, Number(state.dirtyPressure || 0) - 1);
-  state.logs.push('Calm Mode: a small early-shift pressure bleed was applied (one-time this shift).');
+  state._demCalmTickCounter = 0;
+  state.dirtyPressure = Math.max(0, Number(state.dirtyPressure || 0) - 2);
+  window.demCalmModeActive = true;
+  console.log('Calm Mode activated for this shift');
+  state.logs.push('Calm Mode active — pressure spikes reduced this shift.');
+  try { window.refreshDemActiveEffects?.(); } catch { /* ignore */ }
+}
+
+function applyCalmModePassiveTick() {
+  if (!state._demCalmBoostApplied) return;
+  state._demCalmTickCounter = (state._demCalmTickCounter || 0) + 1;
+  // Reduce dirtyPressure by 1 every 8 actions while calm mode is active
+  if (state._demCalmTickCounter % 8 === 0 && Number(state.dirtyPressure || 0) > 1) {
+    state.dirtyPressure = Math.max(0, state.dirtyPressure - 1);
+    console.log('Calm Mode pressure reduction applied');
+  }
 }
 
 function applyMonetizationDawnBonuses() {
+  const bonusLines = [];
   try {
     if (localStorage.getItem('dem_boost_double_earnings_pending') === '1') {
       localStorage.removeItem('dem_boost_double_earnings_pending');
       const bonus = 18;
       state.money = Math.max(0, Number(state.money || 0) + bonus);
-      state.logs.push(`Double Earnings: +$${bonus} night-close bonus (one shift).`);
+      state.logs.push(`Double Earnings: +CA$${bonus} night-close bonus (one shift).`);
+      bonusLines.push(`Double Earnings Bonus: +CA$${bonus}`);
     }
   } catch {
     // ignore
@@ -3018,11 +3035,18 @@ function applyMonetizationDawnBonuses() {
     if (localStorage.getItem('dem_upgrade_income_boost') === 'true') {
       const bonus = 8;
       state.money = Math.max(0, Number(state.money || 0) + bonus);
-      state.logs.push(`Income Boost: +$${bonus} night-close bonus.`);
+      state.logs.push(`Income Boost: +CA$${bonus} night-close bonus.`);
+      bonusLines.push(`Income Boost: +CA$${bonus}`);
     }
   } catch {
     // ignore
   }
+  // Clear calm mode at end of shift
+  state._demCalmBoostApplied = false;
+  state._demCalmTickCounter = 0;
+  window.demCalmModeActive = false;
+  try { window.refreshDemActiveEffects?.(); } catch { /* ignore */ }
+  return bonusLines;
 }
 
 function pushOpeningTensionBeat(context = 'opening') {
@@ -6944,6 +6968,7 @@ function startFreshCampaignRun(options = {}) {
   state = normalizeChainState(state);
   state = assignScenarioForNight(state);
   state.failedState = null;
+  state.continueUsed = false;
   state.rooms = normalizeEscalationRooms(createDefaultRooms({ unlockedCap: getUnlockedRoomCapForNight(1) }));
   state.rooms = normalizeResponseRooms(state.rooms);
   state.rooms = normalizeTacticalRooms(state.rooms);
@@ -9367,8 +9392,192 @@ function buildTownModel(targetState = state) {
 // ─── end v0.31 ────────────────────────────────────────────────
 
 // ============================================================
+// ─── Continue After Failure Overlay ──────────────────────────
+
+// DEV/LEGACY FEATURE FLAG
+// This project now uses verified PayPal purchases + Continue Credits.
+// Fake rewarded ads are NOT used in production/live mode and must never
+// appear as a “free continue” option. Keep this disabled unless you are
+// explicitly testing UI-only flows locally.
+const ENABLE_FAKE_REWARDED_ADS = false;
+
+function closeContinueOverlay() {
+  if (_cfoAdTick !== null) {
+    clearInterval(_cfoAdTick);
+    _cfoAdTick = null;
+  }
+  const overlay = document.getElementById('continue-failure-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('is-open');
+  overlay.setAttribute('aria-hidden', 'true');
+  overlay.innerHTML = '';
+}
+
+function resumeAfterContinue(failureCode) {
+  state.continueUsed = true;
+  state.continueGraceUntil = Date.now() + 1500;
+  // Pull state back from the brink without a full reset
+  state.power = Math.max(state.power || 0, 30);
+  state.reputation = Math.max(state.reputation || 0, 28);
+  const maxIncidents = 4;
+  if (Array.isArray(state.incidents) && state.incidents.length > maxIncidents) {
+    state.incidents = state.incidents.slice(-maxIncidents);
+  }
+  if (Array.isArray(state.rooms)) {
+    state.rooms.forEach(room => {
+      if (room.condition === 'Critical') room.condition = 'Poor';
+    });
+  }
+  state.failedState = null;
+  try { window.refreshDemActiveEffects?.(); } catch { /* ignore */ }
+  setActiveScreen('game-screen');
+  setActivePanel('frontdesk-panel');
+  renderAll();
+}
+
+function showFakeAdAndContinue() {
+  if (!ENABLE_FAKE_REWARDED_ADS) {
+    console.warn('[ContinueOverlay] Fake rewarded ads disabled.');
+    return;
+  }
+  const overlay = document.getElementById('continue-failure-overlay');
+  if (!overlay || !overlay.classList.contains('is-open')) return;
+  const btn = overlay.querySelector('.cfo-continue-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading ad…'; }
+
+  const panel = overlay.querySelector('.cfo-panel');
+  if (!panel) return;
+
+  const adEl = document.createElement('div');
+  adEl.className = 'cfo-ad-panel';
+  adEl.innerHTML = `<p class="cfo-ad-title">AD BREAK</p>
+<p class="cfo-ad-label">Fake rewarded ad simulation</p>
+<p class="cfo-ad-countdown" id="cfo-ad-countdown">3</p>`;
+  panel.appendChild(adEl);
+
+  let remaining = 3;
+  if (_cfoAdTick !== null) { clearInterval(_cfoAdTick); _cfoAdTick = null; }
+  _cfoAdTick = setInterval(() => {
+    remaining -= 1;
+    const cd = document.getElementById('cfo-ad-countdown');
+    if (cd) cd.textContent = String(remaining);
+    if (remaining <= 0) {
+      clearInterval(_cfoAdTick);
+      _cfoAdTick = null;
+      closeContinueOverlay();
+      const failureCode = state?.failedState?.code || 'unknown';
+      resumeAfterContinue(failureCode);
+    }
+  }, 1000);
+}
+
+function showContinueOverlay(failure) {
+  if (!ENABLE_FAKE_REWARDED_ADS) return;
+  const overlay = document.getElementById('continue-failure-overlay');
+  if (!overlay) return;
+  if (overlay.classList.contains('is-open')) return;
+
+  const continueUsed = state.continueUsed === true;
+
+  let savedCredits = 0;
+  try {
+    savedCredits = Math.max(0, parseInt(localStorage.getItem('credit') || '0', 10) || 0);
+  } catch { /* ignore */ }
+
+  const ctx = typeof window.deadEndMotelGetFailureContext === 'function'
+    ? window.deadEndMotelGetFailureContext() : null;
+  const progressPct = ctx?.progressPercent ?? null;
+  const nearWin = ctx?.nearWin ?? false;
+
+  const night = Number(state?.night || 1);
+  const rep = state?.reputation != null ? Math.round(Number(state.reputation)) : null;
+  const power = state?.power != null ? Math.round(Number(state.power)) : null;
+  const money = state?.money != null ? Math.floor(Number(state.money)) : null;
+
+  const reasonLabel = failure?.reason || 'Shift conditions became unrecoverable.';
+
+  const progressHtml = progressPct != null
+    ? `<div class="cfo-recap">
+        <p class="cfo-recap-pct">${Math.round(progressPct)}% through the shift</p>
+        ${nearWin ? '<p class="cfo-recap-line">You were close — one more push might do it.</p>' : ''}
+      </div>` : '';
+
+  const statItems = [
+    rep != null && `<span class="cfo-stat">Rep: ${rep}</span>`,
+    power != null && `<span class="cfo-stat">Power: ${power}%</span>`,
+    money != null && `<span class="cfo-stat">Funds: CA$${money}</span>`,
+  ].filter(Boolean).join('');
+  const statsHtml = statItems ? `<div class="cfo-stats">${statItems}</div>` : '';
+
+  let ctaHtml = '';
+  let noteHtml = '';
+
+  if (savedCredits > 0) {
+    ctaHtml = `<button class="button cfo-use-credit-btn" type="button">
+      Continue with saved credit ×${savedCredits}
+    </button>
+    <button class="button button--ghost cfo-restart-btn" type="button">Restart shift</button>`;
+    noteHtml = `<p class="cfo-note">Restores tonight's opening snapshot. ${savedCredits - 1} credit${savedCredits - 1 !== 1 ? 's' : ''} will remain.</p>`;
+  } else if (!continueUsed) {
+    // Legacy/dev-only path. Never shown in live mode (feature-flagged).
+    ctaHtml = `<button class="button cfo-continue-btn" type="button">Continue — Watch Ad (dev-only)</button>
+    <button class="button button--ghost cfo-restart-btn" type="button">Restart shift</button>`;
+    noteHtml = `<p class="cfo-note">Dev-only: fake rewarded ad simulation. Live builds use credits + verified PayPal.</p>`;
+  } else {
+    ctaHtml = `<button class="button button--ghost cfo-restart-btn" type="button">Restart shift</button>`;
+    noteHtml = `<p class="cfo-note cfo-continue-used-msg">Continue already used this run.</p>`;
+  }
+
+  overlay.innerHTML = `<div class="cfo-panel" role="dialog" aria-modal="true" aria-label="Shift failed">
+    <h2 class="cfo-title">SHIFT FAILED</h2>
+    <p class="cfo-subtitle">${reasonLabel}</p>
+    ${progressHtml}
+    ${statsHtml}
+    <div class="cfo-actions">
+      ${ctaHtml}
+    </div>
+    ${noteHtml}
+  </div>`;
+
+  overlay.classList.add('is-open');
+  overlay.setAttribute('aria-hidden', 'false');
+
+  const creditBtn = overlay.querySelector('.cfo-use-credit-btn');
+  if (creditBtn) {
+    creditBtn.addEventListener('click', () => {
+      if (creditBtn.disabled) return;
+      creditBtn.disabled = true;
+      const ok = window.deadEndMotelUseSavedContinue?.();
+      if (ok) {
+        closeContinueOverlay();
+      } else {
+        creditBtn.disabled = false;
+      }
+    });
+  }
+
+  const adBtn = overlay.querySelector('.cfo-continue-btn');
+  if (adBtn) {
+    adBtn.addEventListener('click', () => {
+      if (adBtn.disabled) return;
+      adBtn.disabled = true;
+      showFakeAdAndContinue();
+    });
+  }
+
+  const restartBtn = overlay.querySelector('.cfo-restart-btn');
+  if (restartBtn) {
+    restartBtn.addEventListener('click', () => {
+      closeContinueOverlay();
+    });
+  }
+}
+
+// ─── end Continue After Failure Overlay ──────────────────────
 
 function checkFailureState() {
+  if (state.continueGraceUntil && Date.now() < state.continueGraceUntil) return false;
+
   const failure = evaluateFailureState(state);
   if (!failure) return false;
 
@@ -9390,6 +9599,11 @@ function checkFailureState() {
   audioController.playFailure();
   renderFailure(failure, { deadDropOffer: buildDeadDropFailureOffer(metaState, state) });
   setActiveScreen('failure-screen');
+  // Live/production failure continue system:
+  // - Saved Continue Credits first (failure screen CTA)
+  // - Verified PayPal continue packs second (failure screen CTA)
+  // - Retry/Restart/Menu always visible
+  if (ENABLE_FAKE_REWARDED_ADS) showContinueOverlay(failure);
   return true;
 }
 
@@ -9429,6 +9643,7 @@ function progressShift(actionKey, options = {}) {
     );
   }
   consumeMonetizationCalmBoostIfPending();
+  applyCalmModePassiveTick();
   if (!skipPassiveDrain) {
     tickOperatorFatigue(state, actionKey);
     const coldAlert = tickColdWithoutHeating(state);
@@ -11799,7 +12014,11 @@ function endNight(options = {}) {
   try {
     recordCampaignConvergenceNight(state);
     _endNightSummary = buildNightSummary(state);
-    applyMonetizationDawnBonuses();
+    const _demBonusLines = applyMonetizationDawnBonuses();
+    if (Array.isArray(_demBonusLines) && _demBonusLines.length && _endNightSummary) {
+      if (!Array.isArray(_endNightSummary.breakdown)) _endNightSummary.breakdown = [];
+      _endNightSummary.breakdown.push(..._demBonusLines);
+    }
     if (isEndlessMode(state)) {
       recordEndlessWaveStats(state, _endNightSummary);
     }
