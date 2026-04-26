@@ -124,15 +124,16 @@
       margin-top: 12px;
     }
 
-    .paypal-panel {
+    .failure-store-panel {
       margin-top: 14px;
       padding: 14px 14px 12px;
       border-radius: 16px;
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid rgba(255, 255, 255, 0.10);
       box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+      text-align: left;
     }
-    .paypal-panel h3 {
+    .failure-store-panel h3 {
       margin: 0 0 8px;
       font-size: 1.05rem;
     }
@@ -141,13 +142,48 @@
       gap: 10px;
       margin-top: 12px;
     }
-    .paypal-status {
+    #paypal-root {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2000;
+    }
+    #paypal-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(7, 10, 16, 0.78);
+      pointer-events: auto;
+    }
+    #paypal-modal.is-open { display: flex; }
+    #paypal-modal .modal-content {
+      width: min(520px, 100%);
+      border-radius: 18px;
+      background: rgba(9, 11, 18, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+      padding: 16px;
+    }
+    #paypal-modal .modal-content h2 { margin: 0 0 10px; font-size: 1.1rem; }
+    #paypal-modal #paypal-status {
       margin-top: 10px;
       color: rgba(148, 163, 184, 0.95);
       line-height: 1.45;
       min-height: 22px;
     }
-    #paypal-container { margin-top: 12px; }
+    #paypal-button-container { margin-top: 12px; }
+    #close-paypal {
+      margin-top: 12px;
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(241, 245, 249, 0.92);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
     @media (max-width: 520px) {
       .site-footer { padding: 18px 12px; }
       .about-game-block { margin-top: 14px; }
@@ -164,7 +200,7 @@
     <div class="seo-cta-row">
       <a class="button button-primary" href="#app">Play Game</a>
       <a class="button button-secondary" href="game-guide.html">Read Game Guide</a>
-      <a class="button button-utility" href="#failure-screen">Support / Store</a>
+      <a class="button button-utility" href="#failure-store">Support / Store</a>
     </div>
   </section>
   <div id="app" class="app-shell screen-main-menu v42-root v43-root v50-root v51-root">
@@ -682,7 +718,7 @@
             </p>
             <div id="failure-dead-drop-mount" class="v40-failure-dead-drop" hidden></div>
 
-            <section class="paypal-panel" aria-label="Support and purchases">
+            <section id="failure-store" class="failure-store-panel" aria-label="Support and purchases">
               <h3>Support the game</h3>
               <p class="muted" style="margin: 0; line-height: 1.45;">
                 Purchases are verified server-side. Nothing unlocks until the backend confirms payment.
@@ -691,8 +727,6 @@
                 <button type="button" class="button button-secondary" id="buy-remove-ads-btn">Remove Ads ($1.99)</button>
                 <button type="button" class="button button-secondary" id="buy-continue-btn">Continue ($0.99)</button>
               </div>
-              <div class="paypal-status" id="paypal-status" aria-live="polite"></div>
-              <div id="paypal-container"></div>
             </section>
           </div>
           <div class="hero-actions">
@@ -763,6 +797,8 @@
   <div id="camera-scene-overlay" class="camera-scene-overlay" aria-hidden="true"></div>
   <div id="help-overlay" class="help-overlay" aria-hidden="true"></div>
   <div id="settings-overlay" class="help-overlay" aria-hidden="true"></div>
+
+  <div id="paypal-root"></div>
 
   <script type="module" src="js/main.js"></script>
   <!-- Adsterra disabled during AdSense review -->

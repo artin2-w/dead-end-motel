@@ -1,5 +1,7 @@
 const API_BASE_URL = 'https://steep-boat-15e1.artinkarshad.workers.dev';
 
+let _activeButtons = null;
+
 function getUserId() {
   let id = localStorage.getItem('userId');
   if (!id) {
@@ -27,7 +29,11 @@ async function postJson(url, body) {
   });
   const text = await res.text();
   let data;
-  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
   return { ok: res.ok, status: res.status, data };
 }
 
@@ -40,6 +46,54 @@ function setStatus(msg) {
   if (el) el.textContent = msg || '';
 }
 
+function clearPaypalRoot() {
+  const root = $('paypal-root');
+  if (!root) return;
+  root.innerHTML = '';
+}
+
+function closePaypalModal() {
+  try {
+    _activeButtons?.close?.();
+  } catch {
+    // ignore
+  }
+  _activeButtons = null;
+  clearPaypalRoot();
+}
+
+function mountPaypalModal() {
+  clearPaypalRoot();
+  const root = $('paypal-root');
+  if (!root) return;
+
+  root.innerHTML = `
+    <div id="paypal-modal">
+      <div class="modal-content">
+        <h2>Complete Purchase</h2>
+        <div id="paypal-status" aria-live="polite"></div>
+        <div id="paypal-button-container"></div>
+        <button id="close-paypal" type="button">Close</button>
+      </div>
+    </div>
+  `;
+
+  const modal = $('paypal-modal');
+  modal?.classList.add('is-open');
+
+  $('close-paypal')?.addEventListener('click', () => {
+    closePaypalModal();
+  });
+
+  window.addEventListener(
+    'keydown',
+    (ev) => {
+      if (ev.key === 'Escape') closePaypalModal();
+    },
+    { once: true }
+  );
+}
+
 function ensurePaypalLoaded() {
   return typeof window.paypal?.Buttons === 'function';
 }
@@ -47,12 +101,16 @@ function ensurePaypalLoaded() {
 async function beginCheckout(product) {
   if (!product) return;
 
+  mountPaypalModal();
+
   if (!ensurePaypalLoaded()) {
     setStatus('PayPal failed to load. Please refresh and try again.');
     return;
   }
 
+  console.log('Creating order');
   setStatus('Creating order…');
+
   const create = await postJson(`${API_BASE_URL}/create-order`, { product });
   const orderID = create?.data?.orderID || create?.data?.id || create?.data?.orderId;
 
@@ -61,25 +119,35 @@ async function beginCheckout(product) {
     return;
   }
 
-  setStatus('Ready. Complete payment with PayPal below.');
-  const container = $('paypal-container');
-  if (!container) return;
-  container.innerHTML = '';
+  console.log('Order created', orderID);
+  setStatus('Order created. Complete payment with PayPal below.');
 
-  window.paypal.Buttons({
+  const btnHost = $('paypal-button-container');
+  if (!btnHost) return;
+
+  // Clear only the button host (never remove the element while PayPal is active).
+  btnHost.innerHTML = '';
+
+  _activeButtons = window.paypal.Buttons({
     createOrder: () => orderID,
 
     onApprove: async (data) => {
+      console.log('Approved');
+      console.log('Calling capture');
       setStatus('Verifying payment…');
+
       const capture = await postJson(`${API_BASE_URL}/capture-order`, {
         orderID: data.orderID,
         userId: getUserId()
       });
 
-      if (capture.ok && capture?.data?.ok) {
+      const result = capture.data;
+      console.log('Capture result', result);
+
+      if (result?.ok === true) {
         unlockProduct(product);
         setStatus('Payment verified. Purchase applied.');
-        window.setTimeout(() => setStatus(''), 1200);
+        window.setTimeout(() => closePaypalModal(), 900);
       } else {
         setStatus('Payment verification failed.');
         alert('Payment verification failed');
@@ -93,7 +161,9 @@ async function beginCheckout(product) {
     onError: () => {
       setStatus('PayPal error. Please try again.');
     }
-  }).render('#paypal-container');
+  });
+
+  _activeButtons.render('#paypal-button-container');
 }
 
 function bindUi() {
@@ -106,4 +176,3 @@ if (document.readyState === 'loading') {
 } else {
   bindUi();
 }
-
