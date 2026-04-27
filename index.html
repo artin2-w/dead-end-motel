@@ -211,7 +211,7 @@
   <div id="app" class="app-shell screen-main-menu v42-root v43-root v50-root v51-root">
     <header class="topbar topbar-v20 v42-topbar v43-topbar" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.53</p>
+        <p class="eyebrow">Dead End Motel v0.54</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -731,6 +731,7 @@
             </p>
             <div id="failure-dead-drop-mount" class="v40-failure-dead-drop" hidden></div>
             <div id="dem-failure-campaign-strip" hidden></div>
+            <div id="dem-failure-horror-factors" hidden></div>
             <p id="failure-emotional-line" class="failure-emotional muted" aria-live="polite">
               You were so close… Continue your night
             </p>
@@ -843,7 +844,7 @@
         </div>
       </section>
       <footer id="v51-desktop-status-footer" class="v51-desktop-status-footer" aria-hidden="true">
-        Control surface v0.53 — read risk first, then spend attention.
+        Control surface v0.54 — read risk first, then spend attention.
       </footer>
     </main>
     <div id="v43-guest-sticky-rail" class="v43-guest-sticky-rail" hidden aria-live="polite"></div>
@@ -856,6 +857,7 @@
   <div id="settings-overlay" class="help-overlay" aria-hidden="true"></div>
   <!-- Legacy/dev-only overlay. Live flow uses failure screen + credits + verified PayPal. -->
   <div id="continue-failure-overlay" class="cfo-overlay" aria-hidden="true"></div>
+  <div id="dem-horror-panel" class="dem-horror-panel" role="dialog" aria-label="Motel event" aria-hidden="true" hidden></div>
   <div id="dem-unlock-toast" class="dem-unlock-toast" role="status" aria-live="assertive" aria-hidden="true" hidden></div>
 
   <div id="paypal-root"></div>
@@ -916,5 +918,6 @@
 
   <script type="module" src="js/paypal-checkout.js"></script>
   <script type="module" src="js/campaign-progression.js"></script>
+  <script type="module" src="js/signature-horror.js"></script>
 </body>
 </html>

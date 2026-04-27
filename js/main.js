@@ -6890,6 +6890,7 @@ function renderAll() {
     try { window.refreshDemCampaignFailureStrip?.(state?.night || 1); } catch { /* ignore */ }
   }
   try { window.demCampaignRenderAll?.(state?.night || 1); } catch { /* ignore */ }
+  try { window.demHorrorRender?.(state?.guests); } catch { /* ignore */ }
   if (window.DeadEndPhase2?.decorateUi) {
     window.DeadEndPhase2.decorateUi();
   }
@@ -6912,6 +6913,16 @@ function renderAll() {
   }
 
   saveState(state);
+
+  // v0.54: set alert bridge for signature-horror.js on first renderAll
+  if (!window.demHorrorPushAlert) {
+    window.demHorrorPushAlert = function(message, type) {
+      try {
+        pushLiveAlert(state, { message, type: type || 'info', dedupeKey: 'horror-' + Date.now() });
+        renderAll();
+      } catch { /* ignore */ }
+    };
+  }
 }
 
 function handleQuickEndlessSetup() {
@@ -9602,6 +9613,7 @@ function checkFailureState() {
   renderFailure(failure, { deadDropOffer: buildDeadDropFailureOffer(metaState, state) });
   setActiveScreen('failure-screen');
   try { window.refreshDemCampaignFailureStrip?.(state.night); } catch { /* ignore */ }
+  try { window.demHorrorRenderFailureFactors?.(); } catch { /* ignore */ }
   // Live/production failure continue system:
   // - Saved Continue Credits first (failure screen CTA)
   // - Verified PayPal continue packs second (failure screen CTA)
@@ -10071,6 +10083,9 @@ function progressShift(actionKey, options = {}) {
       fireMidnightDJBroadcast();
     }
   }
+
+  // v0.54 signature horror events
+  try { window.demHorrorMaybeTrigger?.(state); } catch { /* ignore */ }
 
   return false;
 }
