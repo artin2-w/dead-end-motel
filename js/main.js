@@ -6887,7 +6887,9 @@ function renderAll() {
   renderLogs(renderState);
   if (activeScreenId === 'failure-screen' && state?.failedState) {
     renderFailure(state.failedState, { deadDropOffer: buildDeadDropFailureOffer(metaState, state) });
+    try { window.refreshDemCampaignFailureStrip?.(state?.night || 1); } catch { /* ignore */ }
   }
+  try { window.demCampaignRenderAll?.(state?.night || 1); } catch { /* ignore */ }
   if (window.DeadEndPhase2?.decorateUi) {
     window.DeadEndPhase2.decorateUi();
   }
@@ -9599,6 +9601,7 @@ function checkFailureState() {
   audioController.playFailure();
   renderFailure(failure, { deadDropOffer: buildDeadDropFailureOffer(metaState, state) });
   setActiveScreen('failure-screen');
+  try { window.refreshDemCampaignFailureStrip?.(state.night); } catch { /* ignore */ }
   // Live/production failure continue system:
   // - Saved Continue Credits first (failure screen CTA)
   // - Verified PayPal continue packs second (failure screen CTA)
@@ -12025,6 +12028,7 @@ function endNight(options = {}) {
     state.lastSummary = _endNightSummary;
     state.finalePerformance = buildFinalePerformanceContext(state);
     registerCampaignNightSuccess(state, { summary: _endNightSummary });
+    try { window.demCampaignOnNightCompleted?.(state.night); } catch { /* ignore */ }
     const campaignContext = getCampaignContext();
     _endNightShouldEndRun = shouldEndRunAfterSuccessfulNight(state, state.night);
     state.pendingRunCompletion = _endNightShouldEndRun;

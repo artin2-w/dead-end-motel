@@ -211,7 +211,7 @@
   <div id="app" class="app-shell screen-main-menu v42-root v43-root v50-root v51-root">
     <header class="topbar topbar-v20 v42-topbar v43-topbar" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.51</p>
+        <p class="eyebrow">Dead End Motel v0.53</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -240,6 +240,7 @@
         </div>
         <p id="topbar-context-strip" class="topbar-context-strip muted" aria-live="polite"></p>
         <p id="active-upgrades-inline" class="topbar-upgrades muted">Active Upgrades: None</p>
+        <p id="dem-next-unlock-line" class="dem-next-unlock-line muted" hidden></p>
       </div>
       <div class="topbar-toolbar">
         <button id="audio-toggle-btn" class="button audio-toggle" type="button">Sound: On</button>
@@ -304,6 +305,7 @@
 
             <aside class="v41-menu-rail" aria-label="Situation and archive">
               <div id="main-menu-situation-cards" class="v41-situation-cards" aria-live="polite"></div>
+              <div id="dem-campaign-map-mount" class="dem-campaign-map-outer"></div>
               <div id="main-menu-meta-surface" class="main-menu-meta-surface v41-meta-surface">
               <details class="mobile-menu-section main-menu-run-setup" id="main-menu-run-setup-section" data-mobile-default="closed">
                 <summary>Run Setup</summary>
@@ -338,6 +340,12 @@
                 <summary>Archive</summary>
                 <div class="mobile-menu-section-body">
                   <ul id="main-menu-archive-list" class="main-menu-archive-list"></ul>
+                </div>
+              </details>
+              <details class="mobile-menu-section dem-motel-files-section" id="dem-motel-files-section" data-mobile-default="closed">
+                <summary>Motel Files</summary>
+                <div class="mobile-menu-section-body">
+                  <div id="dem-motel-files-mount"></div>
                 </div>
               </details>
               </div>
@@ -722,6 +730,7 @@
               The motel lost all usable power and operations failed across the property.
             </p>
             <div id="failure-dead-drop-mount" class="v40-failure-dead-drop" hidden></div>
+            <div id="dem-failure-campaign-strip" hidden></div>
             <p id="failure-emotional-line" class="failure-emotional muted" aria-live="polite">
               You were so close… Continue your night
             </p>
@@ -731,6 +740,9 @@
               <h3>Support the game</h3>
               <p class="muted dem-trust-lead">
                 Purchases are optional — you can always retry or restart without paying. PayPal verifies each order before anything unlocks.
+              </p>
+              <p class="muted" style="margin: 8px 0 0; line-height: 1.45;">
+                Rough shift? Continue Credits can protect progress, but you can always retry for free.
               </p>
               <p class="muted" style="margin: 8px 0 0; line-height: 1.45;">
                 Make sure you want to continue before purchasing.
@@ -831,7 +843,7 @@
         </div>
       </section>
       <footer id="v51-desktop-status-footer" class="v51-desktop-status-footer" aria-hidden="true">
-        Control surface v0.51 — read risk first, then spend attention.
+        Control surface v0.53 — read risk first, then spend attention.
       </footer>
     </main>
     <div id="v43-guest-sticky-rail" class="v43-guest-sticky-rail" hidden aria-live="polite"></div>
@@ -844,6 +856,7 @@
   <div id="settings-overlay" class="help-overlay" aria-hidden="true"></div>
   <!-- Legacy/dev-only overlay. Live flow uses failure screen + credits + verified PayPal. -->
   <div id="continue-failure-overlay" class="cfo-overlay" aria-hidden="true"></div>
+  <div id="dem-unlock-toast" class="dem-unlock-toast" role="status" aria-live="assertive" aria-hidden="true" hidden></div>
 
   <div id="paypal-root"></div>
 
@@ -902,5 +915,6 @@
   </footer>
 
   <script type="module" src="js/paypal-checkout.js"></script>
+  <script type="module" src="js/campaign-progression.js"></script>
 </body>
 </html>

@@ -280,3 +280,230 @@
   color: rgba(167, 243, 208, 0.88);
   line-height: 1.45;
 }
+
+/* ─── Campaign Progress Map ──────────────────────────────────────── */
+
+.dem-campaign-map-outer {
+  margin: 10px 0 0;
+}
+
+.dem-campaign-map {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px 14px 10px;
+}
+
+.dem-cp-heading {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.80);
+}
+
+.dem-cp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dem-cprow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  flex-wrap: wrap;
+}
+
+.dem-cprow-icon {
+  font-size: 0.82rem;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+
+.dem-cprow-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.dem-cprow--done .dem-cprow-label {
+  color: rgba(167, 243, 208, 0.90);
+}
+
+.dem-cprow--current .dem-cprow-label {
+  color: rgba(226, 232, 240, 0.95);
+  font-weight: 600;
+}
+
+.dem-cprow--locked .dem-cprow-label {
+  color: rgba(148, 163, 184, 0.55);
+}
+
+.dem-cprow-badge {
+  font-size: 0.72rem;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(167, 243, 208, 0.10);
+  border: 1px solid rgba(167, 243, 208, 0.22);
+  color: rgba(167, 243, 208, 0.80);
+  white-space: nowrap;
+}
+
+.dem-cp-complete {
+  margin: 10px 0 0;
+  font-size: 0.88rem;
+  color: rgba(110, 231, 255, 0.90);
+  font-weight: 600;
+}
+
+.dem-cp-reset-btn {
+  margin-top: 10px;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  color: rgba(148, 163, 184, 0.65);
+  cursor: pointer;
+  line-height: 1.3;
+}
+
+.dem-cp-reset-btn:hover {
+  border-color: rgba(251, 113, 133, 0.35);
+  color: rgba(251, 113, 133, 0.80);
+}
+
+/* ─── Motel Files Panel ──────────────────────────────────────────── */
+
+.dem-files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dem-file {
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.dem-file--unlocked {
+  border-left: 2px solid rgba(110, 231, 255, 0.28);
+  padding-left: 10px;
+}
+
+.dem-file-title {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: rgba(226, 232, 240, 0.90);
+  margin: 0 0 3px;
+}
+
+.dem-file-text {
+  margin: 0;
+  color: rgba(148, 163, 184, 0.88);
+  font-style: italic;
+}
+
+.dem-file--locked {
+  opacity: 0.50;
+}
+
+.dem-file-lock {
+  font-size: 0.82rem;
+  color: rgba(148, 163, 184, 0.60);
+}
+
+/* ─── Unlock Toast ───────────────────────────────────────────────── */
+
+.dem-unlock-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  z-index: 9500;
+  background: rgba(15, 18, 30, 0.97);
+  border: 1px solid rgba(167, 243, 208, 0.30);
+  border-radius: 14px;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 220px;
+  max-width: min(360px, calc(100vw - 32px));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.dem-unlock-toast.dem-toast--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.dem-toast-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: rgba(167, 243, 208, 0.95);
+  display: block;
+}
+
+.dem-toast-sub {
+  font-size: 0.80rem;
+  color: rgba(148, 163, 184, 0.80);
+  display: block;
+}
+
+/* ─── Failure Screen Campaign Strip ─────────────────────────────── */
+
+#dem-failure-campaign-strip {
+  margin: 10px 0 0;
+}
+
+.dem-fail-cp {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dem-fail-cp-line {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.dem-fail-cp-next {
+  margin: 4px 0 0;
+  font-size: 0.84rem;
+  color: rgba(148, 163, 184, 0.88);
+}
+
+.dem-fail-cp-hint {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: rgba(167, 243, 208, 0.80);
+}
+
+/* ─── Game screen next-unlock line ──────────────────────────────── */
+
+.dem-next-unlock-line {
+  font-size: 0.80rem;
+  color: rgba(148, 163, 184, 0.70);
+  margin: 2px 0 0;
+  line-height: 1.35;
+}
+
+/* ─── end v0.53 campaign progression ────────────────────────────── */
