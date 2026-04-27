@@ -7205,6 +7205,7 @@ function startShift() {
     maybeGenerateNightStoryBeat(state, state.night);
   }
   try { window.demApplyContractStartEffects?.(state); } catch { /* ignore */ }
+  try { window.demApplyDailyStartEffects?.(state); } catch { /* ignore */ }
   syncFinaleStateForNight({ refreshBranch: true });
   state.rooms = applyRoomUnlockFlags(state.rooms || [], state.night);
   state = normalizeRoomServiceState(state);

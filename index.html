@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Dead End Motel is a browser-based horror management game where you manage guests, cameras, power, and survive intense night shifts." />
   <title>Dead End Motel - Browser Horror Management Game</title>
+  <!-- Social preview (no og:image yet — add when an asset exists) -->
+  <meta property="og:title" content="Dead End Motel - Browser Horror Management Game" />
+  <meta property="og:description" content="Dead End Motel is a free browser horror management game where you manage guests, cameras, power, and survive strange night shifts." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://artin2-w.github.io/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Dead End Motel" />
+  <meta name="twitter:description" content="Free browser horror management game about surviving the night shift." />
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/ui.css" />
@@ -211,7 +219,7 @@
   <div id="app" class="app-shell screen-main-menu v42-root v43-root v50-root v51-root">
     <header class="topbar topbar-v20 v42-topbar v43-topbar" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.54</p>
+        <p class="eyebrow">Dead End Motel v0.55</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -269,6 +277,12 @@
                 <p class="v41-menu-guidance muted">
                   Primary action uses your current Run Setup (length, difficulty, contracts). Tune it in the rail before you commit.
                 </p>
+                <div id="dem-daily-card" class="dem-daily-card" aria-live="polite"></div>
+                <div class="v41-menu-btn-row v41-menu-btn-row-wrap" style="margin-top:10px;">
+                  <button id="dem-replay-tutorial-btn" type="button" class="button button-secondary">Replay Tutorial</button>
+                  <a class="button button-secondary" href="game-guide.html" style="text-decoration:none;">Open Game Guide</a>
+                  <button id="dem-feedback-btn" type="button" class="button button-utility">Feedback</button>
+                </div>
               </div>
 
               <div class="v41-menu-cluster v41-menu-cluster-training">
@@ -668,6 +682,7 @@
           <div class="hero-actions">
             <button id="next-night-btn" class="button button-primary">Continue to Night Prep</button>
             <button id="back-menu-btn" class="button button-secondary">Main Menu</button>
+            <button id="dem-copy-summary-result-btn" class="button button-secondary" type="button">Copy Result</button>
           </div>
         </div>
       </section>
@@ -792,6 +807,7 @@
             <button id="restart-night-btn" class="button button-primary">Retry Current Night</button>
             <button id="restart-campaign-btn" class="button button-warning">Restart Campaign</button>
             <button id="failure-menu-btn" class="button button-secondary">Main Menu</button>
+            <button id="dem-copy-failure-result-btn" class="button button-secondary" type="button">Copy Result</button>
           </div>
         </div>
       </section>
@@ -845,7 +861,7 @@
         </div>
       </section>
       <footer id="v51-desktop-status-footer" class="v51-desktop-status-footer" aria-hidden="true">
-        Control surface v0.54 — read risk first, then spend attention.
+        Control surface v0.55 — read risk first, then spend attention.
       </footer>
     </main>
     <div id="v43-guest-sticky-rail" class="v43-guest-sticky-rail" hidden aria-live="polite"></div>
@@ -862,8 +878,11 @@
   <div id="dem-unlock-toast" class="dem-unlock-toast" role="status" aria-live="assertive" aria-hidden="true" hidden></div>
 
   <div id="paypal-root"></div>
+  <div id="dem-overlay-root" aria-hidden="true"></div>
+  <div id="dem-toast" class="dem-toast" aria-live="polite" hidden></div>
 
   <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/public-demo.js"></script>
   <!-- Adsterra disabled during AdSense review -->
   <!--
   <script src="https://pl29260444.profitablecpmratenetwork.com/3c/b6/5d/3cb65df83fb6964b959ef5f6499c8db8.js"></script>
