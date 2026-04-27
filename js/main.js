@@ -73,6 +73,8 @@ import {
   SHIFT_DURATION_MINUTES,
   getShiftProgressPercent
 } from './nightCycle.js';
+import './replayability-contracts.js';
+import { demRecordFailure } from './playstats.js';
 import {
   normalizePowerEconomyState,
   buildFreshPowerEconomy,
@@ -7167,6 +7169,7 @@ function startShift() {
   onMeaningfulAction();
   audioController.playUiClick();
   cleanupTransientUiState('shift-start');
+  try { localStorage.removeItem('dem.recoShownThisRun'); } catch { /* ignore */ }
   state.failedState = null;
   state.pendingRunCompletion = false;
   if (window.DeadEndPhase2?.applyNightModifier) {
@@ -7201,6 +7204,7 @@ function startShift() {
   if (!state.activeStoryBeat) {
     maybeGenerateNightStoryBeat(state, state.night);
   }
+  try { window.demApplyContractStartEffects?.(state); } catch { /* ignore */ }
   syncFinaleStateForNight({ refreshBranch: true });
   state.rooms = applyRoomUnlockFlags(state.rooms || [], state.night);
   state = normalizeRoomServiceState(state);
@@ -9604,6 +9608,18 @@ function checkFailureState() {
 
   state.failedState = failure;
   cleanupTransientUiState('failure');
+  try {
+    const ctx = typeof window.deadEndMotelGetFailureContext === 'function' ? window.deadEndMotelGetFailureContext() : null;
+    demRecordFailure({ reasonCode: failure.code || 'unknown', nearWin: Boolean(ctx?.nearWin) });
+    const n = Math.max(1, Number(state?.night || 1));
+    const lastNight = Number(localStorage.getItem('dem.lastFailureNight') || 0);
+    const prevCount = Number(localStorage.getItem('dem.failuresThisNight') || 0);
+    const nextCount = lastNight === n ? prevCount + 1 : 1;
+    localStorage.setItem('dem.lastFailureNight', String(n));
+    localStorage.setItem('dem.failuresThisNight', String(nextCount));
+  } catch {
+    // ignore
+  }
   pushLiveAlert(state, {
     type: 'danger',
     message: failure.reason || 'Motel control failed.',
@@ -9658,6 +9674,7 @@ function progressShift(actionKey, options = {}) {
     );
   }
   consumeMonetizationCalmBoostIfPending();
+  try { window.demApplyContractProgressEffects?.(state, { actionKey }); } catch { /* ignore */ }
   applyCalmModePassiveTick();
   if (!skipPassiveDrain) {
     tickOperatorFatigue(state, actionKey);
@@ -12031,11 +12048,15 @@ function endNight(options = {}) {
   let _endNightShouldEndRun = false;
   try {
     recordCampaignConvergenceNight(state);
+    const _contractLines = typeof window.demApplyContractSuccessBonus === 'function'
+      ? window.demApplyContractSuccessBonus(state, { baseMoney: state.money })
+      : [];
     _endNightSummary = buildNightSummary(state);
     const _demBonusLines = applyMonetizationDawnBonuses();
-    if (Array.isArray(_demBonusLines) && _demBonusLines.length && _endNightSummary) {
+    if (_endNightSummary) {
       if (!Array.isArray(_endNightSummary.breakdown)) _endNightSummary.breakdown = [];
-      _endNightSummary.breakdown.push(..._demBonusLines);
+      if (Array.isArray(_contractLines) && _contractLines.length) _endNightSummary.breakdown.push(..._contractLines);
+      if (Array.isArray(_demBonusLines) && _demBonusLines.length) _endNightSummary.breakdown.push(..._demBonusLines);
     }
     if (isEndlessMode(state)) {
       recordEndlessWaveStats(state, _endNightSummary);
@@ -12727,6 +12748,7 @@ function nextNight() {
   onMeaningfulAction();
   audioController.playUiClick();
   cleanupTransientUiState('next-night');
+  try { localStorage.removeItem('dem.recoShownThisRun'); } catch { /* ignore */ }
   updateOnboarding((current) => markTutorialEvent(current, 'prep-opened'));
   state.night += 1;
   state.deadDropRevealRolledNight = null;

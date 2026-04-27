@@ -5154,6 +5154,64 @@ export function renderMainMenuMetaSurface(state, handlers = {}) {
 
   if (contractList) {
     contractList.innerHTML = '';
+
+    // v0.55 Shift Contract (local-only, optional). Does not replace existing run contracts.
+    if (typeof window.demGetActiveContract === 'function') {
+      const active = window.demGetActiveContract();
+      const catalog = (window.demShiftContractCatalog && Array.isArray(window.demShiftContractCatalog))
+        ? window.demShiftContractCatalog
+        : null;
+      const list = catalog || [
+        { id: 'standard', title: 'Standard Shift', risk: 'Normal', bonusPct: 0, description: 'Baseline tuning.' },
+        { id: 'weak_grid', title: 'Weak Grid', risk: 'Medium', bonusPct: 20, description: 'Power drains faster; higher success payout.' },
+        { id: 'hostile_neighborhood', title: 'Hostile Neighborhood', risk: 'Medium', bonusPct: 25, description: 'More tension; higher success payout.' },
+        { id: 'budget_cut', title: 'Budget Cut', risk: 'High', bonusPct: 30, description: 'Less start buffer; higher success payout.' },
+        { id: 'no_mistakes', title: 'No Mistakes', risk: 'High', bonusPct: 35, description: 'Mistakes sting; higher success payout.' },
+        { id: 'quiet_shift', title: 'Quiet Shift', risk: 'Low', bonusPct: -15, description: 'Lower pressure; lower payout.' }
+      ];
+
+      const header = document.createElement('div');
+      header.className = 'dem-contract-header';
+      header.innerHTML = `
+        <strong>Shift Contract</strong>
+        <span class="muted">Optional modifiers for replayability. Higher risk can increase payout.</span>
+      `;
+      contractList.appendChild(header);
+
+      const grid = document.createElement('div');
+      grid.className = 'dem-contract-grid';
+      list.forEach((c) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `dem-contract-card ${active?.id === c.id ? 'is-selected' : ''}`;
+        const bonus = Number(c.bonusPct || 0);
+        btn.innerHTML = `
+          <div class="dem-contract-top">
+            <span class="dem-contract-title">${String(c.title || c.id)}</span>
+            <span class="dem-contract-badges">
+              <span class="dem-contract-risk">${String(c.risk || 'Normal')}</span>
+              <span class="dem-contract-bonus">${bonus === 0 ? '0%' : bonus > 0 ? `+${bonus}%` : `${bonus}%`}</span>
+            </span>
+          </div>
+          <div class="dem-contract-desc muted">${String(c.description || '')}</div>
+        `;
+        btn.addEventListener('click', () => {
+          if (typeof window.demSetShiftContract === 'function') {
+            window.demSetShiftContract(c.id);
+            try { renderMainMenuMetaSurface(state, handlers); } catch { /* ignore */ }
+          }
+        });
+        grid.appendChild(btn);
+      });
+      contractList.appendChild(grid);
+
+      const note = document.createElement('p');
+      note.className = 'muted dem-contract-note';
+      note.textContent = 'Optional. You can always play Standard Shift without any contract.';
+      contractList.appendChild(note);
+      return;
+    }
+
     contractCatalog.forEach((contract) => {
       const row = document.createElement('label');
       row.className = 'main-menu-contract-item';

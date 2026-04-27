@@ -6,6 +6,11 @@ import {
   isContinueProduct,
   listAllowedProductIds
 } from './monetization-catalog.js';
+import {
+  demBumpCounter,
+  demGetPlayStats,
+  demGetRecommendationOverride
+} from './playstats.js';
 
 /**
  * Ethical monetization guardrails (frontend):
@@ -190,6 +195,25 @@ function renderProductCard(productId, options = {}) {
 }
 
 function buildStoreHtml() {
+  const reco = typeof window.demGetStoreRecommendation === 'function' ? window.demGetStoreRecommendation() : null;
+  const recoProduct = reco?.productId ? getProduct(reco.productId) : null;
+  const recoHtml = reco && recoProduct
+    ? `
+      <section class="dem-store-section dem-reco" aria-label="Recommended for your playstyle">
+        <h3>Recommended for your playstyle</h3>
+        <p class="dem-section-desc">${escapeHtml(reco.reason || '')}</p>
+        <div class="dem-reco-card">
+          <div class="dem-reco-main">
+            <div class="dem-reco-title">${escapeHtml(recoProduct.title || reco.productId)}</div>
+            <div class="dem-reco-price">${escapeHtml(recoProduct.priceLabel || '')}</div>
+          </div>
+          <button type="button" class="button button-secondary" data-dem-checkout-btn data-product="${escapeHtml(reco.productId)}">Buy</button>
+        </div>
+        <p class="muted dem-reco-note">Optional. You can always retry for free.</p>
+      </section>
+    `
+    : '';
+
   const featuredHtml = FEATURED_PRODUCTS.map((f) => {
     const p = getProduct(f.productId);
     if (!p) return '';
@@ -224,6 +248,8 @@ function buildStoreHtml() {
           <span>I understand this is a digital purchase and is non-refundable after successful delivery.</span>
         </label>
 
+        ${recoHtml}
+
         <div class="dem-featured">
           <h3>Featured</h3>
           <p class="dem-featured-intro muted">
@@ -249,6 +275,7 @@ function applyVerifiedPurchase(product) {
 
   if (isContinueProduct(product)) {
     console.log('Applying paid continue');
+    try { demBumpCounter('paidContinueUses', 1); } catch { /* ignore */ }
     const grant = continueCreditsGranted(product);
     const prevCredits = readContinueCredits();
     writeContinueCredits(prevCredits + grant);
@@ -442,6 +469,7 @@ function renderPurchaseHistory(host) {
 
 function openStoreModal() {
   console.log('Opening global store');
+  try { demBumpCounter('storeOpens', 1); } catch { /* ignore */ }
   clearPaypalRoot();
   const root = $('paypal-root');
   if (!root) return;
@@ -704,6 +732,37 @@ function refreshFailurePurchaseUi() {
       bundleHint.hidden = true;
     }
   }
+
+  // One contextual line per run (no-spam rule).
+  const offerLine = $('failure-context-offer-line');
+  if (offerLine && active) {
+    let already = false;
+    try { already = localStorage.getItem('dem.recoShownThisRun') === '1'; } catch { already = false; }
+    if (!already) {
+      let msg = '';
+      const reason = String(ctx?.reason || '').toLowerCase();
+      const failuresThisNight = (() => {
+        try { return Number(localStorage.getItem('dem.failuresThisNight') || '0'); } catch { return 0; }
+      })();
+
+      if (ctx?.nearWin) {
+        msg = 'You were close. Continue Credits protect progress.';
+      } else if (reason.includes('power') || reason.includes('blackout')) {
+        msg = 'Pressure spikes caused trouble. Calm Mode can help next shift.';
+      } else if (failuresThisNight >= 2) {
+        msg = 'Rough shift? Continue ×3 gives backup chances, but retry is always free.';
+      }
+
+      if (msg) {
+        offerLine.hidden = false;
+        offerLine.textContent = msg;
+        try { localStorage.setItem('dem.recoShownThisRun', '1'); } catch { /* ignore */ }
+      } else {
+        offerLine.hidden = true;
+        offerLine.textContent = '';
+      }
+    }
+  }
 }
 
 window.refreshDemFailureMonetization = refreshFailurePurchaseUi;
@@ -776,8 +835,104 @@ function attemptSavedContinue() {
 
   if (!ok) {
     alert('No saved Continue credits available, or the night could not be resumed.');
+  } else {
+    try { demBumpCounter('savedContinueUses', 1); } catch { /* ignore */ }
   }
 }
+
+function demGetStoreRecommendation() {
+  const override = demGetRecommendationOverride();
+  if (override) {
+    const p = getProduct(override);
+    return p
+      ? { productId: override, title: p.title, reason: 'Forced recommendation (dev helper).', priority: 999 }
+      : { productId: 'continue_pack_3', title: 'Continue ×3', reason: 'Default recommendation.', priority: 1 };
+  }
+
+  const stats = demGetPlayStats();
+  const credits = readContinueCredits();
+  const hasNoAds = (() => {
+    try { return localStorage.getItem('no_ads') === 'true'; } catch { return false; }
+  })();
+  const hasIncomeBoost = (() => {
+    try { return localStorage.getItem('dem_upgrade_income_boost') === 'true'; } catch { return false; }
+  })();
+
+  // Rule: 0 credits + nearWin -> x3
+  if (credits === 0 && Number(stats.nearWins || 0) >= 1) {
+    const p = getProduct('continue_pack_3');
+    return {
+      productId: 'continue_pack_3',
+      title: p?.title || 'Continue ×3',
+      reason: 'You were close to surviving recently. Keep backup credits ready.',
+      priority: 90
+    };
+  }
+
+  // Repeated pressure/power failures -> Calm Mode
+  if ((Number(stats.powerFailures || 0) + Number(stats.pressureFailures || 0)) >= 3) {
+    const p = getProduct('power_calm_mode');
+    return {
+      productId: 'power_calm_mode',
+      title: p?.title || 'Calm Mode (next shift)',
+      reason: 'Recent failures involved power/pressure stress. Calm Mode can reduce spikes next shift.',
+      priority: 85
+    };
+  }
+
+  // Many store opens + no Remove Ads -> Remove Ads
+  if (!hasNoAds && Number(stats.storeOpens || 0) >= 5) {
+    const p = getProduct('remove_ads');
+    return {
+      productId: 'remove_ads',
+      title: p?.title || 'Remove Ads',
+      reason: 'You’ve opened the store a lot. Supporter Clean Mode keeps future ad slots hidden on this browser.',
+      priority: 70
+    };
+  }
+
+  // Low money on last success -> Income Boost (if owned check false)
+  const lastSuccessMoney = (() => {
+    try { return Number(localStorage.getItem('dem.lastSuccessMoney') || '0'); } catch { return 0; }
+  })();
+  if (!hasIncomeBoost && lastSuccessMoney > 0 && lastSuccessMoney < 70) {
+    const p = getProduct('income_boost');
+    return {
+      productId: 'income_boost',
+      title: p?.title || 'Income Boost',
+      reason: 'You’re surviving nights, but money stays tight. Income Boost improves successful-night rewards.',
+      priority: 65
+    };
+  }
+
+  // Many single continues bought -> x10
+  const receipts = (() => {
+    try { return JSON.parse(localStorage.getItem('dem.purchaseReceipts') || '[]'); } catch { return []; }
+  })();
+  const singleBuys = Array.isArray(receipts)
+    ? receipts.filter((r) => String(r?.product || '') === 'continue_pack_1' || String(r?.product || '') === 'continue_credit').length
+    : 0;
+  if (singleBuys >= 4) {
+    const p = getProduct('continue_pack_10');
+    return {
+      productId: 'continue_pack_10',
+      title: p?.title || 'Continue ×10',
+      reason: 'You’ve bought several single continues. Bundles are better value for long runs.',
+      priority: 60
+    };
+  }
+
+  // Default -> x3
+  const p = getProduct('continue_pack_3');
+  return {
+    productId: 'continue_pack_3',
+    title: p?.title || 'Continue ×3',
+    reason: 'A practical backup for rough nights. Optional — you can always retry for free.',
+    priority: 10
+  };
+}
+
+window.demGetStoreRecommendation = demGetStoreRecommendation;
 
 function bindUi() {
   const failureTerms = $('dem-terms-accept-failure');
