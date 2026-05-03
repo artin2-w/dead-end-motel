@@ -13,12 +13,9 @@ import { getRoomPresentationMeta } from './presentation.js';
 import { tapeBackupEligible, buildDeskUvObjectLines } from './forensicNoir.js';
 import { roomEligibleForShaftRouting } from './borderTransfer.js';
 import { mountV56SummaryDossier } from './v56-summary-dossier.js';
+import { formatMoney } from './formatMoney.js';
 
 let _v21SelectedRoomId = null;
-
-function formatMoney(value) {
-  return `$${value}`;
-}
 
 function formatFamilyLabel(value = 'stable') {
   const text = String(value || 'stable').replace(/[-_]+/g, ' ');
@@ -1137,6 +1134,34 @@ export function renderTopbar(state) {
   }
 
   renderMotelCommandBoard(state);
+  syncV57PhoneToastUI(state);
+}
+
+export function syncV57PhoneToastUI(state) {
+  const el = document.getElementById('v57-phone-toast');
+  if (!el) return;
+  const toast = state?.v57?.pendingPhoneToast;
+  if (!toast) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  el.hidden = false;
+  const safe = (s) =>
+    String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/"/g, '&quot;');
+  el.innerHTML = `
+    <div class="v57-phone-toast-head">
+      <div>
+        <div class="v57-phone-toast-kicker">Incoming line</div>
+        <p class="v57-phone-toast-line">${safe(toast.line)}</p>
+      </div>
+      <button type="button" class="button button-utility" data-v57-dismiss-phone="1">Dismiss</button>
+    </div>
+    <p class="v57-phone-toast-hint">${safe(toast.hint)}</p>
+  `;
 }
 
 function getRiskBadgeClass(riskLevel = 'Low') {
@@ -1170,6 +1195,21 @@ function getSignalLevelClass(value = 0) {
   if (numeric >= 2) return 'is-strong';
   if (numeric >= 1) return 'is-moderate';
   return 'is-low';
+}
+
+function buildV57ManualChipsHtml(guest) {
+  const tags = Array.isArray(guest?.v57ManualTags) ? guest.v57ManualTags : [];
+  if (!tags.length) return '';
+  const labels = {
+    'id-mismatch': 'Manual: ID',
+    'wrong-reflection': 'Manual: UV',
+    'repeated-phrase': 'Manual: Phrase',
+    'no-shadow': 'Manual: Shadow',
+    'vehicle-plate-mismatch': 'Manual: Plate'
+  };
+  return tags
+    .map((id) => `<span class="v57-manual-chip" title="Field Manual pattern">${labels[id] || `Manual: ${id}`}</span>`)
+    .join('');
 }
 
 function buildSignalChips(guest) {
@@ -1673,6 +1713,7 @@ export function renderGuests(
         ${guest?.vehicleProfile ? '<span class="guest-meta-chip guest-meta-chip-scanner">Vehicle Read</span>' : ''}
         ${guest?.idInspected ? '<span class="guest-meta-chip guest-meta-chip-verified">ID Read</span>' : ''}
         ${guest?.uvInspected ? '<span class="guest-meta-chip guest-meta-chip-uv">UV Used</span>' : ''}
+        ${buildV57ManualChipsHtml(guest)}
       `;
 
     const polLow = String(guest.policyRecommendation || 'Approve').toLowerCase();
@@ -2029,7 +2070,8 @@ export function renderRooms(
   onLockDownRoom,
   onCallPoliceForRoom,
   onCutPowerToRoom,
-  onEvictRoomGuest
+  onEvictRoomGuest,
+  onListenInRoom
 ) {
   const roomList = document.getElementById('room-list');
   roomList.innerHTML = '';
@@ -2291,6 +2333,15 @@ export function renderRooms(
       bindAtomicActionButton(evictButton, () => onEvictRoomGuest(room.id), { groupRoot: actions });
 
       actions.appendChild(lockDownButton);
+      if (typeof onListenInRoom === 'function') {
+        const listenBtn = document.createElement('button');
+        listenBtn.className = 'button button-secondary v57-listen-btn';
+        listenBtn.type = 'button';
+        listenBtn.textContent = 'Listen In';
+        listenBtn.title = 'Intercept room audio — small power cost, text read, cooldown per room.';
+        bindAtomicActionButton(listenBtn, () => onListenInRoom(room.id), { groupRoot: actions });
+        actions.appendChild(listenBtn);
+      }
       actions.appendChild(callPoliceButton);
       actions.appendChild(cutPowerButton);
       actions.appendChild(evictButton);

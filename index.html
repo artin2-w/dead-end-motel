@@ -43,6 +43,7 @@
   <link rel="stylesheet" href="styles/v50-clarity.css" />
   <link rel="stylesheet" href="styles/v51-premium-surface.css" />
   <link rel="stylesheet" href="styles/v56-cinematic.css" />
+  <link rel="stylesheet" href="styles/v57-suspicion.css" />
   <link rel="stylesheet" href="styles/monetization-store.css" />
   <!-- Popunder disabled during AdSense review to protect user experience. -->
   <!-- Adsterra Popunder: baseline monetization script. Not a rewarded-ad callback. -->
@@ -405,6 +406,42 @@
               <div id="shift-progress-fill" class="shift-progress-fill"></div>
             </div>
             <div id="live-alert-strip" class="live-alert-strip"></div>
+            <details id="v57-field-manual" class="v57-field-manual">
+              <summary>Night Clerk Field Manual</summary>
+              <div class="v57-field-manual-body">
+                <div class="v57-manual-pattern">
+                  <h4>1. No Shadow</h4>
+                  <p><strong>Read:</strong> silhouette looks “cut out” or too thin under lobby light.</p>
+                  <p><strong>Tool:</strong> camera scan + compare arrival timing.</p>
+                  <p><strong>Risk:</strong> impersonation / wrong person at glass.</p>
+                </div>
+                <div class="v57-manual-pattern">
+                  <h4>2. Wrong Reflection</h4>
+                  <p><strong>Read:</strong> glass or laminate reacts wrong vs. angle of light.</p>
+                  <p><strong>Tool:</strong> UV pass on ID and objects.</p>
+                  <p><strong>Risk:</strong> altered surfaces, swapped props.</p>
+                </div>
+                <div class="v57-manual-pattern">
+                  <h4>3. Repeated Phrase</h4>
+                  <p><strong>Read:</strong> same wording across answers or scanner chatter.</p>
+                  <p><strong>Tool:</strong> follow-up questions + incident report review.</p>
+                  <p><strong>Risk:</strong> coached story, linked arrivals.</p>
+                </div>
+                <div class="v57-manual-pattern">
+                  <h4>4. ID Mismatch</h4>
+                  <p><strong>Read:</strong> document chips disagree with stated route or age.</p>
+                  <p><strong>Tool:</strong> Inspect ID → secondary verification.</p>
+                  <p><strong>Risk:</strong> forgery, pressure at desk.</p>
+                </div>
+                <div class="v57-manual-pattern">
+                  <h4>5. Vehicle Plate Mismatch</h4>
+                  <p><strong>Read:</strong> plate region vs. story; car heat vs. check-in time.</p>
+                  <p><strong>Tool:</strong> Ask Vehicle / lot scanner context.</p>
+                  <p><strong>Risk:</strong> drop-off watchers, wrong car for the name.</p>
+                </div>
+              </div>
+            </details>
+            <div id="v57-phone-toast" class="v57-phone-toast" hidden aria-live="assertive"></div>
             <div id="v35-shift-extensions" class="v35-shift-extensions" hidden aria-live="polite"></div>
             <div id="active-night-event-card" class="active-night-event-card">
               <p class="muted">No active shift events.</p>
@@ -588,7 +625,13 @@
               <button id="restore-power-btn" class="button button-primary">Emergency Restore</button>
               <button id="drain-power-btn" class="button button-danger">Emergency Reroute</button>
             </div>
+            <div class="button-row v57-power-lockdown-row">
+              <button id="v57-lobby-lockdown-btn" type="button" class="button button-warning">
+                Emergency Lobby Lockdown
+              </button>
+            </div>
             <p class="muted microcopy-line">Restore is steadier. Reroute is faster, but usually destabilizes something else.</p>
+            <p class="muted microcopy-line">Lockdown: panic only — heavy power draw, reputation hit, guests agitated. Long cooldown.</p>
             <p id="power-economy-meta" class="power-economy-meta muted"></p>
           </section>
 

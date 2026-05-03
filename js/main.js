@@ -16,6 +16,7 @@ import {
 } from './rooms.js';
 import { createDefaultCameras } from './cameras.js';
 import { clampPower } from './power.js';
+import { formatMoney } from './formatMoney.js';
 import { generateCameraScanResult } from './anomalies.js';
 import { reviewRoomIncidents, hasActionableIncidentReviewContext } from './incidents.js';
 import {
@@ -271,6 +272,19 @@ import {
 import { maybeOpenShiftHandover } from './v56-guided-handover.js';
 import { initV56DebugKeyboard } from './v56-debug-hooks.js';
 import {
+  ensureV57State,
+  resetV57ForNewShift,
+  tryV57PhoneCallEvent,
+  dismissV57PhoneToast,
+  surfaceV57CluesAfterGuestAction,
+  surfaceV57AfterDeskQuestion,
+  surfaceV57CameraScanHint,
+  surfaceV57AfterIncidentReview,
+  attemptListenInRoom,
+  attemptLobbyLockdown,
+  getV57LockdownButtonLabel
+} from './v57-suspicion-layer.js';
+import {
   loadSettings,
   saveSettings,
   normalizeSettings,
@@ -485,6 +499,15 @@ let settingsOverlayOpen = false;
 let isScreenTransitionInProgress = false;
 let _cfoAdTick = null;
 const actionLocks = new Set();
+
+/** Shift log line — same shape as state.logs.push(...) elsewhere (plain strings). */
+function addToLog(message) {
+  if (!state) return;
+  if (!Array.isArray(state.logs)) state.logs = [];
+  const text = String(message ?? '').trim();
+  if (!text) return;
+  state.logs.push(text);
+}
 
 // Dev helpers are intentionally isolated from normal release flow.
 const DEV_HELPERS_ENABLED = Boolean(window?.__DEM_DEV__);
@@ -6836,11 +6859,18 @@ function bootstrapState() {
   normalizeForensicNoirState(state);
   normalizeOperatorNoirState(state);
   normalizeBorderTransferState(state);
+  ensureV57State(state);
 }
 function renderAll() {
   evaluatePresentationState();
   const renderState = buildRenderState();
   renderTopbar(renderState);
+  try {
+    const ld = document.getElementById('v57-lobby-lockdown-btn');
+    if (ld) ld.textContent = getV57LockdownButtonLabel(state);
+  } catch {
+    /* ignore */
+  }
   renderCurrentPriorityCard(renderState);
   renderNightEventCard(renderState);
   renderGuests(
@@ -6863,7 +6893,8 @@ function renderAll() {
     lockDownRoom,
     callPoliceForRoom,
     cutPowerToRoom,
-    evictRoomGuest
+    evictRoomGuest,
+    handleListenInRoom
   );
   renderSharedSpaces(renderState);
   renderCameras(renderState);
@@ -7201,6 +7232,7 @@ function startShift() {
   audioController.playUiClick();
   cleanupTransientUiState('shift-start');
   resetV56AmbientForNewRun();
+  resetV57ForNewShift(state);
   try { localStorage.removeItem('dem.recoShownThisRun'); } catch { /* ignore */ }
   state.failedState = null;
   state.pendingRunCompletion = false;
@@ -10150,6 +10182,12 @@ function progressShift(actionKey, options = {}) {
     /* ignore */
   }
 
+  try {
+    tryV57PhoneCallEvent(state, { audioController });
+  } catch {
+    /* ignore */
+  }
+
   // v0.54 signature horror events
   try { window.demHorrorMaybeTrigger?.(state); } catch { /* ignore */ }
 
@@ -10582,6 +10620,11 @@ function inspectGuestId(guestId) {
       message: updatedGuest.flagged ? `${updatedGuest.name}'s ID raised desk concerns.` : `${updatedGuest.name}'s ID read clean.`,
       dedupeKey: `desk-id-${updatedGuest.id}`
     });
+    try {
+      surfaceV57CluesAfterGuestAction(state, guestId, 'id-inspect');
+    } catch {
+      /* ignore */
+    }
     if (checkFailureState()) return;
     if (progressShift('inspectId', { timeScale: updatedGuest.flagged ? 1.1 : 0.8 })) return;
     renderAll();
@@ -10641,6 +10684,11 @@ function deepInspectGuest(guestId) {
         : `${updatedGuest.name} cleared UV inspection.`,
       dedupeKey: `desk-uv-${updatedGuest.id}`
     });
+    try {
+      surfaceV57CluesAfterGuestAction(state, guestId, 'uv-inspect');
+    } catch {
+      /* ignore */
+    }
     if (checkFailureState()) return;
     if (progressShift('deepInspect', { timeScale: updatedGuest?.uvProfile?.suspicious ? 1.2 : 1 })) return;
     renderAll();
@@ -10754,6 +10802,11 @@ function requestSecondaryVerification(guestId) {
         : `${updatedGuest.name} cleared extra verification.`,
       dedupeKey: `desk-verify-${updatedGuest.id}`
     });
+    try {
+      surfaceV57CluesAfterGuestAction(state, guestId, 'secondary-verify');
+    } catch {
+      /* ignore */
+    }
     if (checkFailureState()) return;
     if (progressShift('secondaryVerify')) return;
     renderAll();
@@ -10821,6 +10874,11 @@ function questionGuestFurther(guestId, questionId = 'inconsistency') {
         : `${updatedGuest.name} held together under questioning.`,
       dedupeKey: `desk-question-${updatedGuest.id}-${questionId}`
     });
+    try {
+      surfaceV57AfterDeskQuestion(state, guestId, questionId);
+    } catch {
+      /* ignore */
+    }
     if (checkFailureState()) return;
     if (progressShift('secondaryVerify', { timeScale: 0.9 })) return;
     renderAll();
@@ -11164,6 +11222,11 @@ function scanCameraSystem() {
     });
   }
   state.logs = [...state.logs, ...mergedScan.logs];
+  try {
+    surfaceV57CameraScanHint(state, mergedScan);
+  } catch {
+    /* ignore */
+  }
 
   if (unresolvedCarry > 0) {
     state.shiftStats.unresolvedLocationScenes =
@@ -12342,6 +12405,11 @@ function reviewIncidents() {
   ) {
     return;
   }
+  try {
+    surfaceV57AfterIncidentReview(state, meaningful, Number(result.generated || 0) > 0);
+  } catch {
+    /* ignore */
+  }
   updateOnboarding((current) => markTutorialEvent(current, 'report-action'));
   renderAll();
 }
@@ -12623,6 +12691,28 @@ function cutPowerToRoom(roomId) {
   renderAll();
 }
 
+function handleListenInRoom(roomId) {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  try {
+    audioController.playUiClick();
+  } catch {
+    /* ignore */
+  }
+  attemptListenInRoom(state, roomId, { progressShift, renderAll, audioController });
+}
+
+function handleLobbyLockdownClick() {
+  if (activeScreenId !== 'game-screen') return;
+  onMeaningfulAction();
+  try {
+    audioController.playUiClick();
+  } catch {
+    /* ignore */
+  }
+  attemptLobbyLockdown(state, { progressShift, renderAll });
+}
+
 function evictRoomGuest(roomId) {
   onMeaningfulAction();
   audioController.playUiClick();
@@ -12890,6 +12980,7 @@ function nextNight() {
   state.autoIncidentCooldown = 0;
   state.escalationTick = 0;
   state.shiftElapsedMinutes = 0;
+  resetV57ForNewShift(state);
   state._demCalmBoostApplied = false;
   state.dawnProcessed = false;
   state.lastAdvanceReason = null;
@@ -13004,6 +13095,7 @@ function bindEvents() {
   document.getElementById('scan-cameras-btn').addEventListener('click', scanCameraSystem);
   document.getElementById('restore-power-btn').addEventListener('click', restorePower);
   document.getElementById('drain-power-btn').addEventListener('click', drainPower);
+  document.getElementById('v57-lobby-lockdown-btn')?.addEventListener('click', handleLobbyLockdownClick);
   document.getElementById('review-incidents-btn').addEventListener('click', reviewIncidents);
   document.getElementById('dispatch-staff-btn').addEventListener('click', dispatchStaff);
   document.getElementById('end-night-btn').addEventListener('click', endNight);
@@ -13027,6 +13119,12 @@ function bindEvents() {
   if (appRoot && !appRoot.dataset.v35UiDelegation) {
     appRoot.dataset.v35UiDelegation = '1';
     appRoot.addEventListener('click', (e) => {
+      if (e.target.closest('[data-v57-dismiss-phone]')) {
+        dismissV57PhoneToast(state);
+        renderAll();
+        e.preventDefault();
+        return;
+      }
       const pickBtn = e.target.closest('[data-dark-contract-id]');
       if (pickBtn && activeScreenId === 'night-prep-screen') {
         handleSelectDarkContract(pickBtn.getAttribute('data-dark-contract-id'));

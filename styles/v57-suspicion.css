@@ -1,0 +1,114 @@
+/**
+ * v0.57 — Suspicion layer: field manual, phone toast, manual clue chips, listen-in.
+ */
+
+.v57-field-manual {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 18, 28, 0.55);
+}
+
+.v57-field-manual > summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.92);
+  list-style: none;
+}
+
+.v57-field-manual > summary::-webkit-details-marker {
+  display: none;
+}
+
+.v57-field-manual-body {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.9);
+}
+
+.v57-manual-pattern {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.45);
+}
+
+.v57-manual-pattern:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.v57-manual-pattern h4 {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(251, 191, 36, 0.88);
+}
+
+.v57-manual-pattern p {
+  margin: 0.25rem 0;
+}
+
+.v57-phone-toast {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: linear-gradient(135deg, rgba(40, 22, 10, 0.92), rgba(12, 10, 8, 0.95));
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+}
+
+.v57-phone-toast-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.v57-phone-toast-kicker {
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(251, 191, 36, 0.85);
+}
+
+.v57-phone-toast-line {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  color: #fff5e8;
+}
+
+.v57-phone-toast-hint {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.v57-manual-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: rgba(224, 242, 254, 0.95);
+  background: rgba(12, 74, 110, 0.35);
+  margin-left: 4px;
+}
+
+.v57-listen-btn {
+  font-size: 0.72rem;
+}
+
+.v57-power-lockdown-row {
+  margin-top: 8px;
+}
