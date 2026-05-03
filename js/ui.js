@@ -14,6 +14,13 @@ import { tapeBackupEligible, buildDeskUvObjectLines } from './forensicNoir.js';
 import { roomEligibleForShaftRouting } from './borderTransfer.js';
 import { mountV56SummaryDossier } from './v56-summary-dossier.js';
 import { formatMoney } from './formatMoney.js';
+import {
+  syncV58ShiftStatusDom,
+  syncV58VoiceToastDom,
+  syncV58AtmosphereClasses,
+  buildV58TraitChipsHtml,
+  computeV58MoralityProfile
+} from './v58-living-motel.js';
 
 let _v21SelectedRoomId = null;
 
@@ -627,7 +634,8 @@ export function renderTopbar(state) {
       const emphasis =
         isAmbient || Number(alert?.message?.length || 0) >= 96 || type === 'danger';
       const label = isActionable ? 'Action' : isAmbient ? 'Ambient' : type.toUpperCase();
-      item.className = `live-alert live-alert-${type} ${isActionable ? 'live-alert-actionable' : ''} ${isAmbient ? 'live-alert-v56-ambient' : ''} ${emphasis ? 'is-emphasis' : ''}`;
+      const v58Voice = /voice line|audio intercept/i.test(String(alert?.message || ''));
+      item.className = `live-alert live-alert-${type} ${isActionable ? 'live-alert-actionable' : ''} ${isAmbient ? 'live-alert-v56-ambient' : ''} ${emphasis ? 'is-emphasis' : ''} ${v58Voice ? 'live-alert-v58-voice' : ''}`;
       item.innerHTML = `
         <strong class="live-alert-label">${label}</strong>
         <span>${alert?.message || ''}</span>
@@ -1134,6 +1142,13 @@ export function renderTopbar(state) {
   }
 
   renderMotelCommandBoard(state);
+  try {
+    syncV58ShiftStatusDom(state);
+    syncV58VoiceToastDom(state);
+    syncV58AtmosphereClasses(state);
+  } catch {
+    /* ignore */
+  }
   syncV57PhoneToastUI(state);
 }
 
@@ -1714,6 +1729,7 @@ export function renderGuests(
         ${guest?.idInspected ? '<span class="guest-meta-chip guest-meta-chip-verified">ID Read</span>' : ''}
         ${guest?.uvInspected ? '<span class="guest-meta-chip guest-meta-chip-uv">UV Used</span>' : ''}
         ${buildV57ManualChipsHtml(guest)}
+        ${buildV58TraitChipsHtml(guest)}
       `;
 
     const polLow = String(guest.policyRecommendation || 'Approve').toLowerCase();
@@ -3656,6 +3672,18 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
     runBonusLabel.textContent = bonus > 0
       ? `Archive bonus active: +${bonus}%`
       : 'Archive bonus active: None';
+  }
+
+  const v58Strip = document.getElementById('summary-v58-strip');
+  if (v58Strip) {
+    try {
+      const moral = computeV58MoralityProfile(state);
+      v58Strip.hidden = false;
+      v58Strip.textContent = `Living motel read — Morality: ${moral.profile} (check-ins ${moral.checkIns}, turned away ${moral.rejects}, flags ${moral.flags}).`;
+    } catch {
+      v58Strip.hidden = true;
+      v58Strip.textContent = '';
+    }
   }
 
   const v35Strip = document.getElementById('summary-v35-strip');

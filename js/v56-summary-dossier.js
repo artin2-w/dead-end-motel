@@ -2,6 +2,8 @@
  * v0.56 — End-of-shift dossier strip (charts + incident highlight + CCTV card).
  */
 
+import { buildV58DossierHtml } from './v58-living-motel.js';
+
 function barRow(label, startPct, endPct) {
   const a = Math.max(0, Math.min(100, Math.round(Number(startPct) || 0)));
   const b = Math.max(0, Math.min(100, Math.round(Number(endPct) || 0)));
@@ -80,6 +82,13 @@ export function mountV56SummaryDossier(summary, state, rootOverride = null) {
   const digest = choiceDigest(state);
   const grade = summary?.grade || '—';
 
+  let v58DossierHtml = '';
+  try {
+    v58DossierHtml = buildV58DossierHtml(state);
+  } catch {
+    v58DossierHtml = '';
+  }
+
   root.innerHTML = `
     <div class="v56-dossier-strip-intro" role="region" aria-label="Night dossier">
       <span class="v56-dossier-strip-kicker">Shift archive</span>
@@ -108,6 +117,7 @@ export function mountV56SummaryDossier(summary, state, rootOverride = null) {
         <h4 class="v56-dossier-heading">Operator choices</h4>
         <p>${digest}</p>
       </div>
+      ${v58DossierHtml}
     </div>
   `;
 }
