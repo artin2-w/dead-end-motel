@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Dead End Motel is a browser-based horror management game where you manage guests, cameras, power, and survive intense night shifts." />
   <title>Dead End Motel - Browser Horror Management Game</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23140d0a'/%3E%3Cpath fill='%23c4a882' d='M8 22V10h4l4 7 4-7h4v12h-3.5v-7.2L12.8 22H11.2L8.5 14.8V22z'/%3E%3C/svg%3E" />
   <!-- Social preview (no og:image yet — add when an asset exists) -->
   <meta property="og:title" content="Dead End Motel - Browser Horror Management Game" />
   <meta property="og:description" content="Dead End Motel is a free browser horror management game where you manage guests, cameras, power, and survive strange night shifts." />
@@ -41,6 +42,7 @@
   <link rel="stylesheet" href="styles/v43-control-surface.css" />
   <link rel="stylesheet" href="styles/v50-clarity.css" />
   <link rel="stylesheet" href="styles/v51-premium-surface.css" />
+  <link rel="stylesheet" href="styles/v56-cinematic.css" />
   <link rel="stylesheet" href="styles/monetization-store.css" />
   <!-- Popunder disabled during AdSense review to protect user experience. -->
   <!-- Adsterra Popunder: baseline monetization script. Not a rewarded-ad callback. -->
@@ -219,7 +221,7 @@
   <div id="app" class="app-shell screen-main-menu v42-root v43-root v50-root v51-root">
     <header class="topbar topbar-v20 v42-topbar v43-topbar" role="banner">
       <div class="topbar-brand">
-        <p class="eyebrow">Dead End Motel v0.55</p>
+        <p class="eyebrow">Dead End Motel v0.56</p>
         <h1>Dead End Motel</h1>
         <p class="topbar-subtitle">Keep the sign lit until dawn.</p>
       </div>
@@ -627,6 +629,7 @@
                 <div id="summary-v35-strip" class="summary-v35-strip" hidden></div>
                 <h3 id="summary-outcome-title" class="summary-outcome-title"></h3>
                 <p id="summary-outcome-note" class="summary-outcome-note"></p>
+                <div id="v56-summary-dossier" class="v56-summary-dossier" aria-label="Shift dossier"></div>
               </div>
             </section>
 

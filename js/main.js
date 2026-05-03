@@ -262,6 +262,14 @@ import {
   createAudioController,
   getPressureAudioLevel
 } from './audio.js';
+import { applyV56Atmosphere } from './v56-atmosphere.js';
+import {
+  tryV56AmbientEncounter,
+  tryV56AmbientEncounterEarlyPing,
+  resetV56AmbientForNewRun
+} from './v56-ambient-encounters.js';
+import { maybeOpenShiftHandover } from './v56-guided-handover.js';
+import { initV56DebugKeyboard } from './v56-debug-hooks.js';
 import {
   loadSettings,
   saveSettings,
@@ -587,6 +595,12 @@ function cleanupTransientUiState(reason = 'screen-transition') {
 
   // Finale UI should never leak into non-finale screens/runs.
   clearFinaleUiLeak(state);
+
+  try {
+    document.getElementById('v56-handover-overlay')?.remove();
+  } catch {
+    /* ignore */
+  }
 
   if (reason === 'hard-reset') {
     state.summaryBranchNotes = [];
@@ -6914,6 +6928,23 @@ function renderAll() {
     // Phase 3 visuals are optional and must fail gracefully.
   }
 
+  try {
+    applyV56Atmosphere(renderState);
+    maybeOpenShiftHandover({
+      activeScreenId,
+      night: state?.night,
+      onFinished: () => {
+        try {
+          renderAll();
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+  } catch {
+    /* ignore */
+  }
+
   saveState(state);
 
   // v0.54: set alert bridge for signature-horror.js on first renderAll
@@ -7169,6 +7200,7 @@ function startShift() {
   onMeaningfulAction();
   audioController.playUiClick();
   cleanupTransientUiState('shift-start');
+  resetV56AmbientForNewRun();
   try { localStorage.removeItem('dem.recoShownThisRun'); } catch { /* ignore */ }
   state.failedState = null;
   state.pendingRunCompletion = false;
@@ -10100,6 +10132,22 @@ function progressShift(actionKey, options = {}) {
       normalizeTownState();
       fireMidnightDJBroadcast();
     }
+  }
+
+  try {
+    tryV56AmbientEncounterEarlyPing(state, { pushLiveAlert });
+    tryV56AmbientEncounter(state, {
+      pushLiveAlert,
+      playStaticBurst: () => {
+        try {
+          audioController.playStaticBurst('light');
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+  } catch {
+    /* ignore */
   }
 
   // v0.54 signature horror events
@@ -13069,6 +13117,13 @@ function bindEvents() {
 
 bootstrapState();
 bindEvents();
+initV56DebugKeyboard({
+  getActiveScreenId: () => activeScreenId,
+  getState: () => state,
+  renderAll,
+  audioController,
+  pushLiveAlert
+});
 renderAll();
 
 // Dawn integrity watchdog — last-resort fallback only.

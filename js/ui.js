@@ -12,6 +12,7 @@ import {
 import { getRoomPresentationMeta } from './presentation.js';
 import { tapeBackupEligible, buildDeskUvObjectLines } from './forensicNoir.js';
 import { roomEligibleForShaftRouting } from './borderTransfer.js';
+import { mountV56SummaryDossier } from './v56-summary-dossier.js';
 
 let _v21SelectedRoomId = null;
 
@@ -625,10 +626,13 @@ export function renderTopbar(state) {
       const item = document.createElement('div');
       const type = alert?.type || 'info';
       const isActionable = alert?.kind === 'actionable';
-      const emphasis = Number(alert?.message?.length || 0) >= 96 || type === 'danger';
-      item.className = `live-alert live-alert-${type} ${isActionable ? 'live-alert-actionable' : ''} ${emphasis ? 'is-emphasis' : ''}`;
+      const isAmbient = alert?.kind === 'ambient';
+      const emphasis =
+        isAmbient || Number(alert?.message?.length || 0) >= 96 || type === 'danger';
+      const label = isActionable ? 'Action' : isAmbient ? 'Ambient' : type.toUpperCase();
+      item.className = `live-alert live-alert-${type} ${isActionable ? 'live-alert-actionable' : ''} ${isAmbient ? 'live-alert-v56-ambient' : ''} ${emphasis ? 'is-emphasis' : ''}`;
       item.innerHTML = `
-        <strong class="live-alert-label">${isActionable ? 'Action' : type.toUpperCase()}</strong>
+        <strong class="live-alert-label">${label}</strong>
         <span>${alert?.message || ''}</span>
       `;
       alertStrip.appendChild(item);
@@ -3882,6 +3886,12 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
     } else {
       summaryEvidenceSlot.innerHTML = '';
     }
+  }
+
+  try {
+    mountV56SummaryDossier(summary, state);
+  } catch {
+    /* ignore */
   }
 }
 
