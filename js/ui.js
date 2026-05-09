@@ -21,6 +21,7 @@ import {
   buildV58TraitChipsHtml,
   computeV58MoralityProfile
 } from './v58-living-motel.js';
+import { buildV60GuestCardsSummaryHtml } from './v60-motel-memory.js';
 
 let _v21SelectedRoomId = null;
 
@@ -1461,6 +1462,8 @@ export function syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGue
   checkIn.type = 'button';
   checkIn.className = 'button button-primary';
   checkIn.textContent = 'Check In';
+  checkIn.setAttribute('data-v59-label-default', 'Check In');
+  checkIn.setAttribute('data-v59-label-lie', 'Let them in');
   checkIn.title = 'Assign room now.';
   bindAtomicActionButton(checkIn, () => onCheckIn(guestId, roomValue()), { groupRoot: row });
 
@@ -1475,6 +1478,8 @@ export function syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGue
   rejectBtn.type = 'button';
   rejectBtn.className = 'button button-danger';
   rejectBtn.textContent = 'Reject';
+  rejectBtn.setAttribute('data-v59-label-default', 'Reject');
+  rejectBtn.setAttribute('data-v59-label-lie', 'Keep them out');
   rejectBtn.title = 'Turn the guest away.';
   bindAtomicActionButton(rejectBtn, () => onRejectGuest(guestId), { groupRoot: row });
 
@@ -1766,6 +1771,21 @@ export function renderGuests(
       </div>
       ${reasonsHtml ? `<div class="v50-guest-reasons">${reasonsHtml}</div>` : ''}
       <p class="v51-guest-desk-line">${strapline}</p>
+      ${
+        guest?.v60Story
+          ? `<div class="v60-guest-story">
+          <p class="v60-guest-story-hint">${String(guest.v60Story.dangerHint || '').replace(/</g, '')}</p>
+          <div class="v60-guest-story-chips">${(Array.isArray(guest.v60Story.revealed) ? guest.v60Story.revealed : [])
+              .map((r) => `<span class="v60-story-chip">${String(r).replace(/</g, '')}</span>`)
+              .join('')}</div>
+          ${
+            guest.v60Story.weirdRequest?.label
+              ? `<p class="v60-guest-request">Request: ${String(guest.v60Story.weirdRequest.label).replace(/</g, '')}</p>`
+              : ''
+          }
+        </div>`
+          : ''
+      }
       ${guest.threadMemoryLine || guest.priorHistoryLine
         ? `<details class="v51-thread-drawer"><summary>Thread / prior context</summary><div class="guest-history-block"><p class="guest-history-line muted">${[guest.priorHistoryLine, guest.threadMemoryLine].filter(Boolean).join(' · ')}</p></div></details>`
         : ''}
@@ -1897,6 +1917,8 @@ export function renderGuests(
     const checkInButton = document.createElement('button');
     checkInButton.className = 'button button-primary';
     checkInButton.textContent = 'Check In';
+    checkInButton.setAttribute('data-v59-label-default', 'Check In');
+    checkInButton.setAttribute('data-v59-label-lie', 'Let them in');
     checkInButton.title = 'Assign room now. Gains money, but may introduce pressure depending on guest risk.';
     bindAtomicActionButton(checkInButton, () => onCheckIn(guest.id, roomSelect?.value || null), { groupRoot: actions });
 
@@ -1909,6 +1931,8 @@ export function renderGuests(
     const rejectButton = document.createElement('button');
     rejectButton.className = 'button button-danger';
     rejectButton.textContent = 'Reject';
+    rejectButton.setAttribute('data-v59-label-default', 'Reject');
+    rejectButton.setAttribute('data-v59-label-lie', 'Keep them out');
     rejectButton.title = 'Turn the guest away. May reduce immediate risk but can hurt reputation.';
     bindAtomicActionButton(rejectButton, () => onRejectGuest(guest.id), { groupRoot: actions });
 
@@ -2137,7 +2161,11 @@ export function renderRooms(
         <div class="room-card-v20-surface v42-room-body">
           <div class="room-card-header">
             <h4>${room.label}</h4>
-            <span class="room-condition-pill">${room.condition || 'Stable'}</span>
+            <span class="room-condition-pill">${room.condition || 'Stable'}</span>${
+            (state?.v60?.motelMemory?.roomsHaunted || []).map(Number).includes(Number(room.id))
+              ? '<span class="v60-room-memory-chip" title="Motel memory">Memory stain</span>'
+              : ''
+          }
           </div>
           <p class="room-occupant-summary">Occupied by <strong>${room.guestName || room.occupiedBy}</strong>${room.occupantArchetypeLabel ? ` · ${room.occupantArchetypeLabel}` : ''}</p>
           ${Number(room.stayNightsRemaining) > 0 ? `<p class="room-stay-line muted">Stay: ${room.stayNightsRemaining} night${Number(room.stayNightsRemaining) === 1 ? '' : 's'} incl. tonight${Number(room.stayNightsRemaining) === 1 ? ' · checkout dawn' : ''}</p>` : ''}
@@ -2354,6 +2382,8 @@ export function renderRooms(
         listenBtn.className = 'button button-secondary v57-listen-btn';
         listenBtn.type = 'button';
         listenBtn.textContent = 'Listen In';
+        listenBtn.setAttribute('data-v59-label-default', 'Listen In');
+        listenBtn.setAttribute('data-v59-label-lie', 'They hear you');
         listenBtn.title = 'Intercept room audio — small power cost, text read, cooldown per room.';
         bindAtomicActionButton(listenBtn, () => onListenInRoom(room.id), { groupRoot: actions });
         actions.appendChild(listenBtn);
@@ -3683,6 +3713,17 @@ export function renderSummary(summary, state, outcomeFlavor = null) {
     } catch {
       v58Strip.hidden = true;
       v58Strip.textContent = '';
+    }
+  }
+
+  const v60CardMount = document.getElementById('summary-v60-cards');
+  if (v60CardMount) {
+    try {
+      v60CardMount.innerHTML = `<p class="section-tag">Guest cards (v0.60)</p><div class="v60-dossier-cards">${buildV60GuestCardsSummaryHtml(state)}</div>`;
+      v60CardMount.hidden = false;
+    } catch {
+      v60CardMount.innerHTML = '';
+      v60CardMount.hidden = true;
     }
   }
 

@@ -2,6 +2,15 @@
 
 A clean, modular starter for the first playable prototype of **Dead End Motel**.
 
+## Version: Staff Terminal & Site Integration Foundation
+
+Notes:
+
+- Adds a local **Staff Terminal** on the front desk (modal) with Overview, Guest Lookup, Room Records, Incident Log, Code Entry, and Staff Portal tabs.
+- Introduces **guest file IDs**, **room records** (including Room 204 warnings), **incident archive IDs**, and **verification code** entry with optional `localStorage` unlock notes.
+- Includes optional, clearly labeled **external links** to the official site ([deadendmotel.site](https://deadendmotel.site)) — the game does not open them unless the player chooses.
+- **No backend**, **no login**, **no online dependency**; website material is optional lore and future second-screen support.
+
 ## What is included
 - Main menu
 - Front desk panel
@@ -18,8 +27,10 @@ A clean, modular starter for the first playable prototype of **Dead End Motel**.
   - `base.css`
   - `theme.css`
   - `ui.css`
+  - `staff-terminal.css` (Staff Terminal / site foundation UI)
 - `js/`
   - `main.js`
+  - `staffTerminal.js` (Staff Terminal / site foundation logic)
   - `state.js`
   - `ui.js`
   - `guests.js`

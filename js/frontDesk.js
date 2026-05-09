@@ -1,3 +1,5 @@
+import { getV60ReputationGainMult } from './v60-motel-memory.js';
+
 function clampReputationValue(value) {
   return Math.max(0, value);
 }
@@ -123,6 +125,14 @@ export function adjustRoomForDeskDecision(room, guest) {
   return updatedRoom;
 }
 
-export function applyReputationDelta(currentValue, delta) {
-  return clampReputationValue(currentValue + delta);
+export function applyReputationDelta(currentValue, delta, state = null) {
+  let d = Number(delta) || 0;
+  if (state && d > 0) {
+    try {
+      d = Math.round(d * getV60ReputationGainMult(state) * 1000) / 1000;
+    } catch {
+      /* ignore */
+    }
+  }
+  return clampReputationValue(currentValue + d);
 }

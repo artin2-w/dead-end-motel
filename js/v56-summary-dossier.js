@@ -3,6 +3,8 @@
  */
 
 import { buildV58DossierHtml } from './v58-living-motel.js';
+import { buildV59SummaryHtml } from './v59-physical-desk.js';
+import { buildV60SummaryHtml } from './v60-motel-memory.js';
 
 function barRow(label, startPct, endPct) {
   const a = Math.max(0, Math.min(100, Math.round(Number(startPct) || 0)));
@@ -89,6 +91,20 @@ export function mountV56SummaryDossier(summary, state, rootOverride = null) {
     v58DossierHtml = '';
   }
 
+  let v59DossierHtml = '';
+  try {
+    v59DossierHtml = buildV59SummaryHtml(state);
+  } catch {
+    v59DossierHtml = '';
+  }
+
+  let v60DossierHtml = '';
+  try {
+    v60DossierHtml = buildV60SummaryHtml(state);
+  } catch {
+    v60DossierHtml = '';
+  }
+
   root.innerHTML = `
     <div class="v56-dossier-strip-intro" role="region" aria-label="Night dossier">
       <span class="v56-dossier-strip-kicker">Shift archive</span>
@@ -118,6 +134,8 @@ export function mountV56SummaryDossier(summary, state, rootOverride = null) {
         <p>${digest}</p>
       </div>
       ${v58DossierHtml}
+      ${v59DossierHtml}
+      ${v60DossierHtml}
     </div>
   `;
 }

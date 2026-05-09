@@ -284,6 +284,49 @@ import {
   attemptLobbyLockdown,
   getV57LockdownButtonLabel
 } from './v57-suspicion-layer.js';
+import { syncV59ParanoiaDom, tickV59ParanoiaMaybe } from './v59-paranoia.js';
+import {
+  ensureV59State,
+  resetV59ForNewShift,
+  tryV59PhoneRing,
+  tickV59PhoneExpire,
+  syncV59PhysicalDom,
+  armDispatchWait,
+  bindV59DeskUi,
+  v59CloseLobbyView,
+  v59PrinterClose,
+  tryV59ContrabandDiscovery,
+  initV59DebugShortcuts,
+  forceV59PhoneCall,
+  forceV59SwitchboardToFirstOccupied,
+  forceV59LobbyThreat,
+  forceV59RadioMeaningful,
+  forceV59PrinterJamDev,
+  forceV59DispatchSignalLostDev,
+  forceV59ContrabandDev,
+  forceV59SanityGlitchDev
+} from './v59-physical-desk.js';
+import {
+  ensureV60State,
+  resetV60ForNewShift,
+  rollV60NightEvolution,
+  adjustVeil,
+  applyV60MemoryFromDecision,
+  surfaceV60MemoryReminder,
+  syncV60Ui,
+  enrichGuestV60Story,
+  v60RevealGuestStoryClue,
+  tryV60PhoneBoothRing,
+  v60PhoneBoothAnswer,
+  v60PhoneBoothIgnore,
+  v60IncidentChanceMultiplier,
+  v60AwardGuestCardsEndNight,
+  initV60DebugShortcuts,
+  maybeHauntRoomFromSevere,
+  grantV60StaffNoteDev,
+  forceV60PhoneBoothRingDev,
+  forceV60GuestCardDev
+} from './v60-motel-memory.js';
 import {
   ensureV58State,
   maybeRollV58NightIfNeeded,
@@ -360,6 +403,7 @@ import {
   resetCarryoverMemory
 } from './carryover.js';
 import { saveState, loadState, clearSave } from './save.js';
+import { initStaffTerminal } from './staffTerminal.js';
 import {
   normalizeProgressionState,
   getUpgradeCatalog,
@@ -628,6 +672,12 @@ function clearFinaleUiLeak(targetState = state) {
 
 function cleanupTransientUiState(reason = 'screen-transition') {
   if (!state || typeof state !== 'object') return;
+
+  try {
+    window.demForceCloseStaffTerminal?.();
+  } catch {
+    /* ignore */
+  }
 
   closePersistentOverlaysSilently();
 
@@ -4640,10 +4690,18 @@ function maybeGenerateOccupiedRoomRequest(source = 'tick') {
   const averageAnxiety = candidates.reduce((sum, room) => sum + Number(room?.serviceState?.anxiety || 0), 0) / Math.max(1, candidates.length);
   const overlapBoost = Math.max(0, Number(state?.crisisEscalation?.overlapPressureLevel || 0)) * 0.03;
   const earlyNightDampener = night <= 2 && Number(state?.shiftElapsedMinutes || 0) < 120 ? 0.03 : 0;
-  const baseChance = Math.max(
+  let baseChance = Math.max(
     0.04,
     (crisis.active ? 0.18 : 0.09) + Math.min(0.08, averageAnxiety * 0.02) + overlapBoost + (blackout.active ? 0.05 : 0) - earlyNightDampener
   );
+  try {
+    ensureV60State(state);
+    const mult =
+      candidates.reduce((s, r) => s + v60IncidentChanceMultiplier(state, r.id), 0) / Math.max(1, candidates.length);
+    baseChance *= mult;
+  } catch {
+    /* ignore */
+  }
   const roll = Math.random();
   if (roll > baseChance) return false;
   const target = candidates.sort((a, b) => {
@@ -5124,6 +5182,11 @@ function resolveRoomServiceAction(roomId, actionType) {
     markRoomMemory(roomId, {
       note: `${request.title} was handled cleanly here during the night.`
     });
+    try {
+      applyV60MemoryFromDecision(state, { kind: 'resolve-clean' });
+    } catch {
+      /* ignore */
+    }
   } else if (partial) {
     noteStaffOutcome(staffRoleTag, `Partial response in ${room.label}.`, {
       fatigue: 0.07,
@@ -5168,6 +5231,14 @@ function resolveRoomServiceAction(roomId, actionType) {
       }`
     );
     state.shiftStats.roomCallsMissed = (state.shiftStats.roomCallsMissed || 0) + 1;
+    try {
+      applyV60MemoryFromDecision(state, { kind: 'ignore-incident' });
+      if (truthState === 'real-threat') {
+        maybeHauntRoomFromSevere(state, roomId, 'Real threat missed at the desk');
+      }
+    } catch {
+      /* ignore */
+    }
     if (truthState === 'real-threat') {
       state.shiftStats.realThreatsMissed = (state.shiftStats.realThreatsMissed || 0) + 1;
     }
@@ -6889,10 +6960,17 @@ function bootstrapState() {
     /* ignore */
   }
   ensureV57State(state);
+  ensureV59State(state);
+  ensureV60State(state);
 }
 function renderAll() {
   evaluatePresentationState();
   const renderState = buildRenderState();
+  try {
+    window.demRefreshStaffTerminal?.(renderState);
+  } catch {
+    /* ignore */
+  }
   renderTopbar(renderState);
   try {
     const ld = document.getElementById('v57-lobby-lockdown-btn');
@@ -7001,6 +7079,22 @@ function renderAll() {
         }
       }
     });
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    ensureV59State(state);
+    tickV59PhoneExpire(state);
+    syncV59PhysicalDom(state, audioController);
+    syncV59ParanoiaDom(state);
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    ensureV60State(state);
+    syncV60Ui(state);
   } catch {
     /* ignore */
   }
@@ -7267,6 +7361,14 @@ function startShift() {
   cleanupTransientUiState('shift-start');
   resetV56AmbientForNewRun();
   resetV57ForNewShift(state);
+  ensureV59State(state);
+  resetV59ForNewShift(state);
+  ensureV60State(state);
+  try {
+    rollV60NightEvolution(state);
+  } catch {
+    /* ignore */
+  }
   try {
     maybeRollV58NightIfNeeded(state);
   } catch {
@@ -9807,6 +9909,20 @@ function progressShift(actionKey, options = {}) {
   });
   maybeAdvanceSignatureNightFlow('progress', { actionKey });
 
+  try {
+    ensureV59State(state);
+    tryV59PhoneRing(state, audioController);
+    tickV59ParanoiaMaybe(state);
+  } catch {
+    /* ignore */
+  }
+  try {
+    ensureV60State(state);
+    tryV60PhoneBoothRing(state);
+  } catch {
+    /* ignore */
+  }
+
   const branchContext = getBranchContext(true);
   const eventTick = tickNightEvents(state, branchContext);
   if (Array.isArray(eventTick?.logs) && eventTick.logs.length) {
@@ -10234,7 +10350,13 @@ function progressShift(actionKey, options = {}) {
 
   try {
     if (Math.random() < 0.052) {
-      maybeRollShadowTrace(state, 'ambient');
+      if (maybeRollShadowTrace(state, 'ambient')) {
+        try {
+          applyV60MemoryFromDecision(state, { kind: 'shadow-trace' });
+        } catch {
+          /* ignore */
+        }
+      }
     }
     tryV58VoiceIntercept(state, { audioController, source: 'ambient', chance: 0.028 });
   } catch {
@@ -10314,6 +10436,11 @@ function callNextArrival() {
     )
   };
   const preparedDeskGuest = normalizeDeskInspectionGuest(guestWithStay, state);
+  try {
+    enrichGuestV60Story(preparedDeskGuest, state);
+  } catch {
+    /* ignore */
+  }
   if (preparedDeskGuest.isReturningGuest) {
     const preferredRoom = state.rooms.find((room) => room.id === preparedDeskGuest.assignedRoomMemoryId);
     if (preferredRoom?.memory?.note) {
@@ -10459,7 +10586,7 @@ function flagGuest(guestId) {
   }
 
   state.logs = [...state.logs, ...outcome.logs];
-  state.reputation = applyReputationDelta(state.reputation, outcome.reputationDelta);
+  state.reputation = applyReputationDelta(state.reputation, outcome.reputationDelta, state);
 
   if (!wasFlagged) {
     state.shiftStats.flagged += 1;
@@ -10596,8 +10723,20 @@ function rejectGuest(guestId) {
   } catch {
     /* ignore */
   }
-  state.reputation = applyReputationDelta(state.reputation, _rejRep);
+  state.reputation = applyReputationDelta(state.reputation, _rejRep, state);
   state.logs = [...state.logs, ...policyOutcome.logs];
+  try {
+    const polRec = String(guest.policyRecommendation || '').toLowerCase();
+    if (
+      (policyOutcome.policyOverride || polRec.includes('approve')) &&
+      String(guest.riskLevel || '').toLowerCase() === 'low' &&
+      !guest.flagged
+    ) {
+      applyV60MemoryFromDecision(state, { kind: 'reject-innocent', guestName: guest.name });
+    }
+  } catch {
+    /* ignore */
+  }
   let _polRep = policyOutcome.reputationDelta;
   try {
     _polRep = applyOwnerAuditRepExtra(state, _polRep);
@@ -10714,6 +10853,16 @@ function inspectGuestId(guestId) {
     }
     if (checkFailureState()) return;
     if (progressShift('inspectId', { timeScale: updatedGuest.flagged ? 1.1 : 0.8 })) return;
+    try {
+      v60RevealGuestStoryClue(state, guestId, 'id');
+    } catch {
+      /* ignore */
+    }
+    try {
+      tryV59ContrabandDiscovery(state, 'id-inspect');
+    } catch {
+      /* ignore */
+    }
     renderAll();
   } finally {
     releaseActionLock(actionKey);
@@ -10778,6 +10927,16 @@ function deepInspectGuest(guestId) {
     }
     if (checkFailureState()) return;
     if (progressShift('deepInspect', { timeScale: updatedGuest?.uvProfile?.suspicious ? 1.2 : 1 })) return;
+    try {
+      v60RevealGuestStoryClue(state, guestId, 'uv');
+    } catch {
+      /* ignore */
+    }
+    try {
+      tryV59ContrabandDiscovery(state, 'uv-inspect');
+    } catch {
+      /* ignore */
+    }
     renderAll();
   } finally {
     releaseActionLock(actionKey);
@@ -10968,6 +11127,18 @@ function questionGuestFurther(guestId, questionId = 'inconsistency') {
     }
     if (checkFailureState()) return;
     if (progressShift('secondaryVerify', { timeScale: 0.9 })) return;
+    try {
+      v60RevealGuestStoryClue(state, guestId, `question-${questionId}`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (updatedGuest.flagged || questionId === 'vehicle' || question?.reveal === 'vehicle') {
+        tryV59ContrabandDiscovery(state, 'review');
+      }
+    } catch {
+      /* ignore */
+    }
     renderAll();
   } finally {
     releaseActionLock(actionKey);
@@ -11192,6 +11363,16 @@ function checkInGuest(guestId, requestedRoomId = null) {
   } catch {
     /* ignore */
   }
+  try {
+    if (guest.flagged || guest.riskLevel === 'High' || policyOutcome.policyOverride) {
+      applyV60MemoryFromDecision(state, { kind: 'checkin-dangerous', guestName: guest.name });
+    }
+    if (guest?.v60Story?.archetype === 'kind_guest' && guest.riskLevel !== 'High') {
+      applyV60MemoryFromDecision(state, { kind: 'kindness-trap' });
+    }
+  } catch {
+    /* ignore */
+  }
   state.guests = state.guests.filter((entry) => entry.id !== guestId);
   recordSpecialEncounterMiss(state, guest);
 
@@ -11329,7 +11510,13 @@ function scanCameraSystem() {
   }
   try {
     if (Math.random() < 0.06) {
-      maybeRollShadowTrace(state, 'camera');
+      if (maybeRollShadowTrace(state, 'camera')) {
+        try {
+          applyV60MemoryFromDecision(state, { kind: 'shadow-trace' });
+        } catch {
+          /* ignore */
+        }
+      }
     }
     maybeStormCameraStatic(state, audioController);
     tryV58VoiceIntercept(state, { audioController, source: 'camera-sweep', chance: 0.04 });
@@ -11424,6 +11611,11 @@ function scanCameraSystem() {
   if (checkFailureState()) return;
   if (progressShift('scan')) return;
   updateOnboarding((current) => markTutorialEvent(current, 'camera-action'));
+  try {
+    tryV59ContrabandDiscovery(state, 'vehicle');
+  } catch {
+    /* ignore */
+  }
   renderAll();
 }
 
@@ -11630,6 +11822,12 @@ function handleCloseNightEvent() {
 }
 
 function closeTopOverlayIfOpen() {
+  try {
+    if (window.demCloseStaffTerminalIfOpen?.()) return true;
+  } catch {
+    /* ignore */
+  }
+
   if (settingsOverlayOpen) {
     toggleSettingsOverlay(false);
     return true;
@@ -11638,6 +11836,22 @@ function closeTopOverlayIfOpen() {
   if (onboardingState?.helpOverlayOpen) {
     toggleHelpOverlay(false);
     return true;
+  }
+
+  try {
+    ensureV59State(state);
+    if (state.v59?.lobby?.overlayOpen) {
+      v59CloseLobbyView(state);
+      renderAll();
+      return true;
+    }
+    if (state.v59?.printer?.modalOpen) {
+      v59PrinterClose(state);
+      renderAll();
+      return true;
+    }
+  } catch {
+    /* ignore */
   }
 
   if (state?.cameraScene?.activeScene) {
@@ -12273,6 +12487,12 @@ function endNight(options = {}) {
       ? window.demApplyContractSuccessBonus(state, { baseMoney: state.money })
       : [];
     try {
+      ensureV60State(state);
+      v60AwardGuestCardsEndNight(state);
+    } catch {
+      /* ignore */
+    }
+    try {
       finalizeV58EndNight(state);
     } catch {
       /* ignore */
@@ -12524,8 +12744,113 @@ function reviewIncidents() {
   } catch {
     /* ignore */
   }
+  try {
+    if (meaningful) tryV59ContrabandDiscovery(state, 'review');
+  } catch {
+    /* ignore */
+  }
   updateOnboarding((current) => markTutorialEvent(current, 'report-action'));
   renderAll();
+}
+
+let __demV59DispatchBridgeWired = false;
+function ensureV59DispatchBridgeWired() {
+  if (__demV59DispatchBridgeWired) return;
+  __demV59DispatchBridgeWired = true;
+  window.__demV59DispatchComplete = (mode, payload) => {
+    try {
+      if (mode === 'crisis') {
+        renderAll();
+        return;
+      }
+      if (mode === 'apply') {
+        applyDispatchStaffAfterWait(payload);
+      }
+    } catch {
+      /* ignore */
+    }
+    renderAll();
+  };
+}
+
+function applyDispatchStaffAfterWait(payload) {
+  const result = payload?.result;
+  if (!result) return;
+  state.rooms = result.rooms;
+
+  if (Array.isArray(result.logs) && result.logs.length) {
+    state.logs = [...state.logs, ...result.logs];
+  }
+
+  if (typeof result.reputationDelta === 'number' && result.reputationDelta !== 0) {
+    state.reputation = Math.max(0, state.reputation + result.reputationDelta);
+  }
+
+  if (typeof result.powerDelta === 'number' && result.powerDelta !== 0) {
+    state.power = clampPower(state.power + result.powerDelta);
+    if (result.powerDelta < 0) {
+      state.shiftStats.dispatchPowerSpent =
+        (state.shiftStats.dispatchPowerSpent || 0) + Math.abs(result.powerDelta);
+    }
+  }
+
+  const dispatchFee = Number(payload?.dispatchFee || 0);
+  if (
+    (dispatchFee >= 4 || Math.abs(Number(result.powerDelta || 0)) >= 4) &&
+    (state.money <= 26 || state.power <= 32)
+  ) {
+    registerPanicSpend();
+  }
+
+  if (result.roomId != null) {
+    calmRoomChain(result.roomId, 2);
+  }
+
+  if (result.responded && result.success) {
+    noteStaffOutcome('Security', 'Dispatch landed cleanly.', { fatigue: 0.07, morale: 0.03 });
+    registerFinaleContainment(state, 1);
+    applyIdentityImpact({
+      doctrine: { stability: 1, compassion: 1 },
+      factions: { staff: 1, ownership: 1 },
+      stats: { staffAssists: 1 },
+      reason: 'staff dispatch success'
+    });
+  }
+
+  if (result.responded && result.success === false) {
+    noteStaffOutcome('Security', 'Dispatch missed the room pressure.', { fatigue: 0.09, morale: -0.04 });
+    pushLiveAlert(state, {
+      type: 'warning',
+      message: 'Staff response failed to stabilize the target room.',
+      dedupeKey: `staff-failed-${result.roomId || 'none'}-${state.night}`
+    });
+    audioController.playAlert('high');
+    applyIdentityImpact({
+      doctrine: { improvisation: 1, stability: -1 },
+      factions: { staff: -1, ownership: -1 },
+      reason: 'staff dispatch failed'
+    });
+  }
+
+  try {
+    ensureV59State(state);
+    const rid = result.roomId;
+    const room = (state.rooms || []).find((r) => Number(r.id) === Number(rid));
+    state.v59.dispatches.push({
+      id: `dsp-${Date.now()}`,
+      zone: rid,
+      startedMinute: Number(state.shiftElapsedMinutes || 0),
+      etaMinutes: 0.7,
+      status: result.success ? 'resolved' : result.responded ? 'returned' : 'resolved',
+      risk: String(room?.riskLevel || '')
+    });
+  } catch {
+    /* ignore */
+  }
+
+  if (checkFailureState()) return;
+  if (progressShift('dispatch')) return;
+  updateOnboarding((current) => markTutorialEvent(current, 'report-action'));
 }
 
 function dispatchStaff() {
@@ -12572,8 +12897,6 @@ function dispatchStaff() {
       (staffProfile.hasSecurity ? 0.04 : -0.06)
   });
 
-  state.rooms = result.rooms;
-
   const night = Math.max(1, Number(state?.night || 1));
   const dispatchFee = night <= 2 ? 2 : night >= 5 ? 6 : night >= 4 ? 4 : 3;
   if (state.money < dispatchFee) {
@@ -12591,59 +12914,16 @@ function dispatchStaff() {
   state.shiftStats.reportActionCosts = (state.shiftStats.reportActionCosts || 0) + dispatchFee;
   state.adminSpam.dispatchEmptyStreak = 0;
 
-  if (Array.isArray(result.logs) && result.logs.length) {
-    state.logs = [...state.logs, ...result.logs];
-  }
+  state.logs.push('Security team rolling — radio silence until field check-in.');
+  pushLiveAlert(state, {
+    type: 'info',
+    message: 'Staff deployed — watch the dispatch strip for ETA.',
+    dedupeKey: `dispatch-arm-${state.night}-${state.shiftElapsedMinutes}`
+  });
 
-  if (typeof result.reputationDelta === 'number' && result.reputationDelta !== 0) {
-    state.reputation = Math.max(0, state.reputation + result.reputationDelta);
-  }
-
-  if (typeof result.powerDelta === 'number' && result.powerDelta !== 0) {
-    state.power = clampPower(state.power + result.powerDelta);
-    if (result.powerDelta < 0) {
-      state.shiftStats.dispatchPowerSpent =
-        (state.shiftStats.dispatchPowerSpent || 0) + Math.abs(result.powerDelta);
-    }
-  }
-
-  if ((dispatchFee >= 4 || Math.abs(Number(result.powerDelta || 0)) >= 4) && (state.money <= 26 || state.power <= 32)) {
-    registerPanicSpend();
-  }
-
-  if (result.roomId != null) {
-    calmRoomChain(result.roomId, 2);
-  }
-
-  if (result.responded && result.success) {
-    noteStaffOutcome('Security', 'Dispatch landed cleanly.', { fatigue: 0.07, morale: 0.03 });
-    registerFinaleContainment(state, 1);
-    applyIdentityImpact({
-      doctrine: { stability: 1, compassion: 1 },
-      factions: { staff: 1, ownership: 1 },
-      stats: { staffAssists: 1 },
-      reason: 'staff dispatch success'
-    });
-  }
-
-  if (result.responded && result.success === false) {
-    noteStaffOutcome('Security', 'Dispatch missed the room pressure.', { fatigue: 0.09, morale: -0.04 });
-    pushLiveAlert(state, {
-      type: 'warning',
-      message: 'Staff response failed to stabilize the target room.',
-      dedupeKey: `staff-failed-${result.roomId || 'none'}-${state.night}`
-    });
-    audioController.playAlert('high');
-    applyIdentityImpact({
-      doctrine: { improvisation: 1, stability: -1 },
-      factions: { staff: -1, ownership: -1 },
-      reason: 'staff dispatch failed'
-    });
-  }
-
-  if (checkFailureState()) return;
-  if (progressShift('dispatch')) return;
-  updateOnboarding((current) => markTutorialEvent(current, 'report-action'));
+  ensureV59State(state);
+  ensureV59DispatchBridgeWired();
+  armDispatchWait(state, { result, dispatchFee });
   renderAll();
 }
 
@@ -12698,6 +12978,11 @@ function lockDownRoom(roomId) {
       message: `${state.rooms[roomIndex].label} locked down. Immediate spillover is lower, but delayed complaint pressure is now pending.`,
       dedupeKey: `lockdown-now-later-${roomId}-${state.night}`
     });
+    try {
+      applyV60MemoryFromDecision(state, { kind: 'lockdown' });
+    } catch {
+      /* ignore */
+    }
   }
 
   if (checkFailureState()) return;
@@ -12746,6 +13031,11 @@ function callPoliceForRoom(roomId) {
   });
   try {
     recordV58Morality(state, 'policeCalls', 1);
+  } catch {
+    /* ignore */
+  }
+  try {
+    applyV60MemoryFromDecision(state, { kind: 'police-heavy' });
   } catch {
     /* ignore */
   }
@@ -12840,6 +13130,11 @@ function handleLobbyLockdownClick() {
   if (_ldOk) {
     try {
       recordV58Morality(state, 'lockdowns', 1);
+    } catch {
+      /* ignore */
+    }
+    try {
+      applyV60MemoryFromDecision(state, { kind: 'lockdown' });
     } catch {
       /* ignore */
     }
@@ -13114,6 +13409,22 @@ function nextNight() {
   state.escalationTick = 0;
   state.shiftElapsedMinutes = 0;
   resetV57ForNewShift(state);
+  ensureV59State(state);
+  resetV59ForNewShift(state);
+  resetV60ForNewShift(state);
+  ensureV60State(state);
+  try {
+    rollV60NightEvolution(state);
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (Number(state.night || 1) >= 2 && Math.random() < 0.55) {
+      surfaceV60MemoryReminder(state);
+    }
+  } catch {
+    /* ignore */
+  }
   try {
     surfaceV58LegacyReminder(state);
   } catch {
@@ -13196,6 +13507,41 @@ function nextNight() {
 }
 
 function bindEvents() {
+  ensureV59DispatchBridgeWired();
+  const appRootForV59 = document.getElementById('app');
+  if (appRootForV59) {
+    bindV59DeskUi(appRootForV59, () => ({
+      state,
+      renderAll,
+      progressShift,
+      audioController,
+      activeScreenId
+    }));
+    appRootForV59.addEventListener('click', (e) => {
+      const ans = e.target.closest('[data-v60-booth-answer]');
+      if (ans) {
+        e.preventDefault();
+        try {
+          v60PhoneBoothAnswer(state, audioController);
+        } catch {
+          /* ignore */
+        }
+        renderAll();
+        return;
+      }
+      const ign = e.target.closest('[data-v60-booth-ignore]');
+      if (ign) {
+        e.preventDefault();
+        try {
+          v60PhoneBoothIgnore(state);
+        } catch {
+          /* ignore */
+        }
+        renderAll();
+      }
+    });
+  }
+
   const moveToMainMenuSafely = () => {
     if (activeScreenId === 'failure-screen') {
       if (!confirmIfNeeded('Return to main menu? This failed run will be logged in your archive.')) {
@@ -13364,12 +13710,129 @@ function bindEvents() {
 
 bootstrapState();
 bindEvents();
+initStaffTerminal();
 initV56DebugKeyboard({
   getActiveScreenId: () => activeScreenId,
   getState: () => state,
   renderAll,
   audioController,
   pushLiveAlert
+});
+initV60DebugShortcuts({
+  memoryReminder: () => {
+    try {
+      surfaceV60MemoryReminder(state);
+    } catch {
+      /* ignore */
+    }
+    renderAll();
+  },
+  veilBump: () => {
+    try {
+      adjustVeil(state, 20, 'dev V key');
+    } catch {
+      /* ignore */
+    }
+    renderAll();
+  },
+  anomalyReroll: () => {
+    try {
+      rollV60NightEvolution(state);
+    } catch {
+      /* ignore */
+    }
+    renderAll();
+  },
+  boothRing: () => {
+    try {
+      forceV60PhoneBoothRingDev(state);
+    } catch {
+      /* ignore */
+    }
+    renderAll();
+  },
+  cardUnlock: () => {
+    try {
+      forceV60GuestCardDev(state);
+    } catch {
+      /* ignore */
+    }
+    renderAll();
+  },
+  staffNote: () => {
+    try {
+      grantV60StaffNoteDev(state);
+    } catch {
+      /* ignore */
+    }
+    renderAll();
+  },
+  stageFlash: () => {
+    try {
+      ensureV60State(state);
+      state.v60._visualOverrideUntil = Date.now() + 10000;
+    } catch {
+      /* ignore */
+    }
+    renderAll();
+  }
+});
+initV59DebugShortcuts({
+  forcePhone: () => {
+    try {
+      const drawer = document.getElementById('v59-physical-desk-drawer');
+      if (drawer) drawer.open = true;
+    } catch {
+      /* ignore */
+    }
+    if (typeof document !== 'undefined' && !document.hasFocus?.()) {
+      try {
+        console.info('[v59 dev] Browser tab may not have focus — click the game page so keyboard shortcuts register.');
+      } catch {
+        /* ignore */
+      }
+      try {
+        pushLiveAlert(state, {
+          type: 'info',
+          kind: 'ambient',
+          message: 'Dev: click the game window if shortcuts (H, S, …) do nothing.',
+          dedupeKey: 'v59-dev-focus-hint'
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+    forceV59PhoneCall(state);
+    renderAll();
+  },
+  forceSwitchboard: () => {
+    forceV59SwitchboardToFirstOccupied(state);
+    renderAll();
+  },
+  forceLobby: () => {
+    forceV59LobbyThreat(state);
+    renderAll();
+  },
+  forceSanity: () => {
+    forceV59SanityGlitchDev(state);
+    renderAll();
+  },
+  forceRadio: () => {
+    forceV59RadioMeaningful(state);
+    renderAll();
+  },
+  forcePrinterJam: () => {
+    forceV59PrinterJamDev(state);
+    renderAll();
+  },
+  forceDispatchLost: () => {
+    forceV59DispatchSignalLostDev(state);
+    renderAll();
+  },
+  forceContraband: () => {
+    forceV59ContrabandDev(state);
+    renderAll();
+  }
 });
 renderAll();
 
