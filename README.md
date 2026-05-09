@@ -2,14 +2,16 @@
 
 A clean, modular starter for the first playable prototype of **Dead End Motel**.
 
-## Version: Staff Terminal & Site Integration Foundation
+## Version: Game Bridge v4 — Phone messages & voicemail references
 
 Notes:
 
-- Adds a local **Staff Terminal** on the front desk (modal) with Overview, Guest Lookup, Room Records, Incident Log, Code Entry, and Staff Portal tabs.
+- Adds a local **Staff Terminal** on the front desk (modal) with Overview, Guest Lookup, Room Records, Incident Log, Found Items, **Voicemail**, Code Entry, Staff Portal, and References tabs.
+- **Game Bridge v3**: **Local Gazette** cross-links on incident archive and found-item cards (optional links to [local-gazette.html](https://deadendmotel.site/local-gazette.html)); **Gazette verification codes** (`GAZ-*`) unlock local notes only, persisted under `deadEndMotel_terminalCodes`; **Archived Gazette Notes** in Code Entry.
+- **Game Bridge v4**: **Voicemail** tab with a static registry aligned to the site archive ([voicemail.html](https://deadendmotel.site/voicemail.html)); **voicemail log** in `deadEndMotel_voicemailLog`; **VM-*** verification codes unlock local notes in `deadEndMotel_terminalCodes`; **Archived Voicemail Notes** in Code Entry (and mirrored on the Voicemail tab). **No audio, no autoplay.** Optional **switchboard toast** may appear when logging a sample found item (low chance). The website stays optional.
 - Introduces **guest file IDs**, **room records** (including Room 204 warnings), **incident archive IDs**, and **verification code** entry with optional `localStorage` unlock notes.
-- Includes optional, clearly labeled **external links** to the official site ([deadendmotel.site](https://deadendmotel.site)) — the game does not open them unless the player chooses.
-- **No backend**, **no login**, **no online dependency**; website material is optional lore and future second-screen support.
+- Includes optional, clearly labeled **external links** to the official site ([deadendmotel.site](https://deadendmotel.site)) — the game does not open them unless the player chooses. **The website is not required to play.**
+- **No backend**, **no login**, **no online dependency**; website material is optional lore and second-screen support.
 
 ## What is included
 - Main menu

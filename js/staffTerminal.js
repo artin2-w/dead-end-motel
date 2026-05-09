@@ -4,18 +4,22 @@
  */
 
 const SITE_ROOT = 'https://deadendmotel.site';
+const SITE_EMPLOYEE_PORTAL = 'https://deadendmotel.site/employee-portal.html';
 const SITE_FILES = 'https://deadendmotel.site/files.html';
 const SITE_FLOOR = 'https://deadendmotel.site/floor-plan.html';
 const SITE_MEDIA = 'https://deadendmotel.site/media.html';
 const SITE_TRAINING = 'https://deadendmotel.site/training-manual.html';
 const SITE_GUEST_DB = 'https://deadendmotel.site/guest-database.html';
 const SITE_LOST_FOUND = 'https://deadendmotel.site/lost-and-found.html';
+const SITE_GAZETTE = 'https://deadendmotel.site/local-gazette.html';
+const SITE_VOICEMAIL = 'https://deadendmotel.site/voicemail.html';
 
 const LS = {
   code204: 'deadEndMotel_code204Unlocked',
   code013: 'deadEndMotel_code013Unlocked',
   terminalCodes: 'deadEndMotel_terminalCodes',
-  foundItems: 'deadEndMotel_foundItems'
+  foundItems: 'deadEndMotel_foundItems',
+  voicemailLog: 'deadEndMotel_voicemailLog'
 };
 
 function safeGetItem(key) {
@@ -56,6 +60,105 @@ function saveTerminalCodes(obj) {
   }
 }
 
+/** Archive line shown in Code Entry after a Gazette code is verified (local-only). */
+const GAZETTE_ARCHIVE_LINES = {
+  'GAZ-204': 'GAZ-204: Room 204 clipping connected to INC-204 / LF-204.',
+  'GAZ-118': 'GAZ-118: Room 118 clipping connected to LF-007 / LF-118.',
+  'GAZ-404': 'GAZ-404: Missing file clipping connected to Staff Only drawer.',
+  'GAZ-911': 'GAZ-911: Emergency routing clipping connected to switchboard notes.',
+  'GAZ-013': 'GAZ-013: Quiet guest clipping connected to guest file G-013.',
+  'GAZ-237': 'GAZ-237: Hallway noise clipping connected to Room 237.',
+  'GAZ-000': 'GAZ-000: Signal interruption clipping marked incomplete.'
+};
+
+/** Same strings returned by Code Entry when a Gazette code is accepted. */
+const GAZETTE_UNLOCK_MESSAGES = {
+  'GAZ-204':
+    'Gazette reference accepted. Room 204 clipping cross-linked with INC-204 and LF-204.',
+  'GAZ-118':
+    'Gazette reference accepted. Room 118 noise complaint linked to Silver Watch and key return.',
+  'GAZ-404':
+    'Gazette reference accepted. Missing file clipping linked to Staff Only records.',
+  'GAZ-911': 'Gazette reference accepted. Emergency routing outage note unlocked.',
+  'GAZ-013': 'Gazette reference accepted. Quiet guest sighting linked to G-013.',
+  'GAZ-237': 'Gazette reference accepted. Hallway noise report linked to Room 237.',
+  'GAZ-000':
+    'Gazette reference accepted. Signal interruption clipping marked incomplete.'
+};
+
+export function getGazetteNoteForCode(gazetteId) {
+  const id = String(gazetteId || '').trim().toUpperCase();
+  return GAZETTE_ARCHIVE_LINES[id] || '';
+}
+
+function renderGazetteReferenceBlock(row) {
+  if (!row || !row.gazetteId) return '';
+  const url = row.gazetteUrl || SITE_GAZETTE;
+  const idTitle = row.gazetteTitle
+    ? `${escapeHtml(row.gazetteId)} — ${escapeHtml(row.gazetteTitle)}`
+    : escapeHtml(row.gazetteId);
+  const note = row.gazetteNote
+    ? `<p class="dem-gazette-note">${escapeHtml(row.gazetteNote)}</p>`
+    : '';
+  const btn = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="button button-secondary dem-terminal-ref-btn dem-gazette-open-btn">Open Local Gazette</a>`;
+  return `
+    <div class="dem-gazette-ref" role="region" aria-label="Local Gazette reference">
+      <p class="dem-gazette-ref-label">Local Gazette</p>
+      <p class="dem-gazette-id">${idTitle}</p>
+      ${note}
+      <div class="dem-terminal-card-actions dem-gazette-actions">${btn}</div>
+      ${optionalUrlCopyLine(url)}
+    </div>
+  `;
+}
+
+function renderGazetteReferenceCompact(row) {
+  if (!row || !row.gazetteId) return '';
+  const url = row.gazetteUrl || SITE_GAZETTE;
+  const titleBit = row.gazetteTitle ? ` — ${escapeHtml(row.gazetteTitle)}` : '';
+  const btn = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="button button-secondary dem-terminal-ref-btn dem-gazette-open-btn">Open Local Gazette</a>`;
+  return `
+    <div class="dem-gazette-ref dem-gazette-ref--compact" role="region" aria-label="Local Gazette reference">
+      <div class="dem-gazette-compact-row">
+        <p class="dem-gazette-compact-text"><span class="dem-gazette-id-inline">${escapeHtml(row.gazetteId)}</span>${titleBit}</p>
+        ${btn}
+      </div>
+    </div>
+  `;
+}
+
+export function renderUnlockedGazetteNotes(container) {
+  if (!container) return;
+  const u = loadTerminalUnlocks();
+  const order = [
+    'GAZ-204',
+    'GAZ-118',
+    'GAZ-404',
+    'GAZ-911',
+    'GAZ-013',
+    'GAZ-237',
+    'GAZ-000'
+  ];
+  const flags = {
+    'GAZ-204': u.gaz204,
+    'GAZ-118': u.gaz118,
+    'GAZ-404': u.gaz404,
+    'GAZ-911': u.gaz911,
+    'GAZ-013': u.gaz013,
+    'GAZ-237': u.gaz237,
+    'GAZ-000': u.gaz000
+  };
+  const lines = order.filter((id) => flags[id]).map((id) => GAZETTE_ARCHIVE_LINES[id]);
+  if (!lines.length) {
+    container.innerHTML =
+      '<p class="dem-terminal-muted dem-gazette-notes-empty">No Gazette clippings verified yet.</p>';
+    return;
+  }
+  container.innerHTML = `<ul class="dem-gazette-archive-list">${lines
+    .map((line) => `<li>${escapeHtml(line)}</li>`)
+    .join('')}</ul>`;
+}
+
 export function loadTerminalUnlocks() {
   const codes = parseTerminalCodes();
   return {
@@ -66,8 +169,21 @@ export function loadTerminalUnlocks() {
     lf204Ref: codes.lf204Ref === true,
     lf007Ref: codes.lf007Ref === true,
     watch118Note: codes.watch118Note === true,
-    gaz204Reserved: codes.gaz204Reserved === true,
-    vm204Reserved: codes.vm204Reserved === true
+    gaz204: codes.gaz204 === true || codes.gaz204Reserved === true,
+    gaz118: codes.gaz118 === true,
+    gaz404: codes.gaz404 === true,
+    gaz911: codes.gaz911 === true,
+    gaz013: codes.gaz013 === true,
+    gaz237: codes.gaz237 === true,
+    gaz000: codes.gaz000 === true,
+    vm204: codes.vm204 === true || codes.vm204Reserved === true,
+    vm013: codes.vm013 === true,
+    vm237: codes.vm237 === true,
+    vm911: codes.vm911 === true,
+    vm118: codes.vm118 === true,
+    vm404: codes.vm404 === true,
+    vm000: codes.vm000 === true,
+    vmFront7: codes.vmFront7 === true
   };
 }
 
@@ -213,7 +329,11 @@ export const STAFF_TERMINAL_INCIDENTS = [
     pressureImpact: '+6',
     possibleResponses: 'Reroute feed, note timestamp, avoid duplicate dispatch',
     siteReference: SITE_FILES,
-    note: 'May correlate with weather — not always paranormal.'
+    note: 'May correlate with weather — not always paranormal.',
+    gazetteId: 'GAZ-000',
+    gazetteTitle: 'Signal Lost During Local Broadcast',
+    gazetteNote: 'Broadcast drift logged; cross-check DVR timestamps.',
+    gazetteUrl: SITE_GAZETTE
   },
   {
     incidentId: 'INC-118',
@@ -223,7 +343,11 @@ export const STAFF_TERMINAL_INCIDENTS = [
     pressureImpact: '+9',
     possibleResponses: 'Manager callback, security standby, comp negotiation',
     siteReference: SITE_ROOT,
-    note: 'Watch for repeated phrase usage in refusal script.'
+    note: 'Watch for repeated phrase usage in refusal script.',
+    gazetteId: 'GAZ-118',
+    gazetteTitle: 'Noise Complaints Before Checkout',
+    gazetteNote: 'Prior noise complaints sometimes precede refusal patterns.',
+    gazetteUrl: SITE_GAZETTE
   },
   {
     incidentId: 'INC-204',
@@ -233,7 +357,11 @@ export const STAFF_TERMINAL_INCIDENTS = [
     pressureImpact: '+18',
     possibleResponses: 'Dispatch staff, reset cameras, call police',
     siteReference: SITE_FILES,
-    note: 'Previous records reference Room 204.'
+    note: 'Previous records reference Room 204.',
+    gazetteId: 'GAZ-204',
+    gazetteTitle: 'Room Closed After Midnight Incident',
+    gazetteNote: 'Gazette clipping ties blackout corridor to Room 204 policy.',
+    gazetteUrl: SITE_GAZETTE
   },
   {
     incidentId: 'INC-237',
@@ -243,7 +371,11 @@ export const STAFF_TERMINAL_INCIDENTS = [
     pressureImpact: '+4',
     possibleResponses: 'Welfare check, volume warning, room move offer',
     siteReference: SITE_ROOT,
-    note: 'Stacking complaints raises hallway threat.'
+    note: 'Stacking complaints raises hallway threat.',
+    gazetteId: 'GAZ-237',
+    gazetteTitle: 'Hallway Noise Report Reopened',
+    gazetteNote: 'Reopened reports may echo older 237 corridor chatter.',
+    gazetteUrl: SITE_GAZETTE
   },
   {
     incidentId: 'INC-404',
@@ -253,7 +385,11 @@ export const STAFF_TERMINAL_INCIDENTS = [
     pressureImpact: '+7',
     possibleResponses: 'Search dead storage, portal cross-reference, log gap',
     siteReference: SITE_FILES,
-    note: 'Some archives moved to external staff portal.'
+    note: 'Some archives moved to external staff portal.',
+    gazetteId: 'GAZ-404',
+    gazetteTitle: 'Missing Records at Roadside Motel',
+    gazetteNote: 'Gazette mentions gaps that mirror desk archive holes.',
+    gazetteUrl: SITE_GAZETTE
   }
 ];
 
@@ -267,7 +403,10 @@ export const STAFF_TERMINAL_FOUND_ITEMS = [
     linkedIncident: 'INC-237',
     risk: 'Medium',
     note: 'The second hand moves like it is listening for a cue.',
-    siteReference: SITE_LOST_FOUND
+    siteReference: SITE_LOST_FOUND,
+    gazetteId: 'GAZ-118',
+    gazetteTitle: 'Noise Complaints Before Checkout',
+    gazetteNote: 'Watch may tie to 118 noise / checkout chatter.'
   },
   {
     itemId: 'LF-118',
@@ -278,7 +417,10 @@ export const STAFF_TERMINAL_FOUND_ITEMS = [
     linkedIncident: 'INC-118',
     risk: 'Low',
     note: 'Tag is clean. The cut is old.',
-    siteReference: SITE_LOST_FOUND
+    siteReference: SITE_LOST_FOUND,
+    gazetteId: 'GAZ-118',
+    gazetteTitle: 'Noise Complaints Before Checkout',
+    gazetteNote: 'Key return stories sometimes surface in the same clipping.'
   },
   {
     itemId: 'LF-204',
@@ -289,7 +431,10 @@ export const STAFF_TERMINAL_FOUND_ITEMS = [
     linkedIncident: 'INC-204',
     risk: 'High',
     note: 'Soaked through. Still warm.',
-    siteReference: SITE_LOST_FOUND
+    siteReference: SITE_LOST_FOUND,
+    gazetteId: 'GAZ-204',
+    gazetteTitle: 'Room Closed After Midnight Incident',
+    gazetteNote: 'Matchbook moisture matches corridor flood mentions.'
   },
   {
     itemId: 'LF-013',
@@ -300,7 +445,10 @@ export const STAFF_TERMINAL_FOUND_ITEMS = [
     linkedIncident: 'INC-000',
     risk: 'Medium',
     note: 'The faces were removed carefully, not ripped in panic.',
-    siteReference: SITE_LOST_FOUND
+    siteReference: SITE_LOST_FOUND,
+    gazetteId: 'GAZ-013',
+    gazetteTitle: 'Quiet Guest Sighting',
+    gazetteNote: 'Gazette quiet-guest column may reference G-013 patterns.'
   },
   {
     itemId: 'LF-404',
@@ -311,7 +459,10 @@ export const STAFF_TERMINAL_FOUND_ITEMS = [
     linkedIncident: 'INC-404',
     risk: 'Medium',
     note: 'The paper is blank until you stop looking directly at it.',
-    siteReference: SITE_LOST_FOUND
+    siteReference: SITE_LOST_FOUND,
+    gazetteId: 'GAZ-404',
+    gazetteTitle: 'Missing Records at Roadside Motel',
+    gazetteNote: 'Receipt gaps echo missing-records bulletin.'
   },
   {
     itemId: 'LF-237',
@@ -322,7 +473,10 @@ export const STAFF_TERMINAL_FOUND_ITEMS = [
     linkedIncident: 'INC-237',
     risk: 'Low',
     note: 'The crack pattern resembles a hallway map.',
-    siteReference: SITE_LOST_FOUND
+    siteReference: SITE_LOST_FOUND,
+    gazetteId: 'GAZ-237',
+    gazetteTitle: 'Hallway Noise Report Reopened',
+    gazetteNote: '237 corridor noise line in gazette matches item location.'
   },
   {
     itemId: 'LF-911',
@@ -333,7 +487,10 @@ export const STAFF_TERMINAL_FOUND_ITEMS = [
     linkedIncident: 'INC-000',
     risk: 'High',
     note: 'Rewinds by itself when the line goes quiet.',
-    siteReference: SITE_LOST_FOUND
+    siteReference: SITE_LOST_FOUND,
+    gazetteId: 'GAZ-911',
+    gazetteTitle: 'Emergency Routing Notice',
+    gazetteNote: 'Tape gear tied to switchboard outage stories.'
   },
   {
     itemId: 'LF-000',
@@ -344,9 +501,282 @@ export const STAFF_TERMINAL_FOUND_ITEMS = [
     linkedIncident: 'INC-000',
     risk: 'Low',
     note: 'No number. No scratches. Like it never touched a lock.',
-    siteReference: SITE_LOST_FOUND
+    siteReference: SITE_LOST_FOUND,
+    gazetteId: 'GAZ-000',
+    gazetteTitle: 'Signal Lost During Local Broadcast',
+    gazetteNote: 'Blank tags sometimes appear in broadcast glitch footnotes.'
   }
 ];
+
+/** Voicemail Archive registry (matches site transcripts; optional second-screen). */
+export const STAFF_TERMINAL_VOICEMAIL = [
+  {
+    voicemailId: 'VM-204',
+    title: 'Room 204 Line',
+    risk: 'Critical',
+    relatedRoom: 'Room 204',
+    relatedGuest: 'G-204',
+    relatedIncident: 'INC-204',
+    relatedItem: 'LF-204',
+    relatedGazette: 'GAZ-204',
+    manualRule: 'Rule 204',
+    note: 'Do not give him that room. He asked before he saw the map.',
+    siteReference: SITE_VOICEMAIL
+  },
+  {
+    voicemailId: 'VM-013',
+    title: 'Quiet Line',
+    risk: 'Medium',
+    relatedRoom: 'Lobby / Parking Lot',
+    relatedGuest: 'G-013',
+    relatedIncident: '—',
+    relatedItem: 'LF-013',
+    relatedGazette: 'GAZ-013',
+    manualRule: 'Rule 13',
+    note: 'Do not call quiet safe.',
+    siteReference: SITE_VOICEMAIL
+  },
+  {
+    voicemailId: 'VM-237',
+    title: 'Hallway Callback',
+    risk: 'High',
+    relatedRoom: 'Room 237',
+    relatedGuest: 'G-237',
+    relatedIncident: 'INC-237',
+    relatedItem: 'LF-237',
+    relatedGazette: 'GAZ-237',
+    manualRule: 'Rule 237',
+    note: 'Do not move them without logging it.',
+    siteReference: SITE_VOICEMAIL
+  },
+  {
+    voicemailId: 'VM-911',
+    title: 'Routing Failure',
+    risk: 'High',
+    relatedRoom: 'Office',
+    relatedGuest: '—',
+    relatedIncident: 'INC-000',
+    relatedItem: 'LF-911',
+    relatedGazette: 'GAZ-911',
+    manualRule: 'Rule 911',
+    note: 'Emergency routing unavailable. The motel switchboard is already listening.',
+    siteReference: SITE_VOICEMAIL
+  },
+  {
+    voicemailId: 'VM-118',
+    title: 'Key Return Message',
+    risk: 'Medium',
+    relatedRoom: 'Room 118',
+    relatedGuest: 'G-104',
+    relatedIncident: 'INC-118',
+    relatedItem: 'LF-007 / LF-118',
+    relatedGazette: 'GAZ-118',
+    manualRule: 'Rule 118',
+    note: 'The key came back warm.',
+    siteReference: SITE_VOICEMAIL
+  },
+  {
+    voicemailId: 'VM-404',
+    title: 'Missing Record Tone',
+    risk: 'Unknown',
+    relatedRoom: 'Staff Only',
+    relatedGuest: '—',
+    relatedIncident: 'INC-404',
+    relatedItem: 'LF-404',
+    relatedGazette: 'GAZ-404',
+    manualRule: 'Rule 404',
+    note: 'The record exists. Not here.',
+    siteReference: SITE_VOICEMAIL
+  },
+  {
+    voicemailId: 'VM-000',
+    title: 'Dead Air Broadcast',
+    risk: 'Unknown',
+    relatedRoom: 'Camera Room',
+    relatedGuest: '—',
+    relatedIncident: 'INC-000',
+    relatedItem: 'LF-000',
+    relatedGazette: 'GAZ-000',
+    manualRule: 'Rule 07 / Rule 404',
+    note: 'Not enough signal to classify.',
+    siteReference: SITE_VOICEMAIL
+  },
+  {
+    voicemailId: 'VM-FRONT-7',
+    title: 'Cash After Midnight',
+    risk: 'Medium',
+    relatedRoom: 'Front Desk / Far hallway',
+    relatedGuest: 'G-027',
+    relatedIncident: '—',
+    relatedItem: '—',
+    relatedGazette: 'GAZ-027',
+    manualRule: 'Rule 04 / Rule 18',
+    note: 'Cash after midnight is not a crime. It is also not nothing.',
+    siteReference: SITE_VOICEMAIL
+  }
+];
+
+const VOICEMAIL_CODE_MESSAGES = {
+  'VM-204':
+    'Voicemail reference accepted. Room 204 transcript connected to G-204, LF-204, GAZ-204, and Rule 204.',
+  'VM-013':
+    'Voicemail reference accepted. Quiet Line connected to G-013, LF-013, GAZ-013, and Rule 13.',
+  'VM-237':
+    'Voicemail reference accepted. Hallway Callback connected to Room 237, GAZ-237, and Rule 237.',
+  'VM-911':
+    'Voicemail reference accepted. Emergency routing transcript connected to GAZ-911 and Rule 911.',
+  'VM-118':
+    'Voicemail reference accepted. Key Return Message connected to LF-007, LF-118, GAZ-118, and Rule 118.',
+  'VM-404':
+    'Voicemail reference accepted. Missing Record Tone connected to INC-404, LF-404, GAZ-404, and Rule 404.',
+  'VM-000': 'Voicemail reference accepted. Dead Air Broadcast marked incomplete.',
+  'VM-FRONT-7':
+    'Voicemail reference accepted. Cash after midnight note connected to G-027 and Rule 04.'
+};
+
+const VOICEMAIL_ARCHIVE_LINES = {
+  'VM-204': 'VM-204: Room 204 transcript connected to G-204 / LF-204 / GAZ-204.',
+  'VM-013': 'VM-013: Quiet Line connected to G-013 / Rule 13.',
+  'VM-237': 'VM-237: Hallway Callback connected to Room 237 / GAZ-237 / Rule 237.',
+  'VM-911': 'VM-911: Emergency routing transcript connected to Rule 911.',
+  'VM-118': 'VM-118: Key Return Message connected to LF-007 / LF-118 / GAZ-118.',
+  'VM-404': 'VM-404: Missing Record Tone connected to INC-404 / LF-404 / GAZ-404.',
+  'VM-000': 'VM-000: Dead Air Broadcast marked incomplete.',
+  'VM-FRONT-7': 'VM-FRONT-7: Cash after midnight note connected to G-027 / Rule 04.'
+};
+
+const VOICEMAIL_UNLOCK_FLAG_ORDER = [
+  ['vm204', 'VM-204'],
+  ['vm013', 'VM-013'],
+  ['vm237', 'VM-237'],
+  ['vm911', 'VM-911'],
+  ['vm118', 'VM-118'],
+  ['vm404', 'VM-404'],
+  ['vm000', 'VM-000'],
+  ['vmFront7', 'VM-FRONT-7']
+];
+
+let voicemailLogMemory = [];
+
+function parseVoicemailLog() {
+  const raw = safeGetItem(LS.voicemailLog);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadVoicemailLog() {
+  const stored = parseVoicemailLog();
+  if (stored) return stored;
+  return Array.isArray(voicemailLogMemory) ? voicemailLogMemory : [];
+}
+
+function saveVoicemailLog(entries) {
+  const next = Array.isArray(entries) ? entries : [];
+  voicemailLogMemory = next;
+  try {
+    safeSetItem(LS.voicemailLog, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearVoicemailLog() {
+  saveVoicemailLog([]);
+}
+
+function findVoicemailDef(vmId) {
+  const want = String(vmId || '').trim();
+  if (!want) return null;
+  return (
+    STAFF_TERMINAL_VOICEMAIL.find(
+      (v) =>
+        v.voicemailId === want ||
+        v.voicemailId.toLowerCase() === want.toLowerCase()
+    ) || null
+  );
+}
+
+export function logVoicemailMessage(vmId) {
+  const def = findVoicemailDef(vmId);
+  if (!def) return false;
+  const cur = loadVoicemailLog();
+  if (cur.some((x) => String(x?.voicemailId) === def.voicemailId)) return false;
+  saveVoicemailLog([...cur, { voicemailId: def.voicemailId, loggedAt: Date.now() }]);
+  return true;
+}
+
+function pickRandomVoicemailNotLogged() {
+  const current = loadVoicemailLog();
+  const logged = new Set(current.map((x) => String(x?.voicemailId)));
+  const pool = STAFF_TERMINAL_VOICEMAIL.filter((v) => !logged.has(v.voicemailId));
+  if (!pool.length) {
+    return STAFF_TERMINAL_VOICEMAIL[
+      Math.floor(Math.random() * STAFF_TERMINAL_VOICEMAIL.length)
+    ];
+  }
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+export function getVoicemailNoteForCode(vmId) {
+  const id = String(vmId || '').trim();
+  const def = findVoicemailDef(id);
+  const key = def ? def.voicemailId : id.toUpperCase();
+  return VOICEMAIL_ARCHIVE_LINES[key] || '';
+}
+
+export function renderUnlockedVoicemailNotes(container) {
+  if (!container) return;
+  const u = loadTerminalUnlocks();
+  const flags = {
+    'VM-204': u.vm204,
+    'VM-013': u.vm013,
+    'VM-237': u.vm237,
+    'VM-911': u.vm911,
+    'VM-118': u.vm118,
+    'VM-404': u.vm404,
+    'VM-000': u.vm000,
+    'VM-FRONT-7': u.vmFront7
+  };
+  const order = [
+    'VM-204',
+    'VM-013',
+    'VM-237',
+    'VM-911',
+    'VM-118',
+    'VM-404',
+    'VM-000',
+    'VM-FRONT-7'
+  ];
+  const lines = order.filter((id) => flags[id]).map((id) => VOICEMAIL_ARCHIVE_LINES[id]);
+  if (!lines.length) {
+    container.innerHTML =
+      '<p class="dem-terminal-muted dem-voicemail-notes-empty">No voicemail transcripts verified yet.</p>';
+    return;
+  }
+  container.innerHTML = `<ul class="dem-voicemail-archive-list">${lines
+    .map((line) => `<li><span class="dem-voicemail-archive-card">${escapeHtml(line)}</span></li>`)
+    .join('')}</ul>`;
+}
+
+function showStaffTerminalToast(message) {
+  const t = el('dem-staff-terminal-toast');
+  if (!t || !message) return;
+  t.textContent = message;
+  t.hidden = false;
+  try {
+    clearTimeout(window.__demStaffTerminalToastTimer);
+    window.__demStaffTerminalToastTimer = setTimeout(() => {
+      t.hidden = true;
+    }, 4200);
+  } catch {
+    /* ignore */
+  }
+}
 
 function el(id) {
   return typeof document !== 'undefined' ? document.getElementById(id) : null;
@@ -433,14 +863,103 @@ export function handleVerificationCode(raw) {
   }
   if (lower === 'gaz-204') {
     result.ok = true;
-    result.message = 'Gazette reference reserved for future archive.';
-    result.patchCodes.gaz204Reserved = true;
+    result.message =
+      'Gazette reference accepted. Room 204 clipping cross-linked with INC-204 and LF-204.';
+    result.patchCodes.gaz204 = true;
+    return result;
+  }
+  if (lower === 'gaz-118') {
+    result.ok = true;
+    result.message =
+      'Gazette reference accepted. Room 118 noise complaint linked to Silver Watch and key return.';
+    result.patchCodes.gaz118 = true;
+    return result;
+  }
+  if (lower === 'gaz-404') {
+    result.ok = true;
+    result.message =
+      'Gazette reference accepted. Missing file clipping linked to Staff Only records.';
+    result.patchCodes.gaz404 = true;
+    return result;
+  }
+  if (lower === 'gaz-911') {
+    result.ok = true;
+    result.message = 'Gazette reference accepted. Emergency routing outage note unlocked.';
+    result.patchCodes.gaz911 = true;
+    return result;
+  }
+  if (lower === 'gaz-013') {
+    result.ok = true;
+    result.message = 'Gazette reference accepted. Quiet guest sighting linked to G-013.';
+    result.patchCodes.gaz013 = true;
+    return result;
+  }
+  if (lower === 'gaz-237') {
+    result.ok = true;
+    result.message = 'Gazette reference accepted. Hallway noise report linked to Room 237.';
+    result.patchCodes.gaz237 = true;
+    return result;
+  }
+  if (lower === 'gaz-000') {
+    result.ok = true;
+    result.message =
+      'Gazette reference accepted. Signal interruption clipping marked incomplete.';
+    result.patchCodes.gaz000 = true;
     return result;
   }
   if (lower === 'vm-204') {
     result.ok = true;
-    result.message = 'Voicemail reference reserved for future archive.';
-    result.patchCodes.vm204Reserved = true;
+    result.message =
+      'Voicemail reference accepted. Room 204 transcript connected to G-204, LF-204, GAZ-204, and Rule 204.';
+    result.patchCodes.vm204 = true;
+    return result;
+  }
+  if (lower === 'vm-013') {
+    result.ok = true;
+    result.message =
+      'Voicemail reference accepted. Quiet Line connected to G-013, LF-013, GAZ-013, and Rule 13.';
+    result.patchCodes.vm013 = true;
+    return result;
+  }
+  if (lower === 'vm-237') {
+    result.ok = true;
+    result.message =
+      'Voicemail reference accepted. Hallway Callback connected to Room 237, GAZ-237, and Rule 237.';
+    result.patchCodes.vm237 = true;
+    return result;
+  }
+  if (lower === 'vm-911') {
+    result.ok = true;
+    result.message =
+      'Voicemail reference accepted. Emergency routing transcript connected to GAZ-911 and Rule 911.';
+    result.patchCodes.vm911 = true;
+    return result;
+  }
+  if (lower === 'vm-118') {
+    result.ok = true;
+    result.message =
+      'Voicemail reference accepted. Key Return Message connected to LF-007, LF-118, GAZ-118, and Rule 118.';
+    result.patchCodes.vm118 = true;
+    return result;
+  }
+  if (lower === 'vm-404') {
+    result.ok = true;
+    result.message =
+      'Voicemail reference accepted. Missing Record Tone connected to INC-404, LF-404, GAZ-404, and Rule 404.';
+    result.patchCodes.vm404 = true;
+    return result;
+  }
+  if (lower === 'vm-000') {
+    result.ok = true;
+    result.message = 'Voicemail reference accepted. Dead Air Broadcast marked incomplete.';
+    result.patchCodes.vm000 = true;
+    return result;
+  }
+  if (lower === 'vm-front-7') {
+    result.ok = true;
+    result.message =
+      'Voicemail reference accepted. Cash after midnight note connected to G-027 and Rule 04.';
+    result.patchCodes.vmFront7 = true;
     return result;
   }
 
@@ -494,18 +1013,31 @@ export function renderUnlockedNotes(container) {
       body: 'Item note unlocked. The watch was ticking at the wrong time.'
     });
   }
-  if (u.gaz204Reserved) {
-    items.push({
-      title: 'GAZ-204 Placeholder',
-      body: 'Gazette reference reserved for future archive.'
-    });
-  }
-  if (u.vm204Reserved) {
-    items.push({
-      title: 'VM-204 Placeholder',
-      body: 'Voicemail reference reserved for future archive.'
-    });
-  }
+  const gazetteUnlockPairs = [
+    ['gaz204', 'GAZ-204'],
+    ['gaz118', 'GAZ-118'],
+    ['gaz404', 'GAZ-404'],
+    ['gaz911', 'GAZ-911'],
+    ['gaz013', 'GAZ-013'],
+    ['gaz237', 'GAZ-237'],
+    ['gaz000', 'GAZ-000']
+  ];
+  gazetteUnlockPairs.forEach(([flag, id]) => {
+    if (u[flag] && GAZETTE_UNLOCK_MESSAGES[id]) {
+      items.push({
+        title: `${id} note`,
+        body: GAZETTE_UNLOCK_MESSAGES[id]
+      });
+    }
+  });
+  VOICEMAIL_UNLOCK_FLAG_ORDER.forEach(([flag, id]) => {
+    if (u[flag] && VOICEMAIL_CODE_MESSAGES[id]) {
+      items.push({
+        title: `${id} note`,
+        body: VOICEMAIL_CODE_MESSAGES[id]
+      });
+    }
+  });
 
   if (!items.length) {
     container.innerHTML =
@@ -537,6 +1069,10 @@ function referenceLinkMeta(url) {
   if (u === SITE_TRAINING) return { label: 'Open Training Manual', href: SITE_TRAINING };
   if (u === SITE_GUEST_DB) return { label: 'Open Guest Database', href: SITE_GUEST_DB };
   if (u === SITE_LOST_FOUND) return { label: 'Open Lost & Found', href: SITE_LOST_FOUND };
+  if (u === SITE_GAZETTE) return { label: 'Open Local Gazette', href: SITE_GAZETTE };
+  if (u === SITE_VOICEMAIL) return { label: 'Open Voicemail Archive', href: SITE_VOICEMAIL };
+  if (u === SITE_EMPLOYEE_PORTAL)
+    return { label: 'Open Employee Portal', href: SITE_EMPLOYEE_PORTAL };
   if (u === SITE_ROOT) return { label: 'Open Official Site', href: SITE_ROOT };
   return { label: 'Open link', href: u };
 }
@@ -752,6 +1288,7 @@ function renderIncidentLog(root) {
             <div class="dem-kv-row dem-kv-row--wide"><dt>Note</dt><dd>${escapeHtml(inc.note)}</dd></div>
           </dl>
           ${rules}
+          ${renderGazetteReferenceBlock(inc)}
           <div class="dem-terminal-card-actions">${refBtn}</div>
           ${optionalUrlCopyLine(inc.siteReference)}
         </article>`;
@@ -811,6 +1348,76 @@ function pickRandomFoundItemNotLogged() {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+function renderVoicemailTab(root) {
+  if (!root) return;
+  const log = loadVoicemailLog();
+  const archiveBtn = referenceLinkButton(SITE_VOICEMAIL);
+  const listHtml = !log.length
+    ? '<p class="dem-terminal-muted">No voicemail messages logged yet.</p>'
+    : `<div class="dem-voicemail-grid">${log
+        .slice()
+        .reverse()
+        .map((entry) => {
+          const def = findVoicemailDef(entry.voicemailId);
+          if (!def) return '';
+          const riskPill = riskPillClass(def.risk);
+          const giParts = [];
+          if (def.relatedGuest && def.relatedGuest !== '—') giParts.push(def.relatedGuest);
+          if (def.relatedIncident && def.relatedIncident !== '—') giParts.push(def.relatedIncident);
+          const guestInc = giParts.length ? giParts.join(' · ') : '—';
+          const vmBtn = referenceLinkButton(def.siteReference || SITE_VOICEMAIL);
+          return `
+          <article class="dem-terminal-card dem-voicemail-card">
+            <header class="dem-voicemail-head">
+              <h4 class="dem-voicemail-title"><span class="dem-voicemail-id">${escapeHtml(def.voicemailId)}</span> — ${escapeHtml(def.title)}</h4>
+              <span class="${riskPill}">${escapeHtml(def.risk)}</span>
+            </header>
+            <dl class="dem-kv">
+              <div class="dem-kv-row"><dt>Room</dt><dd>${escapeHtml(def.relatedRoom || '—')}</dd></div>
+              <div class="dem-kv-row dem-kv-row--wide"><dt>Guest / incident</dt><dd>${escapeHtml(guestInc)}</dd></div>
+              <div class="dem-kv-row dem-kv-row--wide"><dt>Note</dt><dd>${escapeHtml(def.note || '')}</dd></div>
+            </dl>
+            <div class="dem-terminal-card-actions">${vmBtn}</div>
+            ${optionalUrlCopyLine(def.siteReference || SITE_VOICEMAIL)}
+          </article>`;
+        })
+        .join('')}</div>`;
+
+  root.innerHTML = `
+    <p class="dem-terminal-muted">Switchboard log is local-only. The site Voicemail Archive has optional transcripts.</p>
+    <div class="dem-terminal-card-actions">
+      <button type="button" class="button button-secondary dem-terminal-ref-btn" id="dem-voicemail-log-sample">Log sample voicemail</button>
+      <button type="button" class="button button-secondary dem-terminal-ref-btn" id="dem-voicemail-clear">Clear voicemail log</button>
+      ${archiveBtn}
+    </div>
+    ${optionalUrlCopyLine(SITE_VOICEMAIL)}
+    <section class="dem-terminal-notes-section dem-voicemail-inline-notes" aria-label="Archived Voicemail Notes">
+      <h3 class="dem-terminal-subhead">Archived Voicemail Notes</h3>
+      <div id="dem-terminal-voicemail-notes-inline"></div>
+    </section>
+    ${listHtml}
+  `;
+
+  renderUnlockedVoicemailNotes(el('dem-terminal-voicemail-notes-inline'));
+
+  el('dem-voicemail-log-sample')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const picked = pickRandomVoicemailNotLogged();
+    if (picked) logVoicemailMessage(picked.voicemailId);
+    renderVoicemailTab(root);
+    const rs = window.__demStaffTerminalLastRenderState || {};
+    renderOverview(el('dem-terminal-panel-overview'), rs);
+  });
+
+  el('dem-voicemail-clear')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    clearVoicemailLog();
+    renderVoicemailTab(root);
+    const rs = window.__demStaffTerminalLastRenderState || {};
+    renderOverview(el('dem-terminal-panel-overview'), rs);
+  });
+}
+
 function renderFoundItemsTab(root) {
   if (!root) return;
   const items = loadFoundItems();
@@ -834,6 +1441,7 @@ function renderFoundItemsTab(root) {
               <div class="dem-kv-row"><dt>Incident</dt><dd>${escapeHtml(it.linkedIncident || '—')}</dd></div>
               <div class="dem-kv-row dem-kv-row--wide"><dt>Note</dt><dd>${escapeHtml(it.note || '')}</dd></div>
             </dl>
+            ${renderGazetteReferenceCompact(it)}
             <div class="dem-terminal-card-actions">${refBtn}</div>
             ${optionalUrlCopyLine(it.siteReference || SITE_LOST_FOUND)}
           </article>`;
@@ -856,6 +1464,16 @@ function renderFoundItemsTab(root) {
     const picked = pickRandomFoundItemNotLogged();
     addFoundItem({ ...picked, loggedAt: Date.now() });
     renderFoundItemsTab(root);
+    if (Math.random() < 0.07) {
+      const vmPick = pickRandomVoicemailNotLogged();
+      if (vmPick && logVoicemailMessage(vmPick.voicemailId)) {
+        showStaffTerminalToast(`Switchboard message logged: ${vmPick.voicemailId}`);
+        const vmRoot = el('dem-terminal-panel-voicemail');
+        if (vmRoot) renderVoicemailTab(vmRoot);
+        const rs = window.__demStaffTerminalLastRenderState || {};
+        renderOverview(el('dem-terminal-panel-overview'), rs);
+      }
+    }
   });
 
   el('dem-found-clear')?.addEventListener('click', (e) => {
@@ -872,10 +1490,10 @@ function renderStaffPortalTab(root) {
     <div class="dem-terminal-card dem-portal-board-card">
       <p class="dem-portal-board-title">Portal link status</p>
       <div class="dem-portal-board" role="list">
-        <div class="dem-portal-row" role="listitem">
+        <div class="dem-portal-row dem-portal-row--available" role="listitem">
           <span class="dem-portal-row-name">Employee Portal</span>
           <span class="dem-pill dem-pill-ok">Available</span>
-          <span class="dem-portal-row-action"><a href="${SITE_ROOT}" target="_blank" rel="noopener noreferrer" class="button button-secondary dem-terminal-ref-btn">Open Employee Portal</a></span>
+          <span class="dem-portal-row-action"><a href="${SITE_EMPLOYEE_PORTAL}" target="_blank" rel="noopener noreferrer" class="button button-secondary dem-terminal-ref-btn">Open Employee Portal</a></span>
         </div>
         <div class="dem-portal-row dem-portal-row--available" role="listitem">
           <span class="dem-portal-row-name">Motel Files</span>
@@ -907,14 +1525,55 @@ function renderStaffPortalTab(root) {
           <span class="dem-pill dem-pill-ok">Available</span>
           <span class="dem-portal-row-action"><a href="${SITE_LOST_FOUND}" target="_blank" rel="noopener noreferrer" class="button button-secondary dem-terminal-ref-btn">Open Lost &amp; Found</a></span>
         </div>
+        <div class="dem-portal-row dem-portal-row--available" role="listitem">
+          <span class="dem-portal-row-name">Local Gazette</span>
+          <span class="dem-pill dem-pill-ok">Available</span>
+          <span class="dem-portal-row-action"><a href="${SITE_GAZETTE}" target="_blank" rel="noopener noreferrer" class="button button-secondary dem-terminal-ref-btn">Open Local Gazette</a></span>
+        </div>
+        <div class="dem-portal-row dem-portal-row--available" role="listitem">
+          <span class="dem-portal-row-name">Voicemail Archive</span>
+          <span class="dem-pill dem-pill-ok">Available</span>
+          <span class="dem-portal-row-action"><a href="${SITE_VOICEMAIL}" target="_blank" rel="noopener noreferrer" class="button button-secondary dem-terminal-ref-btn">Open Voicemail Archive</a></span>
+        </div>
       </div>
       <div class="dem-portal-quick-actions">
         <a href="${SITE_ROOT}" target="_blank" rel="noopener noreferrer" class="button button-primary dem-terminal-ref-btn">Open Official Site</a>
         <p class="dem-terminal-muted dem-portal-quick-hint">Opens deadendmotel.site in a new tab.</p>
       </div>
-      <p class="dem-terminal-url-copy dem-terminal-muted"><span class="dem-terminal-url-copy-label">Copy-safe</span> <code class="dem-terminal-url-code">${escapeHtml(SITE_ROOT)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_TRAINING)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_GUEST_DB)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_LOST_FOUND)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_FILES)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_FLOOR)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_MEDIA)}</code></p>
+      <p class="dem-terminal-url-copy dem-terminal-muted"><span class="dem-terminal-url-copy-label">Copy-safe</span> <code class="dem-terminal-url-code">${escapeHtml(SITE_ROOT)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_EMPLOYEE_PORTAL)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_TRAINING)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_GUEST_DB)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_LOST_FOUND)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_GAZETTE)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_VOICEMAIL)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_FILES)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_FLOOR)}</code> · <code class="dem-terminal-url-code">${escapeHtml(SITE_MEDIA)}</code></p>
     </div>
   `;
+}
+
+function buildSwitchboardOverviewCardHtml() {
+  const log = loadVoicemailLog();
+  const archiveBtn = referenceLinkButton(SITE_VOICEMAIL);
+  const tabBtn = `<button type="button" class="button button-secondary dem-terminal-ref-btn" id="dem-overview-open-voicemail-tab">Open Voicemail tab</button>`;
+  if (!log.length) {
+    return `
+    <div class="dem-terminal-card dem-switchboard-overview-card">
+      <p class="dem-switchboard-overview-title">Switchboard Messages</p>
+      <p class="dem-terminal-muted dem-switchboard-overview-body">No phone messages logged this shift.</p>
+      <div class="dem-terminal-card-actions dem-switchboard-overview-actions">
+        ${tabBtn}
+        ${archiveBtn}
+      </div>
+    </div>`;
+  }
+  const latest = log[log.length - 1];
+  const def = findVoicemailDef(latest?.voicemailId);
+  const line = def
+    ? `Latest: ${def.voicemailId} — ${def.title}`
+    : `Latest: ${String(latest?.voicemailId || '')}`;
+  return `
+    <div class="dem-terminal-card dem-switchboard-overview-card">
+      <p class="dem-switchboard-overview-title">Switchboard Messages</p>
+      <p class="dem-switchboard-latest">${escapeHtml(line)}</p>
+      <div class="dem-terminal-card-actions dem-switchboard-overview-actions">
+        ${tabBtn}
+        ${archiveBtn}
+      </div>
+    </div>`;
 }
 
 function renderReferencesTab(root) {
@@ -925,9 +1584,14 @@ function renderReferencesTab(root) {
       <p class="dem-portal-board-title">References</p>
       <div class="dem-portal-board" role="list">
         <div class="dem-portal-row dem-portal-row--available" role="listitem">
+          <span class="dem-portal-row-name">Voicemail Archive</span>
+          <span class="dem-pill dem-pill-ok">Available</span>
+          <span class="dem-portal-row-action">${referenceLinkButton(SITE_VOICEMAIL)}</span>
+        </div>
+        <div class="dem-portal-row dem-portal-row--available" role="listitem">
           <span class="dem-portal-row-name">Employee Portal</span>
           <span class="dem-pill dem-pill-ok">Available</span>
-          <span class="dem-portal-row-action">${referenceLinkButton(SITE_ROOT)}</span>
+          <span class="dem-portal-row-action">${referenceLinkButton(SITE_EMPLOYEE_PORTAL)}</span>
         </div>
         <div class="dem-portal-row dem-portal-row--available" role="listitem">
           <span class="dem-portal-row-name">Training Manual</span>
@@ -945,6 +1609,11 @@ function renderReferencesTab(root) {
           <span class="dem-portal-row-action">${referenceLinkButton(SITE_LOST_FOUND)}</span>
         </div>
         <div class="dem-portal-row dem-portal-row--available" role="listitem">
+          <span class="dem-portal-row-name">Local Gazette</span>
+          <span class="dem-pill dem-pill-ok">Available</span>
+          <span class="dem-portal-row-action">${referenceLinkButton(SITE_GAZETTE)}</span>
+        </div>
+        <div class="dem-portal-row dem-portal-row--available" role="listitem">
           <span class="dem-portal-row-name">Motel Files</span>
           <span class="dem-pill dem-pill-ok">Available</span>
           <span class="dem-portal-row-action">${referenceLinkButton(SITE_FILES)}</span>
@@ -960,6 +1629,7 @@ function renderReferencesTab(root) {
           <span class="dem-portal-row-action">${referenceLinkButton(SITE_MEDIA)}</span>
         </div>
       </div>
+      <div class="dem-terminal-card-actions">${referenceLinkButton(SITE_ROOT)}</div>
     </div>
   `;
 }
@@ -990,11 +1660,20 @@ function renderOverview(root, renderState) {
       </ul>
       <p><span class="dem-terminal-k">Official Staff Portal</span></p>
       <div class="dem-terminal-card-actions">
-        <a href="${SITE_ROOT}" target="_blank" rel="noopener noreferrer" class="button button-secondary dem-terminal-ref-btn">Open Staff Portal</a>
+        <a href="${SITE_EMPLOYEE_PORTAL}" target="_blank" rel="noopener noreferrer" class="button button-secondary dem-terminal-ref-btn">Open Employee Portal</a>
+        <a href="${SITE_ROOT}" target="_blank" rel="noopener noreferrer" class="button button-secondary dem-terminal-ref-btn">Open Official Site</a>
       </div>
       <p class="dem-terminal-muted dem-portal-quick-hint">Opens in a new tab. Optional — not required to play.</p>
       ${optionalUrlCopyLine(SITE_ROOT)}
     </div>
+    <div class="dem-terminal-card dem-gazette-reminder-card">
+      <p class="dem-gazette-reminder-title">Archived Clipping Reminder</p>
+      <p class="dem-terminal-muted dem-gazette-reminder-body">Some incident IDs now have Local Gazette references. If a report mentions GAZ-204, check the Local Gazette archive before assuming the incident is new.</p>
+      <div class="dem-terminal-card-actions">
+        <a href="${SITE_GAZETTE}" target="_blank" rel="noopener noreferrer" class="button button-secondary dem-terminal-ref-btn dem-gazette-open-btn">Open Local Gazette</a>
+      </div>
+    </div>
+    ${buildSwitchboardOverviewCardHtml()}
     <div class="dem-terminal-card">
       <p><span class="dem-terminal-k">Employee ID</span></p>
       <p class="dem-terminal-muted">Employee ID personalization will be supported in a future build.</p>
@@ -1076,11 +1755,18 @@ function closeOverlay() {
   document.body.classList.remove('dem-staff-terminal-open');
 }
 
+function syncVoicemailArchivePanels() {
+  renderUnlockedVoicemailNotes(el('dem-terminal-voicemail-notes'));
+  renderUnlockedVoicemailNotes(el('dem-terminal-voicemail-notes-inline'));
+}
+
 function refreshTerminalContent(renderState) {
   if (!overlayOpen) return;
   renderOverview(el('dem-terminal-panel-overview'), renderState);
   fillActiveIncidents(renderState);
   renderUnlockedNotes(el('dem-terminal-unlocked-notes'));
+  renderUnlockedGazetteNotes(el('dem-terminal-gazette-notes'));
+  syncVoicemailArchivePanels();
 }
 
 function submitCode() {
@@ -1095,6 +1781,8 @@ function submitCode() {
   feedback.className = 'dem-terminal-code-feedback';
   feedback.innerHTML = buildCodeResponseHtml(raw, res);
   renderUnlockedNotes(el('dem-terminal-unlocked-notes'));
+  renderUnlockedGazetteNotes(el('dem-terminal-gazette-notes'));
+  syncVoicemailArchivePanels();
 }
 
 export function initStaffTerminal() {
@@ -1112,11 +1800,14 @@ export function initStaffTerminal() {
       renderRoomRecords(el('dem-terminal-panel-rooms'));
       renderIncidentLog(el('dem-terminal-panel-incidents'));
       renderFoundItemsTab(el('dem-terminal-panel-found'));
+      renderVoicemailTab(el('dem-terminal-panel-voicemail'));
       fillActiveIncidents(rs);
       renderStaffPortalTab(el('dem-terminal-panel-portal'));
       renderReferencesTab(el('dem-terminal-panel-refs'));
       setTab(activeTab);
       renderUnlockedNotes(el('dem-terminal-unlocked-notes'));
+      renderUnlockedGazetteNotes(el('dem-terminal-gazette-notes'));
+      syncVoicemailArchivePanels();
     } catch {
       /* ignore */
     }
@@ -1128,6 +1819,11 @@ export function initStaffTerminal() {
   });
 
   overlay.addEventListener('click', (e) => {
+    if (e.target.closest('#dem-overview-open-voicemail-tab')) {
+      e.preventDefault();
+      setTab('voicemail');
+      return;
+    }
     if (e.target === overlay) closeOverlay();
   });
 

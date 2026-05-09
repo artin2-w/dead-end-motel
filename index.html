@@ -803,12 +803,14 @@
               </div>
               <button type="button" id="dem-staff-terminal-close" class="button button-secondary dem-staff-terminal-close-btn">Close</button>
             </header>
+            <div id="dem-staff-terminal-toast" class="dem-staff-terminal-toast" role="status" aria-live="polite" hidden></div>
             <nav class="dem-staff-terminal-tabs" role="tablist" aria-label="Staff terminal sections">
               <button type="button" role="tab" class="dem-terminal-tab is-active" data-dem-terminal-tab="overview" aria-selected="true">Overview</button>
               <button type="button" role="tab" class="dem-terminal-tab" data-dem-terminal-tab="guest" aria-selected="false">Guest Lookup</button>
               <button type="button" role="tab" class="dem-terminal-tab" data-dem-terminal-tab="rooms" aria-selected="false">Room Records</button>
               <button type="button" role="tab" class="dem-terminal-tab" data-dem-terminal-tab="incidents" aria-selected="false">Incident Log</button>
               <button type="button" role="tab" class="dem-terminal-tab" data-dem-terminal-tab="found" aria-selected="false">Found Items</button>
+              <button type="button" role="tab" class="dem-terminal-tab" data-dem-terminal-tab="voicemail" aria-selected="false">Voicemail</button>
               <button type="button" role="tab" class="dem-terminal-tab" data-dem-terminal-tab="code" aria-selected="false">Code Entry</button>
               <button type="button" role="tab" class="dem-terminal-tab" data-dem-terminal-tab="portal" aria-selected="false">Staff Portal</button>
               <button type="button" role="tab" class="dem-terminal-tab" data-dem-terminal-tab="refs" aria-selected="false">References</button>
@@ -819,6 +821,7 @@
               <div id="dem-terminal-panel-rooms" class="dem-terminal-panel" data-dem-terminal-panel="rooms" role="tabpanel" hidden></div>
               <div id="dem-terminal-panel-incidents" class="dem-terminal-panel" data-dem-terminal-panel="incidents" role="tabpanel" hidden></div>
               <div id="dem-terminal-panel-found" class="dem-terminal-panel" data-dem-terminal-panel="found" role="tabpanel" hidden></div>
+              <div id="dem-terminal-panel-voicemail" class="dem-terminal-panel" data-dem-terminal-panel="voicemail" role="tabpanel" hidden></div>
               <div id="dem-terminal-panel-code" class="dem-terminal-panel" data-dem-terminal-panel="code" role="tabpanel" hidden>
                 <p class="dem-terminal-muted">Future builds may use verification codes found on deadendmotel.site.</p>
                 <label class="dem-terminal-label" for="dem-terminal-code-input">Verification code</label>
@@ -831,6 +834,15 @@
                 <section class="dem-terminal-notes-section" aria-label="Unlocked notes">
                   <h3 class="dem-terminal-subhead">Unlocked notes</h3>
                   <div id="dem-terminal-unlocked-notes"></div>
+                </section>
+                <section class="dem-terminal-notes-section dem-gazette-notes-section" aria-label="Archived Gazette Notes">
+                  <h3 class="dem-terminal-subhead">Archived Gazette Notes</h3>
+                  <div id="dem-terminal-gazette-notes"></div>
+                </section>
+                <section class="dem-terminal-notes-section dem-voicemail-archive-notes-section" aria-label="Archived Voicemail Notes">
+                  <h3 class="dem-terminal-subhead">Archived Voicemail Notes</h3>
+                  <p class="dem-terminal-muted dem-voicemail-archive-hint">Optional transcripts on the site — no audio in this game build.</p>
+                  <div id="dem-terminal-voicemail-notes"></div>
                 </section>
               </div>
               <div id="dem-terminal-panel-portal" class="dem-terminal-panel" data-dem-terminal-panel="portal" role="tabpanel" hidden></div>
