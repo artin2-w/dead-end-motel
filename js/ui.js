@@ -244,13 +244,50 @@ export function setActiveScreen(screenId) {
       'screen-run-ending-screen'
     );
     appShell.classList.add(`screen-${screenId}`);
-    if (screenId === 'main-menu') {
+  if (screenId === 'main-menu') {
       appShell.removeAttribute('data-active-panel');
+      appShell.removeAttribute('data-active-workspace');
+      document.getElementById('game-screen')?.removeAttribute('data-active-workspace');
     }
   }
+
+  if (screenId === 'game-screen') {
+    const panelId = appShell?.dataset?.activePanel || 'frontdesk-panel';
+    const workspace = {
+      'frontdesk-panel': 'frontdesk',
+      'cameras-panel': 'cctv',
+      'spaces-panel': 'operations',
+      'power-panel': 'breaker',
+      'report-panel': 'reports',
+      'basement-panel': 'basement'
+    }[String(panelId)] || String(panelId).replace(/-panel$/, '') || 'frontdesk';
+    if (appShell) {
+      appShell.dataset.activePanel = panelId;
+      appShell.dataset.activeWorkspace = workspace;
+    }
+    const gameScreen = document.getElementById('game-screen');
+    if (gameScreen) gameScreen.dataset.activeWorkspace = workspace;
+  }
+
+  requestAnimationFrame(() => {
+    try {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    } catch {
+      window.scrollTo(0, 0);
+    }
+  });
 }
 
 export function setActivePanel(panelId) {
+  const workspaceMap = {
+    'frontdesk-panel': 'frontdesk',
+    'cameras-panel': 'cctv',
+    'spaces-panel': 'operations',
+    'power-panel': 'breaker',
+    'report-panel': 'reports',
+    'basement-panel': 'basement'
+  };
+  const workspace = workspaceMap[String(panelId || '')] || String(panelId || 'frontdesk-panel').replace(/-panel$/, '') || 'frontdesk';
   document.querySelectorAll('.panel').forEach((panel) => {
     panel.classList.toggle('active-panel', panel.id === panelId);
   });
@@ -263,7 +300,83 @@ export function setActivePanel(panelId) {
   const appShell = document.getElementById('app');
   if (appShell && panelId) {
     appShell.dataset.activePanel = String(panelId);
+    appShell.dataset.activeWorkspace = workspace;
   }
+
+  const gameScreen = document.getElementById('game-screen');
+  if (gameScreen && panelId) {
+    gameScreen.dataset.activeWorkspace = workspace;
+  }
+
+  document.querySelectorAll('.dem-v3-desk-tools [data-panel]').forEach((button) => {
+    const active = button.dataset.panel === panelId;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+
+  const activePanel = panelId ? document.getElementById(panelId) : null;
+  if (activePanel) activePanel.scrollTop = 0;
+}
+
+const ND_PANEL_CHROME = {
+  'frontdesk-panel': { title: 'Front desk', ctx: 'Intake slip is on the left rail.' },
+  'cameras-panel': { title: 'Camera wall', ctx: 'Scan feeds and contain anomalies.' },
+  'spaces-panel': { title: 'Operations', ctx: 'Room service, shared-space pressure, and incident handling.' },
+  'power-panel': { title: 'Power board', ctx: 'Breaker load and emergency grid.' },
+  'basement-panel': { title: 'Basement ledger', ctx: 'Off-book floor — optional depth.' },
+  'report-panel': { title: 'Night paperwork', ctx: 'Incidents, dispatch, end of shift.' }
+};
+
+function ndPriorityTypeLabel(cp) {
+  if (!cp) return '';
+  if (cp.type === 'desk') return 'Front desk';
+  if (cp.type === 'room') return 'Operations';
+  if (cp.type === 'camera') return 'Cameras';
+  if (cp.type === 'zone') return 'Shared zones';
+  return 'Systems';
+}
+
+/** Night Desk Command Center — board chrome next to panel tabs (IDs: nd-board-main-title, nd-board-context). */
+export function syncNightDeskChrome(state) {
+  const titleEl = document.getElementById('nd-board-main-title');
+  const ctxEl = document.getElementById('nd-board-context');
+  if (!titleEl || !ctxEl) return;
+  const app = document.getElementById('app');
+  if (!app?.classList.contains('screen-game-screen')) return;
+
+  const panelId = String(app.dataset.activePanel || 'frontdesk-panel');
+  const panelMeta = ND_PANEL_CHROME[panelId] || { title: 'Night command', ctx: '' };
+  const guests = Array.isArray(state?.guests) ? state.guests : [];
+  const cp = state?.clarity?.currentPriority;
+
+  let title = panelMeta.title;
+  let ctx = panelMeta.ctx;
+
+  if (cp?.headline) {
+    title = `${panelMeta.title} — priority`;
+    const typeL = ndPriorityTypeLabel(cp);
+    ctx = [typeL, String(cp.headline).trim()].filter(Boolean).join(' · ');
+  } else if (panelId === 'frontdesk-panel') {
+    if (guests.length) {
+      const g = guests[0];
+      const name =
+        String(g?.codename || g?.fileId || g?.guestFileId || g?.displayName || g?.name || '').trim() || `Arrival #${g.id}`;
+      title = 'Guest at the window';
+      ctx = `${name} · Risk ${g?.riskLevel || 'Low'}`;
+    } else {
+      title = 'The lobby is quiet';
+      ctx = 'Call the next arrival when you are ready.';
+    }
+  }
+
+  const alertEl = document.getElementById('game-topbar-alert-count');
+  const alertN = alertEl ? Number.parseInt(String(alertEl.textContent || '0'), 10) : 0;
+  if (Number.isFinite(alertN) && alertN > 0 && !cp?.headline) {
+    ctx = `${ctx ? `${ctx} · ` : ''}Alerts ${alertN}`.trim();
+  }
+
+  titleEl.textContent = title;
+  ctxEl.textContent = ctx;
 }
 
 function deriveWeatherState(state) {
@@ -613,6 +726,30 @@ export function renderTopbar(state) {
     const pressure = state?.uiPressureLevel || 'calm';
     pressureLabel.textContent = `Pressure: ${pressure.charAt(0).toUpperCase()}${pressure.slice(1)}`;
     pressureLabel.className = `shift-pressure-label pressure-${pressure}`;
+  }
+
+  const tbPressureLbl = document.getElementById('game-topbar-pressure-label');
+  const tbPressureFill = document.getElementById('game-topbar-pressure-fill');
+  const tbPressureTrack = document.querySelector('.game-topbar-pressure-track');
+  if (tbPressureLbl) {
+    const pressure = state?.uiPressureLevel || 'calm';
+    const short = `${pressure.charAt(0).toUpperCase()}${pressure.slice(1)}`;
+    tbPressureLbl.textContent = short;
+    tbPressureLbl.className = `game-topbar-pressure-label pressure-${pressure}`;
+  }
+  if (tbPressureFill) {
+    const pressure = state?.uiPressureLevel || 'calm';
+    const pct = { calm: 22, tense: 48, dire: 72, emergency: 94 }[pressure] ?? 28;
+    tbPressureFill.style.width = `${pct}%`;
+    if (tbPressureTrack) tbPressureTrack.setAttribute('aria-valuenow', String(pct));
+  }
+
+  const tbAlerts = document.getElementById('game-topbar-alerts');
+  const tbAlertCount = document.getElementById('game-topbar-alert-count');
+  if (tbAlerts && tbAlertCount) {
+    const n = Array.isArray(state?.liveAlerts) ? state.liveAlerts.length : 0;
+    tbAlertCount.textContent = String(n);
+    tbAlerts.hidden = n === 0;
   }
 
   const alertStrip = document.getElementById('live-alert-strip');
@@ -1404,6 +1541,278 @@ function bindAtomicActionButton(button, handler, { groupRoot = null } = {}) {
   }, { passive: false });
 }
 
+function v3Escape(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function v3Short(value, fallback = '-', max = 96) {
+  const text = String(value ?? '').trim();
+  if (!text) return fallback;
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
+function v3RiskClass(value) {
+  const low = String(value || 'low').toLowerCase();
+  if (/critical|high/.test(low)) return 'is-hot';
+  if (/medium|watch|warning/.test(low)) return 'is-warm';
+  return 'is-calm';
+}
+
+function v3ClueChipsForGuest(guest) {
+  const chips = [];
+  const room = String(guest?.idProfile?.requestedRoom || guest?.requestedRoom || guest?.preferredRoom || guest?.roomRequest || '').match(/\d+/)?.[0];
+  const fileId = String(guest?.fileId || guest?.guestFileId || '').trim();
+  if (fileId) chips.push(fileId);
+  if (room) {
+    chips.push(`G-${room}`, `LF-${room}`, `GAZ-${room}`, `VM-${room}`, `Rule ${room}`, `Code ${room}`);
+  } else if (String(guest?.policyRecommendation || '').toLowerCase().includes('reject')) {
+    chips.push('Rule check', 'ID hold', 'Archive');
+  }
+  if (guest?.linkedArrival?.groupId) chips.push('Linked arrival');
+  if (guest?.vehicleProfile) chips.push('Vehicle read');
+  if (guest?.forgeryProfile?.isForged) chips.push('Forgery file');
+  return [...new Set(chips)].slice(0, 8);
+}
+
+function v3PressurePercent(state) {
+  const progress = Math.max(0, Math.min(100, Number(getShiftProgressPercent(state) || 0)));
+  const roomPressure = (Array.isArray(state?.rooms) ? state.rooms : []).reduce(
+    (sum, room) => sum + Math.max(0, Number(room?.chainPressure || 0)) + (String(room?.condition || '').toLowerCase() === 'critical' ? 8 : 0),
+    0
+  );
+  const alerts = Math.min(18, (Array.isArray(state?.liveAlerts) ? state.liveAlerts.length : 0) * 4);
+  return Math.max(8, Math.min(100, Math.round(progress * 0.55 + roomPressure + alerts)));
+}
+
+function v3SetButton(button, handler) {
+  if (!button) return;
+  button.onclick = (event) => {
+    event.preventDefault();
+    if (typeof handler === 'function') handler();
+  };
+}
+
+export function syncVisibleGameV3(state, handlers = {}) {
+  const root = document.getElementById('dem-v3-visible-game');
+  const app = document.getElementById('app');
+  if (!root || !app?.classList.contains('screen-game-screen')) return;
+
+  const guests = Array.isArray(state?.guests) ? state.guests : [];
+  const guest = guests.find((g) => Number(g?.id) === Number(state?.clarity?.deskFocusGuestId)) || guests[0] || null;
+  const activePanel = String(app.dataset.activePanel || 'frontdesk-panel');
+  root.dataset.activeTray = activePanel.replace('-panel', '');
+  root.classList.toggle('has-guest', Boolean(guest));
+  root.classList.toggle('has-incident', Boolean(state?.activeNightEvent));
+
+  const shiftLine = document.getElementById('dem-v3-shift-line');
+  if (shiftLine) shiftLine.textContent = `Night ${state?.night || 1} / ${state?.scenario?.label || 'Standard Shift'}`;
+  const timeChip = document.getElementById('dem-v3-time-chip');
+  if (timeChip) timeChip.textContent = formatShiftTime(state?.shiftElapsedMinutes || 0);
+  const moneyChip = document.getElementById('dem-v3-money-chip');
+  if (moneyChip) moneyChip.textContent = formatMoney(Number(state?.money || 0));
+  const repChip = document.getElementById('dem-v3-rep-chip');
+  if (repChip) repChip.textContent = `Rep ${Math.round(Number(state?.reputation ?? 50))}`;
+  const powerChip = document.getElementById('dem-v3-power-chip');
+  if (powerChip) powerChip.textContent = `Power ${Math.round(Number(state?.power ?? 100))}%`;
+
+  const intake = document.getElementById('dem-v3-intake-body');
+  if (intake) {
+    const remaining = Math.max(0, Number(state?.intake?.arrivalsRemaining ?? 0));
+    const cap = Math.max(1, Number(state?.intake?.queueCap ?? 3));
+    const queueHtml = guests.length
+      ? guests.slice(0, 4).map((g, index) => `
+          <button type="button" class="dem-v3-intake-slip ${guest && g.id === guest.id ? 'is-active' : ''}" data-dem-v3-focus-guest="${v3Escape(g.id)}">
+            <span class="dem-v3-intake-number">#${index + 1}</span>
+            <strong>${v3Escape(v3Short(g?.codename || g?.fileId || g?.name, 'Unknown arrival', 32))}</strong>
+            <span>${v3Escape(g?.riskLevel || 'Low')} risk / ${v3Escape(g?.mood || 'quiet')}</span>
+          </button>
+        `).join('')
+      : '<div class="dem-v3-empty-slip"><strong>No one at the glass.</strong><span>Rain on the parking lot. The key tray is still.</span></div>';
+    intake.innerHTML = `
+      <div class="dem-v3-intake-meta">
+        <span>${guests.length}/${cap} waiting</span>
+        <span>${remaining} arrivals left</span>
+      </div>
+      ${queueHtml}
+    `;
+    intake.querySelectorAll('[data-dem-v3-focus-guest]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const gid = Number(button.getAttribute('data-dem-v3-focus-guest'));
+        if (typeof state?.onDeskGuestFocus === 'function' && Number.isFinite(gid)) state.onDeskGuestFocus(gid);
+      });
+    });
+  }
+
+  const keyTray = document.getElementById('dem-v3-key-tray');
+  if (keyTray) {
+    const rooms = Array.isArray(state?.rooms) ? state.rooms : [];
+    keyTray.innerHTML = rooms.slice(0, 6).map((room) => {
+      const status = room?.unlocked === false ? 'locked' : room?.occupied ? 'occupied' : 'vacant';
+      return `<span class="dem-v3-key-tag is-${status}">${v3Escape(room?.label || `Room ${room?.id || ''}`)}</span>`;
+    }).join('');
+  }
+
+  const activeCase = document.getElementById('dem-v3-active-case-body');
+  if (activeCase) {
+    const event = state?.activeNightEvent || null;
+    if (event) {
+      const options = Array.isArray(event.options) ? event.options.slice(0, 3) : [];
+      activeCase.innerHTML = `
+        <p class="dem-v3-kicker">Active incident</p>
+        <h1>Incident report</h1>
+        <div class="dem-v3-case-stamp">${v3Escape(event.id || event.severity || 'INC')}</div>
+        <p class="dem-v3-case-copy">${v3Escape(v3Short(event.description, 'A live motel incident needs a response.', 180))}</p>
+        <div class="dem-v3-case-facts">
+          <span>Location: ${v3Escape(event.location || event.zoneLabel || 'Motel property')}</span>
+          <span>Impact: ${v3Escape(event.severity || 'watch')}</span>
+          <span>Options: ${options.length || 'review'}</span>
+        </div>
+        <div class="dem-v3-decision-row">
+          <button type="button" class="dem-v3-btn-warning" data-dem-v3-incident>Review response</button>
+          <button type="button" class="dem-v3-btn-secondary" data-dem-v3-panel="report-panel">Open report tray</button>
+        </div>
+      `;
+      v3SetButton(activeCase.querySelector('[data-dem-v3-incident]'), state.onRespondNightEvent);
+    } else if (guest) {
+      const chips = [
+        guest?.idInspected ? 'ID checked' : 'ID unread',
+        guest?.uvInspected ? 'UV cleared' : '',
+        guest?.flagged ? 'Flagged' : '',
+        guest?.linkedArrival ? 'Linked pattern' : '',
+        guest?.vehicleProfile ? 'Vehicle clue' : '',
+        guest?.forgeryProfile?.isForged ? 'Forgery risk' : ''
+      ].filter(Boolean);
+      const roomOptions = Array.isArray(guest?.roomAssignmentOptions) && guest.roomAssignmentOptions.length
+        ? guest.roomAssignmentOptions
+        : [{ roomId: '', label: 'Auto assign room' }];
+      activeCase.innerHTML = `
+        <p class="dem-v3-kicker">Front window</p>
+        <h1>Guest at the window</h1>
+        <div class="dem-v3-guest-identity">
+          <span class="dem-v3-file-id">${v3Escape(guest.fileId || guest.guestFileId || `G-${guest.id}`)}</span>
+          <strong>${v3Escape(guest.codename || guest.name || 'Unknown arrival')}</strong>
+        </div>
+        <p class="dem-v3-case-copy">${v3Escape(v3Short(guest.inspectionHeadline || guest.policyAlignmentLine || guest.riskNote || 'Read the paperwork, check the room request, then decide.', '', 180))}</p>
+        <div class="dem-v3-case-facts">
+          <span>Behavior: ${v3Escape(v3Short(guest.mood || guest.trait || 'quiet', 'quiet', 42))}</span>
+          <span>Payment: ${v3Escape(v3Short(guest.paymentMethod || (guest.depositRequested ? 'deposit paid' : 'not settled'), 'not settled', 42))}</span>
+          <span class="${v3RiskClass(guest.riskLevel)}">Risk: ${v3Escape(guest.riskLevel || 'Low')}</span>
+          <span>Policy: ${v3Escape(guest.policyRecommendation || 'Approve')}</span>
+        </div>
+        <div class="dem-v3-inline-chips">${chips.map((chip) => `<span>${v3Escape(chip)}</span>`).join('')}</div>
+        <label class="dem-v3-room-release">
+          <span>Requested key</span>
+          <select id="dem-v3-room-select" aria-label="Room assignment">
+            ${roomOptions.map((option) => `<option value="${v3Escape(option.roomId || '')}">${v3Escape(option.label || 'Auto assign room')}</option>`).join('')}
+          </select>
+        </label>
+        <div class="dem-v3-decision-row">
+          <button type="button" class="dem-v3-btn-primary" data-dem-v3-check-id ${guest.idInspected ? 'disabled' : ''}>Check ID</button>
+          <button type="button" class="dem-v3-btn-primary" data-dem-v3-checkin>Give Room Key</button>
+          <button type="button" class="dem-v3-btn-warning" data-dem-v3-flag>Flag Guest</button>
+          <button type="button" class="dem-v3-btn-danger" data-dem-v3-reject>Refuse Check-in</button>
+        </div>
+        <div class="dem-v3-secondary-actions">
+          <button type="button" class="dem-v3-btn-secondary" data-dem-v3-secondary-check ${guest.secondaryVerified ? 'disabled' : ''}>Secondary Check</button>
+          <button type="button" class="dem-v3-btn-secondary" data-dem-v3-question>Ask Follow-up</button>
+          <button type="button" class="dem-v3-btn-ghost" data-dem-v3-terminal>Open archive</button>
+        </div>
+      `;
+      const roomValue = () => activeCase.querySelector('#dem-v3-room-select')?.value || null;
+      v3SetButton(activeCase.querySelector('[data-dem-v3-check-id]'), () => handlers.onInspectId?.(guest.id));
+      v3SetButton(activeCase.querySelector('[data-dem-v3-checkin]'), () => handlers.onCheckIn?.(guest.id, roomValue()));
+      v3SetButton(activeCase.querySelector('[data-dem-v3-flag]'), () => handlers.onFlagGuest?.(guest.id));
+      v3SetButton(activeCase.querySelector('[data-dem-v3-reject]'), () => handlers.onRejectGuest?.(guest.id));
+      v3SetButton(activeCase.querySelector('[data-dem-v3-secondary-check]'), () => handlers.onSecondaryVerify?.(guest.id));
+      v3SetButton(activeCase.querySelector('[data-dem-v3-question]'), () => handlers.onQuestionGuest?.(guest.id, guest?.vehicleProfile ? 'vehicle' : 'inconsistency'));
+      v3SetButton(activeCase.querySelector('[data-dem-v3-terminal]'), () => window.demOpenStaffTerminalToTab?.('guest'));
+    } else {
+      activeCase.innerHTML = `
+        <p class="dem-v3-kicker">Front window</p>
+        <h1>The lobby is quiet.</h1>
+        <p class="dem-v3-case-copy">Rain on the parking lot. No one at the window.</p>
+        <div class="dem-v3-quiet-window" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="dem-v3-decision-row">
+          <button type="button" class="dem-v3-btn-primary" data-dem-v3-call>Call next arrival</button>
+          <button type="button" class="dem-v3-btn-secondary" data-dem-v3-terminal>Open Staff Terminal</button>
+          <button type="button" class="dem-v3-btn-ghost" data-dem-v3-panel="spaces-panel">Open operations</button>
+        </div>
+      `;
+      v3SetButton(activeCase.querySelector('[data-dem-v3-call]'), handlers.onCallNextArrival);
+      v3SetButton(activeCase.querySelector('[data-dem-v3-terminal]'), () => document.getElementById('dem-open-staff-terminal-btn')?.click());
+    }
+    activeCase.querySelectorAll('[data-dem-v3-panel]').forEach((button) => {
+      button.addEventListener('click', () => state?.onClarityNavigatePanel?.(button.getAttribute('data-dem-v3-panel')));
+    });
+  }
+
+  const pressure = v3PressurePercent(state);
+  const pressureLabel = document.getElementById('dem-v3-pressure-label');
+  if (pressureLabel) pressureLabel.textContent = `${state?.uiPressureLevel || 'Calm'} / ${pressure}%`;
+  const pressureFill = document.getElementById('dem-v3-pressure-fill');
+  if (pressureFill) pressureFill.style.width = `${pressure}%`;
+
+  const alertsEl = document.getElementById('dem-v3-alert-list');
+  if (alertsEl) {
+    const alerts = Array.isArray(state?.liveAlerts) ? state.liveAlerts.slice(-3).reverse() : [];
+    alertsEl.innerHTML = alerts.length
+      ? alerts.map((a) => `<p>${v3Escape(v3Short(a?.message || a, '', 92))}</p>`).join('')
+      : '<p>No fresh alerts.</p>';
+  }
+  const clueEl = document.getElementById('dem-v3-clue-chips');
+  if (clueEl) {
+    const chips = guest ? v3ClueChipsForGuest(guest) : ['G-204', 'LF-204', 'GAZ-204', 'VM-204', 'Rule 204', 'Code 204'];
+    clueEl.innerHTML = chips.map((chip) => `<button type="button" data-dem-v3-archive>${v3Escape(chip)}</button>`).join('');
+    clueEl.querySelectorAll('[data-dem-v3-archive]').forEach((button) => {
+      button.addEventListener('click', () => window.demOpenStaffTerminalToTab?.('refs'));
+    });
+  }
+  const logEl = document.getElementById('dem-v3-recent-log');
+  if (logEl) {
+    const logs = Array.isArray(state?.logs) ? state.logs.slice(-4).reverse() : [];
+    logEl.innerHTML = logs.length
+      ? logs.map((line) => `<p>${v3Escape(v3Short(line, '', 92))}</p>`).join('')
+      : '<p>Shift log is clean.</p>';
+  }
+
+  const trayTitle = document.getElementById('dem-v3-tray-title');
+  const trayContext = document.getElementById('dem-v3-tray-context');
+  const trayMeta = {
+    'frontdesk-panel': ['Key rack / room board', 'Room status and deep desk tools stay here, below the case.'],
+    'cameras-panel': ['CCTV tray', 'Monitor tiles and scan controls are secondary to the active case.'],
+    'spaces-panel': ['Operations / incidents', 'Room service actions, shared-space pressure, and incident response.'],
+    'power-panel': ['Breaker box tray', 'Reserve, circuits, and emergency power actions.'],
+    'report-panel': ['Paperwork tray', 'Incident log, dispatch, and shift close controls.'],
+    'basement-panel': ['Below-grade tray', 'Off-book systems remain contained.']
+  }[activePanel] || ['Desk tray', 'Secondary systems stay below the active case.'];
+  if (trayTitle) trayTitle.textContent = trayMeta[0];
+  if (trayContext) trayContext.textContent = trayMeta[1];
+
+  root.querySelectorAll('.dem-v3-desk-tools [data-panel]').forEach((button) => {
+    const isActiveTool = button.dataset.panel === activePanel;
+    button.classList.toggle('is-active', isActiveTool);
+    button.setAttribute('aria-pressed', isActiveTool ? 'true' : 'false');
+    button.onclick = (event) => {
+      event.preventDefault();
+      state?.onClarityNavigatePanel?.(button.dataset.panel);
+    };
+  });
+  v3SetButton(document.getElementById('dem-v3-staff-terminal-btn'), () => document.getElementById('dem-open-staff-terminal-btn')?.click());
+  v3SetButton(document.getElementById('dem-v3-found-btn'), () => window.demOpenStaffTerminalToTab?.('found'));
+  v3SetButton(document.getElementById('dem-v3-voicemail-btn'), () => window.demOpenStaffTerminalToTab?.('voicemail'));
+  v3SetButton(document.getElementById('dem-v3-end-night-btn'), handlers.onEndNight);
+  v3SetButton(document.getElementById('dem-operations-review-btn'), () => document.getElementById('review-incidents-btn')?.click());
+  v3SetButton(document.getElementById('dem-operations-dispatch-btn'), () => document.getElementById('dispatch-staff-btn')?.click());
+  v3SetButton(document.getElementById('dem-operations-report-btn'), () => state?.onClarityNavigatePanel?.('report-panel'));
+}
+
 export function syncGuestStickyRail(state, { onCheckIn, onFlagGuest, onRejectGuest }) {
   const rail = document.getElementById('v43-guest-sticky-rail');
   const app = document.getElementById('app');
@@ -1608,8 +2017,7 @@ export function renderPowerDigest(state) {
   `;
 
   if (drawer) {
-    const open = Boolean(state?.clarity?.compactSurfaceState?.breakerDefaultOpen);
-    drawer.open = open;
+    drawer.open = true;
   }
 }
 
@@ -1627,12 +2035,13 @@ export function renderGuests(
   onQuestionGuest
 ) {
   const queue = document.getElementById('guest-queue');
+  if (!queue) return;
   queue.innerHTML = '';
   normalizeDeskFocusGuestIds(state.guests);
 
   if (!state.guests.length) {
     queue.innerHTML =
-      '<div class="v41-empty-queue" role="status"><p class="v41-empty-queue-title">Queue clear</p><p class="v41-empty-queue-copy muted">No bodies at the glass. Call the next arrival when intake has breath — empty is relief, not safety.</p></div>';
+      '<div class="v41-empty-queue nd-empty-lobby" role="status"><p class="v41-empty-queue-title nd-empty-lobby-title">The lobby is quiet</p><p class="v41-empty-queue-copy muted nd-empty-lobby-copy">No one at the glass. Call the next arrival when you want the night to move.</p></div>';
     renderDeskToolsPanel(state, {
       onInspectId,
       onDeepInspect,
@@ -2113,7 +2522,8 @@ export function renderRooms(
   onEvictRoomGuest,
   onListenInRoom
 ) {
-  const roomList = document.getElementById('room-list');
+  const roomList = document.getElementById('operations-room-list') || document.getElementById('room-list');
+  if (!roomList) return;
   roomList.innerHTML = '';
   const isMobileRooms = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 900px)').matches;
   const hotStrip = document.createElement('div');
@@ -3623,6 +4033,27 @@ export function renderFailure(failure, extra = null) {
   document.getElementById('failure-reason').textContent = failure?.reason || 'Motel Failure';
   document.getElementById('failure-text').textContent =
     failure?.text || 'The motel could not sustain operations for the rest of the night.';
+  const failState = extra?.state || {};
+  const setFailureCard = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+  const night = Number(failState?.night || 0);
+  const progress = Number.isFinite(night) && night > 0 ? `Night ${night} interrupted` : 'Night interrupted';
+  const pressure = failState?.uiPressureLevel ? String(failState.uiPressureLevel) : 'unstable';
+  const power = Number.isFinite(Number(failState?.power)) ? `${Math.round(Number(failState.power))}% power` : 'power unknown';
+  const rep = Number.isFinite(Number(failState?.reputation)) ? `${Math.round(Number(failState.reputation))} rep` : 'rep unknown';
+  const recommendation = failure?.code === 'power-collapse'
+    ? 'Prioritize Breaker earlier; avoid stacked scans and room actions.'
+    : failure?.code === 'critical-overload'
+      ? 'Use Operations to contain rooms before they chain.'
+      : failure?.code === 'incident-overload'
+        ? 'Review incidents sooner and dispatch staff before they stack.'
+        : 'Retry free, or continue from the opening snapshot.';
+  setFailureCard('dem-failure-progress-card', progress);
+  setFailureCard('dem-failure-trigger-card', failure?.reason || failure?.title || 'Motel failure');
+  setFailureCard('dem-failure-vitals-card', `${pressure} / ${power} / ${rep}`);
+  setFailureCard('dem-failure-next-card', recommendation);
   const ddMount = document.getElementById('failure-dead-drop-mount');
   if (ddMount) {
     const offer = extra?.deadDropOffer;

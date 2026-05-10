@@ -48,7 +48,10 @@
   <link rel="stylesheet" href="styles/v59-physical-desk.css" />
   <link rel="stylesheet" href="styles/v60-evolving-motel.css" />
   <link rel="stylesheet" href="styles/staff-terminal.css" />
+  <link rel="stylesheet" href="styles/game-ui-rebuild.css" />
+  <link rel="stylesheet" href="styles/game-ui-redesign-v2.css" />
   <link rel="stylesheet" href="styles/monetization-store.css" />
+  <link rel="stylesheet" href="styles/game-ui-v3-real-redesign.css" />
   <!-- Popunder disabled during AdSense review to protect user experience. -->
   <!-- Adsterra Popunder: baseline monetization script. Not a rewarded-ad callback. -->
   <!-- <script src="https://pl29260466.profitablecpmratenetwork.com/4e/87/04/4e870454396120fa5e44a4f71b15c891.js"></script> -->
@@ -223,8 +226,9 @@
       <a class="button button-utility" id="support-store-btn" href="#failure-store">Support / Store</a>
     </div>
   </section>
-  <div id="app" class="app-shell screen-main-menu v42-root v43-root v50-root v51-root">
-    <header class="topbar topbar-v20 v42-topbar v43-topbar" role="banner">
+  <div id="app" class="app-shell game-shell screen-main-menu v42-root v43-root v50-root v51-root">
+    <!-- Topbar: shift readout -->
+    <header class="topbar topbar-v20 v42-topbar v43-topbar game-topbar night-desk-topbar" role="banner">
       <div class="topbar-brand">
         <p class="eyebrow">Dead End Motel v0.60</p>
         <h1>Dead End Motel</h1>
@@ -253,6 +257,14 @@
             <strong id="reputation-display">50</strong>
           </div>
         </div>
+        <div class="game-topbar-pressure-wrap" aria-label="Shift pressure">
+          <span class="game-topbar-pressure-lbl">Pressure</span>
+          <div class="game-topbar-pressure-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="20" aria-labelledby="game-topbar-pressure-label">
+            <div id="game-topbar-pressure-fill" class="game-topbar-pressure-fill"></div>
+          </div>
+          <strong id="game-topbar-pressure-label" class="game-topbar-pressure-label pressure-calm">Calm</strong>
+          <span class="game-topbar-alerts" id="game-topbar-alerts" hidden aria-live="polite"><span class="game-topbar-alerts-lbl">Alerts</span> <strong id="game-topbar-alert-count">0</strong></span>
+        </div>
         <p id="topbar-context-strip" class="topbar-context-strip muted" aria-live="polite"></p>
         <div class="v60-veil-strip" aria-label="Veil meter">
           <span id="v60-veil-label" class="v60-veil-label" title="Reality integrity inside the motel.">Veil: Stable</span>
@@ -270,7 +282,8 @@
       </div>
     </header>
 
-    <main class="v42-main">
+    <!-- Main: all screens -->
+    <main class="v42-main game-main">
       <section id="main-menu" class="screen active v41-main-menu v43-main-menu v50-main-menu">
         <div class="v41-menu-atmosphere" aria-hidden="true"></div>
         <div class="hero-card v41-menu-shell v43-menu-shell">
@@ -282,6 +295,18 @@
                 <p class="v41-menu-lede muted">
                   Run the ledger under bad weather, bad law, and worse guests. Same deep systems — clearer command surface.
                 </p>
+                <div class="dem-menu-night-hook" aria-label="Tonight's motel briefing">
+                  <article>
+                    <span>Tonight's briefing</span>
+                    <strong>The rain is covering too much noise.</strong>
+                    <p>Verify the arrivals, keep the lights alive, and do not let the camera wall decide the whole night for you.</p>
+                  </article>
+                  <article>
+                    <span>Threat forecast</span>
+                    <strong>Low traffic. Bad patterns.</strong>
+                    <p>Quiet rooms are still rooms. The first clean hour is usually a lie.</p>
+                  </article>
+                </div>
               </header>
 
               <div class="v41-menu-primary-block">
@@ -381,8 +406,103 @@
         </div>
       </section>
 
-      <section id="game-screen" class="screen">
-        <nav class="panel-tabs v41-panel-tabs" aria-label="Shift panels">
+      <!-- Night Desk Command Center (visual rebuild v2 retained as support; v3 is the visible game scene) -->
+      <section id="game-screen" class="screen game-screen screen-game-screen">
+        <div id="dem-v3-visible-game" class="dem-v3-scene" aria-label="Dead End Motel night desk">
+          <header class="dem-v3-status-strip" aria-label="Shift status">
+            <div class="dem-v3-status-brand">
+              <span class="dem-v3-neon">Dead End Motel</span>
+              <span id="dem-v3-shift-line" class="dem-v3-shift-line">Night shift</span>
+            </div>
+            <div class="dem-v3-status-readouts">
+              <span id="dem-v3-time-chip" class="dem-v3-status-chip">12:00 AM</span>
+              <span id="dem-v3-money-chip" class="dem-v3-status-chip">$0</span>
+              <span id="dem-v3-rep-chip" class="dem-v3-status-chip">Rep 50</span>
+              <span id="dem-v3-power-chip" class="dem-v3-status-chip">Power 100%</span>
+            </div>
+          </header>
+
+          <main class="dem-v3-desk">
+            <section class="dem-v3-intake" aria-label="Guest intake clipboard">
+              <div class="dem-v3-clipboard-head">
+                <span class="dem-v3-clip"></span>
+                <div>
+                  <p class="dem-v3-kicker">Intake clipboard</p>
+                  <h2>Window slip</h2>
+                </div>
+              </div>
+              <div id="dem-v3-intake-body" class="dem-v3-intake-body"></div>
+              <div id="dem-v3-key-tray" class="dem-v3-key-tray" aria-label="Key tray"></div>
+            </section>
+
+            <section class="dem-v3-active-case" aria-label="Active desk case">
+              <div class="dem-v3-monitor-glass">
+                <div id="dem-v3-active-case-body" class="dem-v3-active-case-body"></div>
+              </div>
+            </section>
+
+            <aside class="dem-v3-control-stack" aria-label="Pressure and clues">
+              <section class="dem-v3-pressure-card">
+                <p class="dem-v3-kicker">Pressure</p>
+                <div id="dem-v3-pressure-label" class="dem-v3-pressure-label">Calm</div>
+                <div class="dem-v3-pressure-track"><div id="dem-v3-pressure-fill" class="dem-v3-pressure-fill"></div></div>
+              </section>
+              <section class="dem-v3-alerts-card">
+                <p class="dem-v3-kicker">Alerts</p>
+                <div id="dem-v3-alert-list" class="dem-v3-alert-list"></div>
+              </section>
+              <section class="dem-v3-clue-card">
+                <p class="dem-v3-kicker">Clue strips</p>
+                <div id="dem-v3-clue-chips" class="dem-v3-clue-chips"></div>
+              </section>
+              <section class="dem-v3-log-card">
+                <p class="dem-v3-kicker">Recent log</p>
+                <div id="dem-v3-recent-log" class="dem-v3-recent-log"></div>
+              </section>
+            </aside>
+          </main>
+
+          <section class="dem-v3-secondary-tray" aria-label="Secondary desk tray">
+            <div class="dem-v3-secondary-head">
+              <div>
+                <p class="dem-v3-kicker">Desk tray</p>
+                <h2 id="dem-v3-tray-title">Room board</h2>
+              </div>
+              <p id="dem-v3-tray-context" class="dem-v3-tray-context">Secondary systems stay below the active case.</p>
+            </div>
+          </section>
+
+          <nav class="dem-v3-desk-tools" aria-label="Physical desk tools">
+            <div class="dem-v3-tool-group dem-v3-tool-group-primary" aria-label="Desk trays">
+              <button type="button" class="dem-v3-btn-tool dem-v3-tool-crt" data-panel="frontdesk-panel"><span>Desk</span></button>
+              <button type="button" class="dem-v3-btn-tool dem-v3-tool-cctv" data-panel="cameras-panel"><span>CCTV</span></button>
+              <button type="button" class="dem-v3-btn-tool dem-v3-tool-key" data-panel="spaces-panel"><span>Operations</span></button>
+              <button type="button" class="dem-v3-btn-tool dem-v3-tool-breaker" data-panel="power-panel"><span>Breaker</span></button>
+            </div>
+            <div class="dem-v3-tool-group dem-v3-tool-group-archive" aria-label="Archive tools">
+              <button type="button" class="dem-v3-btn-tool dem-v3-tool-terminal" id="dem-v3-staff-terminal-btn"><span>Staff Terminal</span></button>
+              <button type="button" class="dem-v3-btn-tool dem-v3-tool-tag" id="dem-v3-found-btn"><span>Found Items</span></button>
+              <button type="button" class="dem-v3-btn-tool dem-v3-tool-phone" id="dem-v3-voicemail-btn"><span>Voicemail</span></button>
+            </div>
+            <div class="dem-v3-tool-group dem-v3-tool-group-danger" aria-label="Shift stamp">
+              <button type="button" class="dem-v3-btn-danger dem-v3-tool-stamp" id="dem-v3-end-night-btn"><span>End Night</span></button>
+            </div>
+          </nav>
+        </div>
+        <div class="game-rebuilt-shell">
+          <div class="night-desk-stage">
+            <aside class="guest-slip-zone nd-paper-rail" aria-label="Window intake slip">
+              <div class="nd-slip-clip">
+                <span class="nd-slip-stamp" aria-hidden="true">IN</span>
+                <div class="nd-slip-titles">
+                  <h2 class="nd-slip-heading">Intake slip</h2>
+                  <p class="nd-slip-lede muted">Who is standing at the glass.</p>
+                </div>
+              </div>
+              <div id="guest-queue" class="card-list v43-guest-queue nd-guest-queue"></div>
+            </aside>
+            <div class="decision-board-zone nd-crt-bezel">
+        <nav class="panel-tabs v41-panel-tabs nd-panel-tabs" aria-label="Shift panels">
           <button class="tab-button active" data-panel="frontdesk-panel">
             <span>Front Desk</span>
             <span id="frontdesk-tab-badge" class="tab-attention-badge" hidden>0</span>
@@ -406,6 +526,195 @@
           </button>
         </nav>
 
+              <div class="nd-board-chrome">
+                <h2 class="nd-board-main-title" id="nd-board-main-title">Night command board</h2>
+                <p class="nd-board-context muted" id="nd-board-context">Front desk channel</p>
+              </div>
+
+        <div id="v50-priority-card" class="v50-priority-card v51-priority-card" hidden></div>
+
+        <div class="layout-grid v41-shift-grid v43-shift-grid">
+          <section id="frontdesk-panel" class="panel panel-v41 panel-v41--desk v43-desk-panel active-panel">
+            <div class="panel-header split-space v41-desk-header-actions">
+              <div>
+                <p class="section-tag">Reception</p>
+                <h3>Room board</h3>
+              </div>
+              <div class="v41-reception-action-row">
+                <button id="dem-open-staff-terminal-btn" type="button" class="button button-secondary dem-staff-terminal-open-btn">Staff Terminal</button>
+                <button id="spawn-guest-btn" type="button" class="button button-primary v41-reception-call nd-call-arrival-btn">Call next arrival</button>
+              </div>
+            </div>
+            <p id="frontdesk-intake-line" class="muted microcopy-line v43-desk-intake"></p>
+            <p class="muted microcopy-line v43-desk-flow-hint">Desk flow: read → verify → decide.</p>
+            <div id="v51-frontdesk-shell" class="v51-frontdesk-shell v51-desk-shell-grid">
+              <div id="v51-frontdesk-main" class="v51-frontdesk-main v51-hero-surface v43-desk-primary">
+                <div class="v43-desk-rooms-wrap">
+                  <div class="panel-header split-space v43-rooms-header">
+                    <div>
+                      <p class="section-tag">Rooms</p>
+                      <h3>Room Status</h3>
+                    </div>
+                  </div>
+                  <div id="room-list" class="room-grid"></div>
+                </div>
+              </div>
+              <aside id="v51-frontdesk-tools" class="v51-frontdesk-tools v51-utility-panel v43-desk-support" aria-label="Desk tools and intelligence">
+                <details id="v51-desk-tools-drawer" class="v51-desk-tools-drawer">
+                  <summary>Desk tools</summary>
+                  <div id="v51-desk-tools-body" class="v51-desk-tools-body" aria-label="Desk utilities"></div>
+                </details>
+                <div id="forensic-shift-mount" class="v33-forensic-mount" aria-live="polite"></div>
+                <div id="operator-noir-mount" class="v37-operator-mount" aria-live="polite"></div>
+                <div id="border-transfer-mount" class="v38-border-mount" aria-live="polite"></div>
+                <div id="lost-found-mount" class="v33-lost-found-mount"></div>
+                <div class="desk-scanner-card intelligence-feed-card v43-scanner-surface" id="v51-desk-scanner-card">
+                  <div class="panel-header split-space">
+                    <div>
+                      <p class="section-tag">Local Scanner</p>
+                      <h4>Police / Incident Feed</h4>
+                    </div>
+                  </div>
+                  <div id="desk-scanner-feed" class="scanner-feed-list" tabindex="-1"></div>
+                  <div class="scanner-intercept-strip">
+                    <button id="radio-intercept-btn" class="radio-intercept-btn" hidden>Intercept Scanner</button>
+                    <span id="radio-intercept-hint" class="radio-intercept-hint"></span>
+                  </div>
+                  <details class="scanner-legend-drawer">
+                    <summary>Legend</summary>
+                    <dl class="scanner-legend" aria-label="Feed line types">
+                      <div><dt class="legend-tone-vehicle">Vehicle</dt><dd>Lot &amp; route</dd></div>
+                      <div><dt class="legend-tone-group">Group</dt><dd>Family / pairs</dd></div>
+                      <div><dt class="legend-tone-desk">Desk</dt><dd>Paper &amp; stories</dd></div>
+                      <div><dt class="legend-tone-emergency">Urgent</dt><dd>Utility / unrest</dd></div>
+                      <div><dt class="legend-tone-planted">Planted</dt><dd>Compromised line</dd></div>
+                    </dl>
+                  </details>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <section id="cameras-panel" class="panel panel-v41 panel-v41--cameras">
+            <div class="panel-header">
+              <div>
+                <p class="section-tag">Surveillance</p>
+                <h3>Camera Feed</h3>
+              </div>
+              <button id="scan-cameras-btn" class="button button-secondary">Scan Cameras</button>
+            </div>
+            <p class="muted microcopy-line">Scan to detect anomalies, then Investigate to contain spillover pressure.</p>
+            <div id="v51-camera-digest" class="v50-camera-digest v51-camera-digest" hidden></div>
+            <details id="v50-camera-wall-drawer" class="v50-camera-wall-drawer">
+              <summary class="v50-camera-wall-summary">Open full camera wall</summary>
+              <div id="camera-grid" class="camera-grid"></div>
+            </details>
+          </section>
+
+          <section id="spaces-panel" class="panel panel-v41 panel-v41--spaces">
+            <div class="panel-header">
+              <div>
+                <p class="section-tag">Operations</p>
+                <h3>Room Operations / Incidents</h3>
+              </div>
+            </div>
+            <p class="muted microcopy-line v43-spaces-lede">Operational calls, room service actions, shared-space pressure, and incident response live here. CCTV is for surveillance; this is where staff act.</p>
+            <div class="dem-operations-action-strip" role="group" aria-label="Operations actions">
+              <button type="button" class="button button-secondary" id="dem-operations-review-btn">Review Incidents</button>
+              <button type="button" class="button button-utility" id="dem-operations-dispatch-btn">Dispatch Staff</button>
+              <button type="button" class="button button-secondary" id="dem-operations-report-btn">Open Report Archive</button>
+            </div>
+            <div class="dem-operations-room-board" aria-label="Room operations board">
+              <div class="panel-header split-space">
+                <div>
+                  <p class="section-tag">Room Operations</p>
+                  <h4>Service board</h4>
+                </div>
+              </div>
+              <div id="operations-room-list" class="room-grid dem-room-list-mount"></div>
+            </div>
+            <div id="v51-shared-summary" class="v51-shared-summary v51-calm-strip" aria-live="polite"></div>
+            <div id="shared-space-board" class="v43-spaces-board-outer">
+              <div id="shared-space-grid" class="shared-space-grid shared-space-board"></div>
+            </div>
+          </section>
+
+          <section id="basement-panel" class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="section-tag">Below Grade</p>
+                <h3>Basement Syndicate</h3>
+              </div>
+            </div>
+            <p class="muted microcopy-line">Off-book floor — high dirty money, real violence, grid drag. Optional until the ledger pulls you under.</p>
+            <div id="basement-board-mount" class="v40-basement-mount" aria-live="polite"></div>
+          </section>
+
+          <section id="power-panel" class="panel panel-v41 panel-v41--power">
+            <div class="panel-header">
+              <div>
+                <p class="section-tag">Maintenance</p>
+                <h3>Power Control</h3>
+              </div>
+            </div>
+
+            <div class="meter-block">
+              <div class="meter-meta">
+                <span>Power Reserve</span>
+                <strong id="power-meter-label">100%</strong>
+              </div>
+              <div class="meter-track">
+                <div id="power-meter-fill" class="meter-fill"></div>
+              </div>
+            </div>
+
+            <div id="v51-power-digest" class="v50-power-digest v51-power-digest" aria-live="polite"></div>
+
+            <details id="v50-breaker-drawer" class="v50-breaker-drawer">
+              <summary class="v50-breaker-summary">Open breaker controls</summary>
+              <div id="analog-breaker-mount" class="analog-breaker-mount" aria-label="Breaker board and operator strain"></div>
+            </details>
+
+            <div class="button-row v51-power-emergency-row">
+              <button id="restore-power-btn" class="button button-primary">Emergency Restore</button>
+              <button id="drain-power-btn" class="button button-danger">Emergency Reroute</button>
+            </div>
+            <div class="button-row v57-power-lockdown-row">
+              <button id="v57-lobby-lockdown-btn" type="button" class="button button-warning">
+                Emergency Lobby Lockdown
+              </button>
+            </div>
+            <p class="muted microcopy-line">Restore is steadier. Reroute is faster, but usually destabilizes something else.</p>
+            <p class="muted microcopy-line">Lockdown: panic only — heavy power draw, reputation hit, guests agitated. Long cooldown.</p>
+            <p id="power-economy-meta" class="power-economy-meta muted"></p>
+          </section>
+
+          <section id="report-panel" class="panel panel-v41 panel-v41--report">
+            <div class="panel-header">
+              <div>
+                <p class="section-tag">Incident Log</p>
+                <h3>Night Report</h3>
+              </div>
+            </div>
+            <p class="muted microcopy-line v43-report-hint">Review and dispatch advance time when pressure exists; empty paperwork barely moves the clock.</p>
+            <div id="v51-report-digest" class="v50-report-digest v51-report-digest"></div>
+            <div class="report-panel-actions report-actions v42-report-actions">
+              <button id="review-incidents-btn" class="button button-secondary">Review Incidents</button>
+              <button id="dispatch-staff-btn" class="button button-utility">Dispatch Staff</button>
+              <button id="end-night-btn" class="button button-primary">End Night</button>
+            </div>
+            <div id="incident-log" class="log-list v43-incident-log v50-incident-log"></div>
+            <div id="v60-staff-notes" class="v60-staff-notes" aria-label="Staff notes">
+              <h4>Staff notes (v0.60)</h4>
+              <div id="v60-staff-notes-body"></div>
+            </div>
+            <div class="v59-report-print-wrap" style="margin-top:10px">
+              <button type="button" class="button button-secondary" data-v59-printer-open>Print incident log (dot matrix)</button>
+            </div>
+          </section>
+        </div>
+            </div>
+            <aside class="pressure-intel-zone nd-paper-rail" aria-label="Pressure, alerts, and references">
         <section class="shift-status-card v41-shift-ribbon">
           <div id="tutorial-hint-card" class="tutorial-hint-card" hidden></div>
           <div id="panel-intro-chip" class="panel-intro-chip" hidden></div>
@@ -589,176 +898,33 @@
           </div>
         </section>
 
-        <div id="v50-priority-card" class="v50-priority-card v51-priority-card" hidden></div>
-
         <div id="motel-command-board" class="motel-command-board v43-command-strip-wrap" aria-label="Motel command overview"></div>
 
-        <div class="layout-grid v41-shift-grid v43-shift-grid">
-          <section id="frontdesk-panel" class="panel panel-v41 panel-v41--desk v43-desk-panel active-panel">
-            <div class="panel-header split-space v41-desk-header-actions">
-              <div>
-                <p class="section-tag">Reception</p>
-                <h3>Guest Queue</h3>
+              <div class="game-intel-block nd-intel-block">
+              <p class="game-intel-kicker">Archive links</p>
+              <p class="game-intel-note muted">Optional second-screen context on deadendmotel.site — not required to play.</p>
+              <div class="game-clue-chip-row" role="list">
+                <a class="game-clue-chip" href="https://deadendmotel.site/guest-database.html" target="_blank" rel="noopener noreferrer">Guest DB</a>
+                <a class="game-clue-chip" href="https://deadendmotel.site/lost-and-found.html" target="_blank" rel="noopener noreferrer">Lost &amp; Found</a>
+                <a class="game-clue-chip" href="https://deadendmotel.site/local-gazette.html" target="_blank" rel="noopener noreferrer">Gazette</a>
+                <a class="game-clue-chip" href="https://deadendmotel.site/voicemail.html" target="_blank" rel="noopener noreferrer">Voicemail</a>
+                <a class="game-clue-chip" href="https://deadendmotel.site/training-manual.html" target="_blank" rel="noopener noreferrer">Manual</a>
               </div>
-              <div class="v41-reception-action-row">
-                <button id="dem-open-staff-terminal-btn" type="button" class="button button-secondary dem-staff-terminal-open-btn">Staff Terminal</button>
-                <button id="spawn-guest-btn" type="button" class="button button-secondary v41-reception-call">Call next arrival</button>
-              </div>
+              <p class="game-rule-chips muted" aria-label="Common rule references">Rules: <span class="game-rule-chip">204</span><span class="game-rule-chip">118</span><span class="game-rule-chip">404</span><span class="game-rule-chip">911</span></p>
             </div>
-            <p id="frontdesk-intake-line" class="muted microcopy-line v43-desk-intake"></p>
-            <p class="muted microcopy-line v43-desk-flow-hint">Desk flow: read → verify → decide.</p>
-            <div id="v51-frontdesk-shell" class="v51-frontdesk-shell v51-desk-shell-grid">
-              <div id="v51-frontdesk-main" class="v51-frontdesk-main v51-hero-surface v43-desk-primary">
-                <div id="guest-queue" class="card-list v43-guest-queue"></div>
-                <div class="v43-desk-rooms-wrap">
-                  <div class="panel-header split-space v43-rooms-header">
-                    <div>
-                      <p class="section-tag">Rooms</p>
-                      <h3>Room Status</h3>
-                    </div>
-                  </div>
-                  <div id="room-list" class="room-grid"></div>
-                </div>
-              </div>
-              <aside id="v51-frontdesk-tools" class="v51-frontdesk-tools v51-utility-panel v43-desk-support" aria-label="Desk tools and intelligence">
-                <details id="v51-desk-tools-drawer" class="v51-desk-tools-drawer">
-                  <summary>Desk tools</summary>
-                  <div id="v51-desk-tools-body" class="v51-desk-tools-body" aria-label="Desk utilities"></div>
-                </details>
-                <div id="forensic-shift-mount" class="v33-forensic-mount" aria-live="polite"></div>
-                <div id="operator-noir-mount" class="v37-operator-mount" aria-live="polite"></div>
-                <div id="border-transfer-mount" class="v38-border-mount" aria-live="polite"></div>
-                <div id="lost-found-mount" class="v33-lost-found-mount"></div>
-                <div class="desk-scanner-card intelligence-feed-card v43-scanner-surface" id="v51-desk-scanner-card">
-                  <div class="panel-header split-space">
-                    <div>
-                      <p class="section-tag">Local Scanner</p>
-                      <h4>Police / Incident Feed</h4>
-                    </div>
-                  </div>
-                  <div id="desk-scanner-feed" class="scanner-feed-list" tabindex="-1"></div>
-                  <div class="scanner-intercept-strip">
-                    <button id="radio-intercept-btn" class="radio-intercept-btn" hidden>Intercept Scanner</button>
-                    <span id="radio-intercept-hint" class="radio-intercept-hint"></span>
-                  </div>
-                  <details class="scanner-legend-drawer">
-                    <summary>Legend</summary>
-                    <dl class="scanner-legend" aria-label="Feed line types">
-                      <div><dt class="legend-tone-vehicle">Vehicle</dt><dd>Lot &amp; route</dd></div>
-                      <div><dt class="legend-tone-group">Group</dt><dd>Family / pairs</dd></div>
-                      <div><dt class="legend-tone-desk">Desk</dt><dd>Paper &amp; stories</dd></div>
-                      <div><dt class="legend-tone-emergency">Urgent</dt><dd>Utility / unrest</dd></div>
-                      <div><dt class="legend-tone-planted">Planted</dt><dd>Compromised line</dd></div>
-                    </dl>
-                  </details>
-                </div>
-              </aside>
-            </div>
-          </section>
-
-          <section id="cameras-panel" class="panel panel-v41 panel-v41--cameras">
-            <div class="panel-header">
-              <div>
-                <p class="section-tag">Surveillance</p>
-                <h3>Camera Feed</h3>
-              </div>
-              <button id="scan-cameras-btn" class="button button-secondary">Scan Cameras</button>
-            </div>
-            <p class="muted microcopy-line">Scan to detect anomalies, then Investigate to contain spillover pressure.</p>
-            <div id="v51-camera-digest" class="v50-camera-digest v51-camera-digest" hidden></div>
-            <details id="v50-camera-wall-drawer" class="v50-camera-wall-drawer">
-              <summary class="v50-camera-wall-summary">Open full camera wall</summary>
-              <div id="camera-grid" class="camera-grid"></div>
-            </details>
-          </section>
-
-          <section id="spaces-panel" class="panel panel-v41 panel-v41--spaces">
-            <div class="panel-header">
-              <div>
-                <p class="section-tag">Living Motel Spaces</p>
-                <h3>Shared Space Pressure</h3>
-              </div>
-            </div>
-            <p class="muted microcopy-line v43-spaces-lede">Live situation board: pressure routes, spillover, and what to do next.</p>
-            <div id="v51-shared-summary" class="v51-shared-summary v51-calm-strip" aria-live="polite"></div>
-            <div id="shared-space-board" class="v43-spaces-board-outer">
-              <div id="shared-space-grid" class="shared-space-grid shared-space-board"></div>
-            </div>
-          </section>
-
-          <section id="basement-panel" class="panel">
-            <div class="panel-header">
-              <div>
-                <p class="section-tag">Below Grade</p>
-                <h3>Basement Syndicate</h3>
-              </div>
-            </div>
-            <p class="muted microcopy-line">Off-book floor — high dirty money, real violence, grid drag. Optional until the ledger pulls you under.</p>
-            <div id="basement-board-mount" class="v40-basement-mount" aria-live="polite"></div>
-          </section>
-
-          <section id="power-panel" class="panel panel-v41 panel-v41--power">
-            <div class="panel-header">
-              <div>
-                <p class="section-tag">Maintenance</p>
-                <h3>Power Control</h3>
-              </div>
-            </div>
-
-            <div class="meter-block">
-              <div class="meter-meta">
-                <span>Power Reserve</span>
-                <strong id="power-meter-label">100%</strong>
-              </div>
-              <div class="meter-track">
-                <div id="power-meter-fill" class="meter-fill"></div>
-              </div>
-            </div>
-
-            <div id="v51-power-digest" class="v50-power-digest v51-power-digest" aria-live="polite"></div>
-
-            <details id="v50-breaker-drawer" class="v50-breaker-drawer">
-              <summary class="v50-breaker-summary">Open breaker controls</summary>
-              <div id="analog-breaker-mount" class="analog-breaker-mount" aria-label="Breaker board and operator strain"></div>
-            </details>
-
-            <div class="button-row v51-power-emergency-row">
-              <button id="restore-power-btn" class="button button-primary">Emergency Restore</button>
-              <button id="drain-power-btn" class="button button-danger">Emergency Reroute</button>
-            </div>
-            <div class="button-row v57-power-lockdown-row">
-              <button id="v57-lobby-lockdown-btn" type="button" class="button button-warning">
-                Emergency Lobby Lockdown
-              </button>
-            </div>
-            <p class="muted microcopy-line">Restore is steadier. Reroute is faster, but usually destabilizes something else.</p>
-            <p class="muted microcopy-line">Lockdown: panic only — heavy power draw, reputation hit, guests agitated. Long cooldown.</p>
-            <p id="power-economy-meta" class="power-economy-meta muted"></p>
-          </section>
-
-          <section id="report-panel" class="panel panel-v41 panel-v41--report">
-            <div class="panel-header">
-              <div>
-                <p class="section-tag">Incident Log</p>
-                <h3>Night Report</h3>
-              </div>
-            </div>
-            <p class="muted microcopy-line v43-report-hint">Review and dispatch advance time when pressure exists; empty paperwork barely moves the clock.</p>
-            <div id="v51-report-digest" class="v50-report-digest v51-report-digest"></div>
-            <div class="report-panel-actions report-actions v42-report-actions">
-              <button id="review-incidents-btn" class="button button-secondary">Review Incidents</button>
-              <button id="dispatch-staff-btn" class="button button-utility">Dispatch Staff</button>
-              <button id="end-night-btn" class="button button-primary">End Night</button>
-            </div>
-            <div id="incident-log" class="log-list v43-incident-log v50-incident-log"></div>
-            <div id="v60-staff-notes" class="v60-staff-notes" aria-label="Staff notes">
-              <h4>Staff notes (v0.60)</h4>
-              <div id="v60-staff-notes-body"></div>
-            </div>
-            <div class="v59-report-print-wrap" style="margin-top:10px">
-              <button type="button" class="button button-secondary" data-v59-printer-open>Print incident log (dot matrix)</button>
-            </div>
-          </section>
+            </aside>
+          </div>
+        <footer class="desk-equipment-dock game-tool-dock" role="navigation" aria-label="Quick desk tools">
+          <button type="button" class="tab-button game-dock-btn" data-panel="frontdesk-panel">Desk</button>
+          <button type="button" class="tab-button game-dock-btn" data-panel="cameras-panel">Cameras</button>
+          <button type="button" class="tab-button game-dock-btn" data-panel="spaces-panel">Spaces</button>
+          <button type="button" class="tab-button game-dock-btn" data-panel="power-panel">Power</button>
+          <button type="button" class="tab-button game-dock-btn" data-panel="report-panel">Report</button>
+          <button type="button" class="button button-secondary game-dock-btn game-dock-btn--tool" id="game-dock-staff-terminal">Staff</button>
+          <button type="button" class="button button-secondary game-dock-btn game-dock-btn--tool" id="game-dock-found">Found</button>
+          <button type="button" class="button button-secondary game-dock-btn game-dock-btn--tool" id="game-dock-voicemail">VM</button>
+          <button type="button" class="button button-utility game-dock-btn game-dock-btn--end" id="game-dock-end-night">End night</button>
+        </footer>
         </div>
         <div id="v59-lobby-modal" class="v59-lobby-modal v59-lobby-modal--dim" hidden role="dialog" aria-modal="true" aria-labelledby="v59-lobby-title">
           <div class="v59-lobby-scene">
@@ -982,7 +1148,7 @@
       </section>
 
       <section id="failure-screen" class="screen">
-        <div class="hero-card">
+        <div class="hero-card dem-failure-v2-card">
           <div>
             <p class="section-tag">Shift Failed</p>
             <h2 id="failure-title">Motel Blackout</h2>
@@ -997,6 +1163,25 @@
               You were so close… Continue your night
             </p>
             <p id="failure-context-subline" class="failure-context-subline muted" aria-live="polite" hidden></p>
+
+            <section class="dem-failure-postmortem" aria-label="Postmortem summary">
+              <article class="dem-failure-summary-card">
+                <span>Campaign</span>
+                <strong id="dem-failure-progress-card">Night interrupted</strong>
+              </article>
+              <article class="dem-failure-summary-card">
+                <span>Trigger</span>
+                <strong id="dem-failure-trigger-card">Power Collapse</strong>
+              </article>
+              <article class="dem-failure-summary-card">
+                <span>Vitals</span>
+                <strong id="dem-failure-vitals-card">Pressure / Power / Rep unstable</strong>
+              </article>
+              <article class="dem-failure-summary-card">
+                <span>Next Move</span>
+                <strong id="dem-failure-next-card">Retry free, or continue from the opening snapshot.</strong>
+              </article>
+            </section>
 
             <section id="failure-store" class="failure-store-panel" aria-label="Support and purchases">
               <h3>Support the game</h3>
@@ -1015,6 +1200,15 @@
               </label>
 
               <div class="failure-cta-primary" role="group" aria-label="Continue options">
+                <div class="dem-failure-product-copy">
+                  <p class="dem-product-kicker">Fastest recovery</p>
+                  <h4>Continue instantly</h4>
+                  <ul>
+                    <li>Restore tonight's opening snapshot.</li>
+                    <li>Skip replaying the whole run.</li>
+                    <li>Best when the failure was close.</li>
+                  </ul>
+                </div>
                 <button
                   type="button"
                   class="button button-primary failure-cta-saved"
@@ -1038,11 +1232,29 @@
               <p id="failure-credits-ready-line" class="failure-credits-ready muted" hidden></p>
 
               <div class="failure-cta-secondary" role="group" aria-label="Bundles and upgrades">
+                <div class="dem-failure-product-copy">
+                  <p class="dem-product-kicker">Backup options</p>
+                  <h4>Bundle or clean session</h4>
+                  <ul>
+                    <li>Continue bundles protect longer runs.</li>
+                    <li>Remove ads is permanent comfort.</li>
+                    <li>Purchases do not change difficulty.</li>
+                  </ul>
+                </div>
                 <p id="failure-context-offer-line" class="failure-context-offer muted" hidden></p>
                 <p id="failure-bundle-hint" class="failure-bundle-hint muted">Rough nights ahead? Save with 3 Continues.</p>
                 <button type="button" class="button button-secondary" id="failure-buy-continue-3-btn" data-dem-checkout-btn>
                   Buy 3 Continues — better value (<span id="failure-buy-3-price-label">CA$2.49</span>)
                 </button>
+                <div class="dem-failure-product-copy dem-failure-remove-ads-copy">
+                  <p class="dem-product-kicker">Permanent comfort</p>
+                  <h4>Remove ads</h4>
+                  <ul>
+                    <li>Cleaner sessions.</li>
+                    <li>Supports development.</li>
+                    <li>Does not change difficulty.</li>
+                  </ul>
+                </div>
                 <button type="button" class="button button-secondary" id="buy-remove-ads-btn" data-dem-checkout-btn>
                   Remove Ads (CA$1.99)
                 </button>

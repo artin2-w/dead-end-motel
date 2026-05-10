@@ -1867,4 +1867,17 @@ export function initStaffTerminal() {
   window.demForceCloseStaffTerminal = function () {
     closeOverlay();
   };
+
+  window.demOpenStaffTerminalToTab = function (tabId) {
+    if (!tabId || typeof tabId !== 'string') return;
+    if (overlay.hidden) {
+      openBtn.click();
+    }
+    try {
+      setTab(tabId);
+      syncVoicemailArchivePanels();
+    } catch {
+      /* ignore */
+    }
+  };
 }

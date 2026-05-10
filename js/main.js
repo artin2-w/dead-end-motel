@@ -512,6 +512,7 @@ import {
   renderTopbar,
   renderCurrentPriorityCard,
   renderPowerDigest,
+  syncVisibleGameV3,
   renderGuests,
   renderRooms,
   renderSharedSpaces,
@@ -534,7 +535,8 @@ import {
   renderSettingsOverlay,
   setActivePanel as setActivePanelUi,
   setActiveScreen as setActiveScreenUi,
-  syncGuestStickyRail
+  syncGuestStickyRail,
+  syncNightDeskChrome
 } from './ui.js';
 import './tutorial.js';
 import './guestUIEnhancer.js';
@@ -738,6 +740,11 @@ function setActivePanel(panelId, options = {}) {
       onFlagGuest: flagGuest,
       onRejectGuest: rejectGuest
     });
+    try {
+      syncNightDeskChrome(buildRenderState());
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -6973,6 +6980,11 @@ function renderAll() {
   }
   renderTopbar(renderState);
   try {
+    syncNightDeskChrome(renderState);
+  } catch {
+    /* ignore */
+  }
+  try {
     const ld = document.getElementById('v57-lobby-lockdown-btn');
     if (ld) ld.textContent = getV57LockdownButtonLabel(state);
   } catch {
@@ -7007,6 +7019,16 @@ function renderAll() {
   renderCameras(renderState);
   renderAnalogPowerExtras(renderState);
   renderPowerDigest(renderState);
+  syncVisibleGameV3(renderState, {
+    onCallNextArrival: callNextArrival,
+    onCheckIn: checkInGuest,
+    onFlagGuest: flagGuest,
+    onRejectGuest: rejectGuest,
+    onInspectId: inspectGuestId,
+    onSecondaryVerify: requestSecondaryVerification,
+    onQuestionGuest: questionGuestFurther,
+    onEndNight: endNight
+  });
   renderForensicShiftUi(renderState);
   renderOperatorNoirMount(renderState);
   renderBorderTransferMount(renderState);
@@ -7040,7 +7062,7 @@ function renderAll() {
   renderSettingsOverlay(renderState);
   renderLogs(renderState);
   if (activeScreenId === 'failure-screen' && state?.failedState) {
-    renderFailure(state.failedState, { deadDropOffer: buildDeadDropFailureOffer(metaState, state) });
+    renderFailure(state.failedState, { deadDropOffer: buildDeadDropFailureOffer(metaState, state), state });
     try { window.refreshDemCampaignFailureStrip?.(state?.night || 1); } catch { /* ignore */ }
   }
   try { window.demCampaignRenderAll?.(state?.night || 1); } catch { /* ignore */ }
@@ -9832,7 +9854,7 @@ function checkFailureState() {
     dedupeKey: `failure-${failure.code || 'unknown'}-${state.night}`
   });
   audioController.playFailure();
-  renderFailure(failure, { deadDropOffer: buildDeadDropFailureOffer(metaState, state) });
+  renderFailure(failure, { deadDropOffer: buildDeadDropFailureOffer(metaState, state), state });
   setActiveScreen('failure-screen');
   try { window.refreshDemCampaignFailureStrip?.(state.night); } catch { /* ignore */ }
   try { window.demHorrorRenderFailureFactors?.(); } catch { /* ignore */ }
@@ -13697,6 +13719,23 @@ function bindEvents() {
 
   document.querySelectorAll('.tab-button').forEach((button) => {
     button.addEventListener('click', () => setActivePanel(button.dataset.panel));
+  });
+
+  document.getElementById('game-dock-staff-terminal')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('dem-open-staff-terminal-btn')?.click();
+  });
+  document.getElementById('game-dock-found')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.demOpenStaffTerminalToTab?.('found');
+  });
+  document.getElementById('game-dock-voicemail')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.demOpenStaffTerminalToTab?.('voicemail');
+  });
+  document.getElementById('game-dock-end-night')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('end-night-btn')?.click();
   });
 
   document.addEventListener('keydown', (event) => {
